@@ -6,9 +6,9 @@ from dotenv import load_dotenv
 
 load_dotenv(os.path.join("backend", ".env"))
 
-SLACK_BOT_TOKEN = "xoxb-10462642372932-10459080530674-NgidjxfHXAdjLg4pflwwGGKA"
+SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN")
 
-CHANNEL_ID = "C0AD1KW632T" 
+CHANNEL_ID = os.getenv("SLACK_CHANNEL_ID")
 
 client = WebClient(token=SLACK_BOT_TOKEN)
 
