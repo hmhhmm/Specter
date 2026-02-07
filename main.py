@@ -792,8 +792,37 @@ def run_specter_pipeline(handoff_packet: Dict[str, Any]) -> str:
     print(f"  Checking Step {handoff_packet['step_id']}...")
     result = check_expectation(handoff_packet)
 
-    if result['status'] == "SUCCESS":
+    # Check if there are UX issues even if test passed
+    ux_issues = handoff_packet.get('evidence', {}).get('ui_analysis', {}).get('issues', [])
+    has_ux_issues = len(ux_issues) > 0
+
+    if result['status'] == "SUCCESS" and not has_ux_issues:
         return "PASS"
+    
+    # If there are UX issues but test passed, create a UX-focused alert
+    if result['status'] == "SUCCESS" and has_ux_issues:
+        handoff_packet['outcome'] = {
+            "status": "UX_ISSUE",
+            "visual_observation": f"UX issues detected: {', '.join(ux_issues[:2])}",
+            "f_score": result.get('f_score', 100),
+            "calculated_severity": "P2 - Minor",  # UX-only issues are typically P2
+            "gif_path": result.get('gif_path'),
+            "heatmap_path": result.get('heatmap_path'),
+        }
+        final_packet = diagnose_failure(handoff_packet, use_vision=True)
+        
+        # Send alert for UX issues
+        try:
+            responsible_team = final_packet.get('outcome', {}).get('responsible_team', 'Design')
+            print(f"  ⚠️  UX Issues ({len(ux_issues)}) detected - Alerting {responsible_team} team")
+            send_alert(final_packet)
+            print(f"  ✅ UX alert sent to {responsible_team} team channel")
+        except Exception as e:
+            print(f"  ⚠️  UX alert failed: {e}")
+            if "channel_not_found" in str(e):
+                print(f"  💡 Solution: Invite bot to channel with /invite @Specter Bot")
+        
+        return "PASS_WITH_UX_ISSUES"
 
     handoff_packet['outcome'] = {
         "status": "FAILED",

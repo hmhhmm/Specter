@@ -164,9 +164,11 @@ async def run_test_background(test_id: str, config: TestConfig):
                 outcome = step_report.get("outcome", {})
                 evidence = step_report.get("evidence", {})
                 
-                # Check if this issue was escalated to Slack (ALL issues now trigger alerts)
+                # Check if this issue was escalated to Slack
+                # Alert is sent for: FAILED status OR UX_ISSUE status (with diagnosis)
                 severity = outcome.get("severity", "")
-                alert_sent = outcome.get("status") == "FAILED" and severity and outcome.get("diagnosis")
+                status = outcome.get("status", "")
+                alert_sent = (status in ["FAILED", "UX_ISSUE"]) and severity and outcome.get("diagnosis")
                 
                 diagnostic_data = {
                     "confusion_score": step_report.get("confusion_score", 0),

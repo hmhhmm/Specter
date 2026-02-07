@@ -2,27 +2,39 @@
 """
 Specter Expectation Engine - F-Score Calculation & Severity Classification
 
-SEVERITY LEVELS (Auto-determined):
+IMPORTANT: Severity (P0-P3) and Team Assignment are INDEPENDENT dimensions!
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-P0 - Critical: SIGNUP BLOCKED
+
+SEVERITY LEVELS (Impact-Based):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+P0 - Critical: SIGNUP BLOCKED (any team can cause this!)
   └─ User cannot proceed at all
   └─ Triggers: 500 errors, f_score > 85
-  └─ Action: Immediate Slack alert to responsible team
+  └─ Examples: Backend DB timeout, Frontend API 404, Design button invisible
 
-P1 - Major: HIGH FRICTION / DROP-OFF RISK  
+P1 - Major: HIGH FRICTION / DROP-OFF RISK
   └─ Serious usability issues likely to cause abandonment
   └─ Triggers: 400 errors + friction, f_score > 70, confusion > 7/10
-  └─ Action: Immediate Slack alert to responsible team
+  └─ Examples: Slow APIs, missing endpoints, poor UX
 
 P2 - Minor: DEGRADED EXPERIENCE
   └─ Moderate issues, workarounds exist
   └─ Triggers: f_score 50-70, confusion 4-7/10, minor errors
-  └─ Action: Immediate Slack alert to responsible team
+  └─ Examples: Performance degradation, small touch targets
 
 P3 - Cosmetic: MINOR UI ISSUES
   └─ Low impact, visual inconsistencies only
   └─ Triggers: f_score < 50, confusion < 4/10
-  └─ Action: Immediate Slack alert to responsible team
+  └─ Examples: Console warnings, spacing issues
+
+TEAM ASSIGNMENT (Root Cause-Based):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- Backend:  5xx errors, DB issues, server timeouts
+- Frontend: 4xx errors, JS errors, API endpoint issues  
+- Design:   UX/accessibility, touch targets, visual issues
+- QA:       Unclear root cause, needs investigation
+
+📖 See SEVERITY_LOGIC.md for comprehensive examples and decision matrix
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ALL severity levels trigger Slack alerts for complete visibility.

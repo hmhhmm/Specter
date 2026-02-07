@@ -109,199 +109,196 @@ export function NeuralMonologue({ state, step, persona, logs = [], results, curr
             ))}
           </AnimatePresence>
 
-          {/* Real-time Diagnostic Data */}
+          {/* Comprehensive Diagnostic Panel */}
           {currentStepData && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="space-y-2 mt-3 p-3 rounded-lg bg-zinc-800/50 border border-emerald-500/20 max-h-[400px] overflow-y-auto scrollbar-hide"
+              className="mt-4 p-4 rounded-xl bg-gradient-to-br from-zinc-800/80 to-zinc-900/80 border border-emerald-500/30 shadow-2xl"
             >
-              {/* Confusion Score */}
-              {currentStepData.confusion_score !== undefined && (
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5">
-                      <Activity className={cn(
-                        "w-3 h-3",
-                        currentStepData.confusion_score >= 7 ? "text-red-500" :
-                        currentStepData.confusion_score >= 4 ? "text-amber-500" :
-                        "text-emerald-500"
-                      )} />
-                      <span className="text-[9px] uppercase tracking-wider text-zinc-500">
-                        Confusion
+              {/* Header with Severity & Team */}
+              <div className="flex items-start justify-between mb-3 pb-3 border-b border-white/10">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className={cn(
+                    "w-5 h-5",
+                    currentStepData.severity?.includes('P0') && "text-red-500",
+                    currentStepData.severity?.includes('P1') && "text-orange-500",
+                    currentStepData.severity?.includes('P2') && "text-yellow-500",
+                    currentStepData.severity?.includes('P3') && "text-blue-500",
+                    !currentStepData.severity && "text-emerald-500"
+                  )} />
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold uppercase tracking-wider text-white">
+                        Diagnostic Report
                       </span>
-                    </div>
-                    <span className={cn(
-                      "text-xs font-bold font-mono",
-                      currentStepData.confusion_score >= 7 ? "text-red-500" :
-                      currentStepData.confusion_score >= 4 ? "text-amber-500" :
-                      "text-emerald-500"
-                    )}>
-                      {currentStepData.confusion_score}/10
-                    </span>
-                  </div>
-                  <div className="h-1.5 bg-zinc-900 rounded-full overflow-hidden">
-                    <div 
-                      className={cn(
-                        "h-full transition-all",
-                        currentStepData.confusion_score >= 7 ? "bg-red-500" :
-                        currentStepData.confusion_score >= 4 ? "bg-amber-500" :
-                        "bg-emerald-500"
-                      )}
-                      style={{ width: `${(currentStepData.confusion_score / 10) * 100}%` }}
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* Dwell Time */}
-              {currentStepData.dwell_time_ms !== undefined && currentStepData.dwell_time_ms > 0 && (
-                <div className="pt-2 border-t border-white/5">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5">
-                      <Activity className="w-3 h-3 text-purple-500" />
-                      <span className="text-[9px] uppercase tracking-wider text-zinc-500">
-                        Duration
-                      </span>
-                    </div>
-                    <span className="text-xs font-mono text-purple-400">
-                      {(currentStepData.dwell_time_ms / 1000).toFixed(1)}s
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              {/* Network Logs */}
-              {currentStepData.network_logs && currentStepData.network_logs.length > 0 && (
-                <div className="pt-2 border-t border-white/5">
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <Network className="w-3 h-3 text-blue-500" />
-                    <span className="text-[9px] uppercase tracking-wider text-zinc-500">
-                      Network
-                    </span>
-                  </div>
-                  <div className="space-y-0.5 font-mono text-[9px]">
-                    {currentStepData.network_logs.slice(0, 2).map((log: any, i: number) => (
-                      <div key={i} className="flex items-center gap-1.5">
+                      {currentStepData.severity && (
                         <span className={cn(
-                          "font-bold w-8",
-                          log.status >= 500 ? "text-red-500" :
-                          log.status >= 400 ? "text-amber-500" :
-                          "text-emerald-500"
+                          "text-[10px] font-bold px-2 py-0.5 rounded-full",
+                          currentStepData.severity.includes('P0') && "text-red-400 bg-red-500/20 border border-red-500/30",
+                          currentStepData.severity.includes('P1') && "text-orange-400 bg-orange-500/20 border border-orange-500/30",
+                          currentStepData.severity.includes('P2') && "text-yellow-400 bg-yellow-500/20 border border-yellow-500/30",
+                          currentStepData.severity.includes('P3') && "text-blue-400 bg-blue-500/20 border border-blue-500/30"
                         )}>
-                          {log.status}
+                          {currentStepData.severity.split(' - ')[0]}
                         </span>
-                        <span className="text-zinc-600 w-10">{log.method}</span>
-                        <span className="text-zinc-500 truncate flex-1 text-[8px]">{log.url}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Console Logs */}
-              {currentStepData.console_logs && currentStepData.console_logs.length > 0 && (
-                <div className="pt-2 border-t border-white/5">
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <Terminal className="w-3 h-3 text-yellow-500" />
-                    <span className="text-[9px] uppercase tracking-wider text-zinc-500">
-                      Console
-                    </span>
-                  </div>
-                  <div className="space-y-0.5 font-mono text-[8px]">
-                    {currentStepData.console_logs.slice(0, 2).map((log: string, i: number) => (
-                      <div key={i} className="text-zinc-400 truncate">{log}</div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* F-Score if available */}
-              {currentStepData.f_score !== undefined && (
-                <div className="pt-2 border-t border-white/5">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5">
-                      <Zap className="w-3 h-3 text-amber-500" />
-                      <span className="text-[9px] uppercase tracking-wider text-zinc-500">
-                        F-Score
-                      </span>
+                      )}
                     </div>
-                    <span className="text-xs font-bold font-mono text-amber-500">
-                      {currentStepData.f_score}/100
-                    </span>
-                  </div>
-                  <div className="h-1.5 bg-zinc-900 rounded-full overflow-hidden mt-1">
-                    <div 
-                      className="h-full bg-gradient-to-r from-emerald-500 via-amber-500 to-red-500 transition-all"
-                      style={{ width: `${currentStepData.f_score}%` }}
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* Diagnosis if failed */}
-              {currentStepData.diagnosis && (
-                <div className="pt-2 border-t border-white/5">
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <AlertTriangle className="w-3 h-3 text-red-500" />
-                    <span className="text-[9px] uppercase tracking-wider text-red-500">
-                      Issue
-                    </span>
-                    {currentStepData.severity && (
-                      <span className={cn(
-                        "text-[8px] font-bold px-1.5 py-0.5 rounded ml-auto",
-                        currentStepData.severity.includes('P0') && "text-red-500 bg-red-500/10",
-                        currentStepData.severity.includes('P1') && "text-orange-500 bg-orange-500/10",
-                        currentStepData.severity.includes('P2') && "text-yellow-500 bg-yellow-500/10",
-                        currentStepData.severity.includes('P3') && "text-blue-500 bg-blue-500/10"
-                      )}>
-                        {currentStepData.severity.split(' - ')[0]}
-                      </span>
+                    {currentStepData.responsible_team && (
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <span className="text-[9px] text-zinc-500">Assigned to</span>
+                        <span className="text-[10px] font-semibold text-emerald-400">
+                          {currentStepData.responsible_team} Team
+                        </span>
+                      </div>
                     )}
                   </div>
-                  <p className="text-[9px] text-zinc-300 leading-relaxed">
+                </div>
+                
+                {currentStepData.alert_sent && (
+                  <motion.div
+                    initial={{ scale: 0.8, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-red-500/15 border border-red-500/40"
+                  >
+                    <Zap className="w-3 h-3 text-red-400 animate-pulse" />
+                    <span className="text-[9px] font-bold uppercase tracking-wider text-red-400">
+                      Alert Sent
+                    </span>
+                  </motion.div>
+                )}
+              </div>
+
+              {/* Main Diagnosis */}
+              {currentStepData.diagnosis && (
+                <div className="mb-3">
+                  <p className="text-sm text-zinc-200 leading-relaxed font-medium">
                     {currentStepData.diagnosis}
                   </p>
-                  <div className="flex items-center justify-between mt-1.5">
-                    {currentStepData.responsible_team && (
-                      <span className="text-[8px] text-zinc-600">
-                        → <span className="text-emerald-500">{currentStepData.responsible_team}</span>
-                      </span>
-                    )}
-                    {currentStepData.alert_sent && (
-                      <motion.div
-                        initial={{ scale: 0.8, opacity: 0 }}
-                        animate={{ scale: 1, opacity: 1 }}
-                        className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-red-500/10 border border-red-500/30"
-                      >
-                        <Zap className="w-2.5 h-2.5 text-red-400 animate-pulse" />
-                        <span className="text-[7px] font-bold uppercase tracking-wider text-red-400">
-                          Alert Sent
-                        </span>
-                      </motion.div>
-                    )}
-                  </div>
                 </div>
               )}
 
-              {/* UX Issues */}
-              {currentStepData.ux_issues && currentStepData.ux_issues.length > 0 && (
-                <div className="pt-2 border-t border-white/5">
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <Eye className="w-3 h-3 text-cyan-500" />
-                    <span className="text-[9px] uppercase tracking-wider text-zinc-500">
-                      UX Issues
+              {/* Metrics Summary - Compact */}
+              <div className="grid grid-cols-3 gap-2 mb-3 pb-3 border-b border-white/5">
+                {currentStepData.f_score !== undefined && (
+                  <div className="bg-zinc-900/50 rounded-lg p-2">
+                    <div className="flex items-center gap-1 mb-1">
+                      <Zap className="w-3 h-3 text-amber-400" />
+                      <span className="text-[8px] uppercase tracking-wider text-zinc-500">F-Score</span>
+                    </div>
+                    <span className="text-lg font-bold font-mono text-amber-400">
+                      {currentStepData.f_score}
                     </span>
+                    <span className="text-xs text-zinc-600">/100</span>
                   </div>
-                  <div className="space-y-0.5">
-                    {currentStepData.ux_issues.slice(0, 2).map((issue: string, i: number) => (
-                      <div key={i} className="text-[8px] text-zinc-400 leading-relaxed">
-                        • {issue}
-                      </div>
-                    ))}
+                )}
+                
+                {currentStepData.confusion_score !== undefined && (
+                  <div className="bg-zinc-900/50 rounded-lg p-2">
+                    <div className="flex items-center gap-1 mb-1">
+                      <Activity className={cn(
+                        "w-3 h-3",
+                        currentStepData.confusion_score >= 7 ? "text-red-400" :
+                        currentStepData.confusion_score >= 4 ? "text-yellow-400" :
+                        "text-emerald-400"
+                      )} />
+                      <span className="text-[8px] uppercase tracking-wider text-zinc-500">Confusion</span>
+                    </div>
+                    <span className={cn(
+                      "text-lg font-bold font-mono",
+                      currentStepData.confusion_score >= 7 ? "text-red-400" :
+                      currentStepData.confusion_score >= 4 ? "text-yellow-400" :
+                      "text-emerald-400"
+                    )}>
+                      {currentStepData.confusion_score}
+                    </span>
+                    <span className="text-xs text-zinc-600">/10</span>
                   </div>
-                </div>
-              )}
+                )}
+                
+                {currentStepData.dwell_time_ms !== undefined && currentStepData.dwell_time_ms > 0 && (
+                  <div className="bg-zinc-900/50 rounded-lg p-2">
+                    <div className="flex items-center gap-1 mb-1">
+                      <Activity className="w-3 h-3 text-purple-400" />
+                      <span className="text-[8px] uppercase tracking-wider text-zinc-500">Duration</span>
+                    </div>
+                    <span className="text-lg font-bold font-mono text-purple-400">
+                      {(currentStepData.dwell_time_ms / 1000).toFixed(1)}
+                    </span>
+                    <span className="text-xs text-zinc-600">s</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Evidence Section */}
+              <div className="space-y-2">
+                {/* Network Evidence */}
+                {currentStepData.network_logs && currentStepData.network_logs.length > 0 && (
+                  <div className="bg-zinc-900/30 rounded-lg p-2.5">
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <Network className="w-3.5 h-3.5 text-blue-400" />
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+                        Network Evidence
+                      </span>
+                    </div>
+                    <div className="space-y-1 font-mono">
+                      {currentStepData.network_logs.slice(0, 3).map((log: any, i: number) => (
+                        <div key={i} className="flex items-center gap-2 text-[10px]">
+                          <span className={cn(
+                            "font-bold w-9 text-center rounded px-1",
+                            log.status >= 500 ? "text-red-400 bg-red-500/10" :
+                            log.status >= 400 ? "text-amber-400 bg-amber-500/10" :
+                            "text-emerald-400 bg-emerald-500/10"
+                          )}>
+                            {log.status}
+                          </span>
+                          <span className="text-zinc-500 w-12">{log.method}</span>
+                          <span className="text-zinc-400 truncate flex-1">{log.url}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Console Evidence */}
+                {currentStepData.console_logs && currentStepData.console_logs.length > 0 && (
+                  <div className="bg-zinc-900/30 rounded-lg p-2.5">
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <Terminal className="w-3.5 h-3.5 text-yellow-400" />
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+                        Console Evidence
+                      </span>
+                    </div>
+                    <div className="space-y-1 font-mono text-[9px]">
+                      {currentStepData.console_logs.slice(0, 3).map((log: string, i: number) => (
+                        <div key={i} className="text-zinc-400 leading-relaxed pl-2 border-l border-yellow-500/30">
+                          {log}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* UX Issues */}
+                {currentStepData.ux_issues && currentStepData.ux_issues.length > 0 && (
+                  <div className="bg-zinc-900/30 rounded-lg p-2.5">
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <Eye className="w-3.5 h-3.5 text-cyan-400" />
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+                        UX Observations
+                      </span>
+                    </div>
+                    <div className="space-y-1">
+                      {currentStepData.ux_issues.slice(0, 3).map((issue: string, i: number) => (
+                        <div key={i} className="flex items-start gap-2 text-[10px]">
+                          <span className="text-cyan-500 mt-0.5">•</span>
+                          <span className="text-zinc-400 leading-relaxed">{issue}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             </motion.div>
           )}
 

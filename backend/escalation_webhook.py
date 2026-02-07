@@ -6,6 +6,7 @@ import os
 import json
 from dotenv import load_dotenv
 from .root_cause_intelligence import RootCauseIntelligence
+from .pdf_alert_generator import generate_and_send_alert_pdf
 
 load_dotenv(os.path.join("backend", ".env"))
 SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN")
@@ -172,6 +173,13 @@ def send_alert(final_packet):
         )
         
         print(f"✅ Alert sent successfully to {responsible_team} team in #{target_channel}")
+        
+        # Generate and send PDF report to the team
+        try:
+            print(f"\n📄 Generating PDF report for {responsible_team} team...")
+            generate_and_send_alert_pdf(final_packet)
+        except Exception as pdf_error:
+            print(f"⚠️  PDF generation failed (non-critical): {pdf_error}")
         
     except SlackApiError as e:
         print(f"❌ Slack API Error: {e.response['error']}")

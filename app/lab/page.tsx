@@ -111,8 +111,18 @@ export default function LabPage() {
             addLog(`   🚨 Alert sent to ${data.diagnosticData.responsible_team} team`);
           }
         } else if (data.diagnosticData.ux_issues && data.diagnosticData.ux_issues.length > 0) {
-          // UX issues detected but not critical enough for alarm
-          addLog(`⚠️  UX Issues detected (${data.diagnosticData.ux_issues.length}) - Review recommended`);
+          // UX issues detected - show what they are!
+          addLog(`⚠️  UX Issues detected (${data.diagnosticData.ux_issues.length}):`);
+          data.diagnosticData.ux_issues.forEach((issue: string, i: number) => {
+            addLog(`   ${i + 1}. ${issue}`);
+          });
+          
+          // Check if alert was sent for these UX issues
+          if (data.diagnosticData.alert_sent) {
+            addLog(`   🚨 Alert sent to ${data.diagnosticData.responsible_team || 'Design'} team`);
+          } else {
+            addLog(`   📋 Review recommended - Alert will be sent`);
+          }
         } else if (data.diagnosticData.confusion_score > 3) {
           // High confusion but no specific diagnosis
           addLog(`⚠️  Elevated confusion detected (${data.diagnosticData.confusion_score}/10)`);

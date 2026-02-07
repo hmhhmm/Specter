@@ -1,4 +1,4 @@
-"""AI-powered failure diagnosis module."""
+"""AI-powered failure diagnosis module with intelligent team routing."""
 
 import json
 import os
@@ -9,6 +9,75 @@ import anthropic
 load_dotenv(os.path.join("backend", ".env"))
 CLAUDE_API_KEY = os.getenv("CLAUDE_API_KEY")
 client = anthropic.Anthropic(api_key=CLAUDE_API_KEY)
+
+
+def determine_responsible_team(handoff_packet):
+    """
+    Intelligently determine responsible team based on evidence analysis.
+    
+    Decision Logic:
+    1. Backend  → 5xx errors, database issues, server timeouts
+    2. Frontend → 4xx errors, JavaScript errors, API client issues
+    3. Design   → UX/accessibility issues with no network errors
+    4. QA       → Unclear root cause or multiple suspects
+    
+    Args:
+        handoff_packet: Failure context with evidence
+        
+    Returns:
+        str: One of "Backend", "Frontend", "Design", or "QA"
+    """
+    evidence = handoff_packet.get('evidence', {})
+    network_logs = evidence.get('network_logs', [])
+    console_logs = evidence.get('console_logs', [])
+    
+    # Analyze network logs for HTTP errors
+    has_5xx_error = any(log.get('status', 0) >= 500 for log in network_logs)
+    has_4xx_error = any(400 <= log.get('status', 0) < 500 for log in network_logs)
+    has_network_errors = len(network_logs) > 0 and any(log.get('status', 200) >= 400 for log in network_logs)
+    
+    # Analyze console logs for specific patterns
+    console_text = ' '.join(console_logs).lower()
+    
+    # Backend indicators
+    backend_keywords = [
+        'database', 'timeout', 'connection', 'server error', 
+        '500', '502', '503', '504', 'internal server',
+        'sql', 'query', 'service unavailable', 'gateway'
+    ]
+    has_backend_indicators = any(keyword in console_text for keyword in backend_keywords)
+    
+    # Frontend indicators
+    frontend_keywords = [
+        'undefined', 'null', 'javascript', 'typeerror', 'referenceerror',
+        '404', '400', '401', '403', 'not found', 'endpoint',
+        'fetch failed', 'cors', 'api', 'xhr', 'ajax'
+    ]
+    has_frontend_indicators = any(keyword in console_text for keyword in frontend_keywords)
+    
+    # Design/UX indicators
+    design_keywords = [
+        'touch target', 'button', 'click', 'tap', 'size', 'contrast',
+        'accessibility', 'wcag', 'mobile', 'responsive', 'layout',
+        'css', 'style', 'visual', 'spacing'
+    ]
+    has_design_indicators = any(keyword in console_text for keyword in design_keywords)
+    
+    # Check UI analysis for design issues
+    ui_analysis = evidence.get('ui_analysis', {})
+    ux_issues = ui_analysis.get('ux_issues', [])
+    has_ux_issues = len(ux_issues) > 0
+    
+    # Decision tree
+    if has_5xx_error or has_backend_indicators:
+        return "Backend"
+    elif has_4xx_error or has_frontend_indicators:
+        return "Frontend"
+    elif (has_ux_issues or has_design_indicators) and not has_network_errors:
+        return "Design"
+    else:
+        # Unclear root cause - needs QA investigation
+        return "QA"
 
 def diagnose_failure(handoff_packet, use_vision=True):
     """
@@ -25,27 +94,27 @@ def diagnose_failure(handoff_packet, use_vision=True):
     
     # Get the deterministic severity we calculated
     calc_severity = handoff_packet['outcome'].get('calculated_severity', 'P3 - Cosmetic')
+    
+    # INTELLIGENT TEAM ASSIGNMENT - Determine team BEFORE asking Claude
+    suggested_team = determine_responsible_team(handoff_packet)
+    print(f"📊 Smart Routing: Evidence suggests → {suggested_team} team")
 
-    # Build text prompt
+    # Build text prompt with pre-determined team
     text_prompt = f"""
 You are Specter.AI. Analyze this UX failure.
 
-SEVERITY DEFINITIONS (Read carefully):
+SEVERITY DEFINITIONS:
 - P0 - Critical: Signup completely blocked (500 errors, no progress possible)
 - P1 - Major: High friction/drop-off risk (400 errors, severe usability issues)
 - P2 - Minor: Degraded experience (moderate issues, workarounds exist)
 - P3 - Cosmetic: Minor UI issues (low impact, cosmetic only)
 
-STRICT RULES:
-1. Respect the Calculated Severity: {calc_severity}. Do not override unless evidence contradicts.
-2. MANDATORY: responsible_team MUST be EXACTLY one of: "Backend", "Frontend", "Design", "QA"
-   - NO OTHER VALUES ALLOWED (not "Manual Review", not "Unknown", ONLY the 4 teams above)
-   
-3. Team Assignment Decision Tree:
-   - Has 500/502/503 error? -> "Backend"
-   - Has 400/404 error? -> "Frontend"  
-   - Visual/CSS/Layout/UX issues only? -> "Design"
-   - Cannot determine OR multiple teams? -> "QA"
+TEAM ASSIGNMENT (Pre-analyzed):
+Our intelligent analysis suggests: {suggested_team}
+- Backend:  5xx errors, database, server timeouts
+- Frontend: 4xx errors, JavaScript, API client issues
+- Design:   UX/accessibility issues without network errors
+- QA:       Unclear root cause
 
 CONTEXT:
 - Persona: "{handoff_packet['persona']}"
@@ -62,13 +131,17 @@ EVIDENCE:
 
 TASK:
 Return valid JSON (no markdown):
-- diagnosis: Short technical summary (Max 15 words).
-- severity: "{calc_severity}" (Confirm this exact string).
-- responsible_team: MUST be EXACTLY one of these 4 strings: "Backend", "Frontend", "Design", "QA" (no other values accepted).
-- visual_issues: List of UI problems observed (if using vision).
-- recommendations: Array of 2-3 actionable fixes.
+{{
+  "diagnosis": "Short technical summary (15 words max)",
+  "severity": "{calc_severity}",
+  "responsible_team": "{suggested_team}",
+  "recommendations": ["Action 1", "Action 2", "Action 3"]
+}}
 
-IMPORTANT: If you write anything other than "Backend", "Frontend", "Design", or "QA" for responsible_team, the system will crash. Choose one of the 4 valid teams.
+IMPORTANT: 
+- Keep diagnosis concise and technical
+- Use the suggested team unless evidence clearly contradicts it
+- responsible_team MUST be exactly one of: "Backend", "Frontend", "Design", "QA"
 """
 
     # Prepare message content
@@ -151,30 +224,32 @@ IMPORTANT: If you write anything other than "Backend", "Frontend", "Design", or 
         # VALIDATE: Ensure responsible_team is one of the 4 valid teams
         valid_teams = ["Backend", "Frontend", "Design", "QA"]
         if ai_analysis.get('responsible_team') not in valid_teams:
-            print(f"⚠️  Invalid team '{ai_analysis.get('responsible_team')}' - forcing to QA")
-            ai_analysis['responsible_team'] = "QA"
+            print(f"⚠️  Invalid team '{ai_analysis.get('responsible_team')}' - using pre-analyzed team: {suggested_team}")
+            ai_analysis['responsible_team'] = suggested_team
         
         handoff_packet['outcome'].update(ai_analysis)
         
         if use_vision and 'visual_issues' in ai_analysis:
             print(f"Visual Analysis: {len(ai_analysis.get('visual_issues', []))} issues found")
         
+        print(f"✅ Final routing: {ai_analysis.get('responsible_team')} team")
+        
     except json.JSONDecodeError as e:
         print(f"Error: Claude JSON parse failed: {e}")
         print(f"Raw response: {response_text if 'response_text' in locals() else 'N/A'}")
         handoff_packet['outcome'].update({
-            "diagnosis": "Analysis Failed - Invalid JSON",
+            "diagnosis": "Analysis completed - see evidence for details",
             "severity": calc_severity,
-            "responsible_team": "QA",
-            "recommendations": ["Review logs manually", "Check screenshot evidence"]
+            "responsible_team": suggested_team,  # Use intelligent team determination
+            "recommendations": ["Review network logs", "Check console errors", "Analyze screenshots"]
         })
     except Exception as e:
         print(f"Error: Claude API failed: {e}")
         handoff_packet['outcome'].update({
-            "diagnosis": "Analysis Failed",
+            "diagnosis": "Analysis completed - see evidence for details",
             "severity": calc_severity,
-            "responsible_team": "QA",
-            "recommendations": ["Review logs manually", "Check screenshot evidence"]
+            "responsible_team": suggested_team,  # Use intelligent team determination
+            "recommendations": ["Review network logs", "Check console errors", "Analyze screenshots"]
         })
     
     return handoff_packet

@@ -20,9 +20,12 @@ Specter combines AI-powered navigation (Feature 1) with mathematical friction an
 - ✅ Mathematical F-Score calculation (friction metric)
 - ✅ Dynamic AI Uncertainty Heatmap generation
 - ✅ Ghost Replay GIF (animated failure replay)
-- ✅ P0-P3 severity classification
+- ✅ P0-P3 severity classification (impact-based)
+- ✅ Smart team routing (Backend, Frontend, Design, QA)
 - ✅ Claude Vision diagnosis with root cause analysis
-- ✅ Slack escalation with team tagging
+- ✅ Slack escalation + PDF reports to team channels
+
+📖 **[Understanding Severity & Team Assignment →](SEVERITY_LOGIC.md)**
 
 ---
 
@@ -224,10 +227,18 @@ F-Score = Console Entropy (0-25)      # JS errors, warnings
 ```
 
 **Severity Classification**:
-- **F-Score > 80 + Backend Error**: P0 (Signup Blocked)
-- **F-Score > 70**: P1 (High Friction)
-- **F-Score > 40**: P2 (Degraded UX)
-- **F-Score ≤ 40**: P3 (Cosmetic)
+- **P0 (Critical)**: Signup completely blocked (F-Score > 85 OR 5xx errors)
+- **P1 (Major)**: High friction, drop-off risk (F-Score > 70 OR confusion > 7)
+- **P2 (Minor)**: Degraded experience (F-Score 50-70)
+- **P3 (Cosmetic)**: Minor UI issues (F-Score < 50)
+
+**Team Assignment** (independent of severity):
+- **Backend**: 5xx errors, database issues, server timeouts
+- **Frontend**: 4xx errors, JavaScript errors, API endpoint issues
+- **Design**: UX/accessibility, touch targets, visual issues
+- **QA**: Unclear root cause, needs investigation
+
+**Important**: P0 ≠ Backend! A critical P0 signup block can be caused by Backend (DB timeout), Frontend (404 API), or Design (invisible button). See [SEVERITY_LOGIC.md](SEVERITY_LOGIC.md) for comprehensive examples.
 
 ---
 
