@@ -1,4 +1,32 @@
 # expectation_engine.py (The "Pro" Logic)
+"""
+Specter Expectation Engine - F-Score Calculation & Severity Classification
+
+SEVERITY LEVELS (Auto-determined):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+P0 - Critical: SIGNUP BLOCKED
+  └─ User cannot proceed at all
+  └─ Triggers: 500 errors, f_score > 85
+  └─ Action: Immediate Slack alert to responsible team
+
+P1 - Major: HIGH FRICTION / DROP-OFF RISK  
+  └─ Serious usability issues likely to cause abandonment
+  └─ Triggers: 400 errors + friction, f_score > 70, confusion > 7/10
+  └─ Action: Immediate Slack alert to responsible team
+
+P2 - Minor: DEGRADED EXPERIENCE
+  └─ Moderate issues, workarounds exist
+  └─ Triggers: f_score 50-70, confusion 4-7/10, minor errors
+  └─ Action: Immediate Slack alert to responsible team
+
+P3 - Cosmetic: MINOR UI ISSUES
+  └─ Low impact, visual inconsistencies only
+  └─ Triggers: f_score < 50, confusion < 4/10
+  └─ Action: Immediate Slack alert to responsible team
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+ALL severity levels trigger Slack alerts for complete visibility.
+"""
 import cv2
 import numpy as np
 import imageio
@@ -448,19 +476,59 @@ def calculate_real_f_score(telemetry, ssim_score, network_logs, console_logs, ex
     # Final Score (0-100)
     return min(100.0, round(score, 1))
 
-def determine_severity_rule(f_score, network_logs):
+def determine_severity_rule(f_score, network_logs, console_logs=None, ui_analysis=None):
     """
-    Explicit P0-P3 Rules (No AI Guessing)
-    """
-    has_critical_error = any(log['status'] >= 500 for log in network_logs)
+    Enhanced P0-P3 Severity Rules
     
-    if has_critical_error and f_score > 80:
-        return "P0" # "Signup Blocked" logic
-    if f_score > 70:
-        return "P1" # High Friction
-    if f_score > 40:
-        return "P2" # Degraded
-    return "P3"     # Cosmetic
+    P0: Signup blocked (complete blocker - user cannot proceed)
+    P1: High friction, drop-off risk (serious usability issues)
+    P2: Degraded experience (moderate issues, workarounds exist)
+    P3: Cosmetic issues (minor UI problems, low impact)
+    """
+    console_logs = console_logs or []
+    ui_analysis = ui_analysis or {}
+    
+    # Check for critical errors
+    has_500_error = any(log.get('status', 0) >= 500 for log in network_logs)
+    has_400_error = any(400 <= log.get('status', 0) < 500 for log in network_logs)
+    has_console_error = any('error' in str(log).lower() for log in console_logs)
+    
+    # Get confusion score (0-10 scale)
+    confusion_score = ui_analysis.get('confusion_score', 0)
+    
+    # P0: SIGNUP BLOCKED - Complete blockers
+    # - 500 errors (backend crashed)
+    # - Extremely high friction (f_score > 85)
+    # - Critical console errors + high confusion
+    if has_500_error or f_score > 85:
+        return "P0 - Critical"
+    
+    # P1: HIGH FRICTION / DROP-OFF RISK
+    # - 400 errors (broken functionality)
+    # - High friction (f_score > 70)
+    # - Very high confusion (>7/10)
+    # - Console errors with significant friction
+    if has_400_error and f_score > 60:
+        return "P1 - Major"
+    if f_score > 70 or confusion_score > 7:
+        return "P1 - Major"
+    if has_console_error and f_score > 55:
+        return "P1 - Major"
+    
+    # P2: DEGRADED EXPERIENCE
+    # - Moderate friction (f_score 50-70)
+    # - Moderate confusion (4-7/10)
+    # - Minor errors with some friction
+    if f_score > 50 or confusion_score > 4:
+        return "P2 - Minor"
+    if (has_400_error or has_console_error) and f_score > 40:
+        return "P2 - Minor"
+    
+    # P3: COSMETIC ISSUES
+    # - Low friction (f_score < 50)
+    # - UI inconsistencies
+    # - Minor confusion (<4/10)
+    return "P3 - Cosmetic"
 
 def check_expectation(handoff):
     print(f"Checking Step {handoff['step_id']}...")
@@ -510,7 +578,12 @@ def check_expectation(handoff):
     )
     
     # 3. ASSIGN SEVERITY (Deterministic Rules)
-    severity_label = determine_severity_rule(f_score, evidence['network_logs'])
+    severity_label = determine_severity_rule(
+        f_score, 
+        evidence['network_logs'],
+        evidence.get('console_logs', []),
+        ui_analysis
+    )
 
     # 4. DECISION
     # If score > 50, we consider it a failure worth reporting

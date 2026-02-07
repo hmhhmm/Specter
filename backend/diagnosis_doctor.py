@@ -24,18 +24,25 @@ def diagnose_failure(handoff_packet, use_vision=True):
     print("Diagnosing with Claude{}...".format(" + Vision" if use_vision else ""))
     
     # Get the deterministic severity we calculated
-    calc_severity = handoff_packet['outcome'].get('calculated_severity', 'P3')
+    calc_severity = handoff_packet['outcome'].get('calculated_severity', 'P3 - Cosmetic')
 
     # Build text prompt
     text_prompt = f"""
 You are Specter.AI. Analyze this UX failure.
 
+SEVERITY DEFINITIONS (Read carefully):
+- P0 - Critical: Signup completely blocked (500 errors, no progress possible)
+- P1 - Major: High friction/drop-off risk (400 errors, severe usability issues)
+- P2 - Minor: Degraded experience (moderate issues, workarounds exist)
+- P3 - Cosmetic: Minor UI issues (low impact, cosmetic only)
+
 STRICT RULES:
-1. Respect the Calculated Severity: {calc_severity}. Do not override it unless logs contradict.
+1. Respect the Calculated Severity: {calc_severity}. Do not override unless evidence contradicts.
 2. Team Assignment Logic:
    - 500/502 Errors -> "Backend"
    - 400/404 Errors -> "Frontend"
-   - Visual Alignment/CSS -> "Design"
+   - Visual Alignment/CSS/UX -> "Design"
+   - Unclear/Multiple Teams -> "QA"
 
 CONTEXT:
 - Persona: "{handoff_packet['persona']}"
@@ -48,12 +55,13 @@ EVIDENCE:
 - Network Logs: {json.dumps(handoff_packet['evidence']['network_logs'])}
 - Console Logs: {json.dumps(handoff_packet['evidence'].get('console_logs', []))}
 - F-Score: {handoff_packet['outcome'].get('f_score', 'N/A')}/100
+- Confusion Score: {handoff_packet['evidence'].get('ui_analysis', {}).get('confusion_score', 'N/A')}/10
 
 TASK:
 Return valid JSON (no markdown):
 - diagnosis: Short technical summary (Max 15 words).
-- severity: "{calc_severity}" (Confirm this).
-- responsible_team: "Backend", "Frontend", or "Design".
+- severity: "{calc_severity}" (Confirm this exact string).
+- responsible_team: "Backend", "Frontend", "Design", or "QA".
 - visual_issues: List of UI problems observed (if using vision).
 - recommendations: Array of 2-3 actionable fixes.
 """

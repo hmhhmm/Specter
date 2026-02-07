@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import { SimulationState } from "@/app/lab/page";
 import { cn } from "@/lib/utils";
-import { Terminal, Cpu, Eye, Zap, AlertTriangle, ShieldCheck } from "lucide-react";
+import { Terminal, Cpu, Eye, Zap, AlertTriangle, ShieldCheck, Network, Activity, GitBranch } from "lucide-react";
 
 interface NeuralMonologueProps {
   state: SimulationState;
@@ -12,20 +12,10 @@ interface NeuralMonologueProps {
   persona: string;
   logs?: string[];
   results?: any;
+  currentStepData?: any;
 }
 
-const LOG_DATA = [
-  { type: "SYSTEM", icon: Cpu, color: "text-blue-400", text: "Initializing browser context. Target: orbitapparel.com/signup..." },
-  { type: "VISION", icon: Eye, color: "text-emerald-400", text: "DOM loaded. Analyzing structure... Found primary form elements." },
-  { type: "VISION", icon: Eye, color: "text-amber-400", text: "CTA contrast ratio check: 'Create Account' button vs. background - 1.2:1. WARNING: Below accessibility standards." },
-  { type: "ACTION", icon: Zap, color: "text-purple-400", text: "Inputting email: testuser_specter@ai.net" },
-  { type: "COGNITION", icon: Cpu, color: "text-emerald-400", text: "Analyzing field focus. User 'Power User' persona active. Expecting quick progression." },
-  { type: "COGNITION", icon: AlertTriangle, color: "text-red-400", text: "[FRUSTRATION DETECTED] Confidence score dropping to 45%. No clear error validation visible." },
-  { type: "ACTION", icon: Zap, color: "text-purple-400", text: "Pausing. Hovering over 'Create Account' button to trigger tooltip. No response." },
-  { type: "STATUS", icon: ShieldCheck, color: "text-emerald-500", text: "AI Agent entering exploratory loop. Requesting human intervention." },
-];
-
-export function NeuralMonologue({ state, step, persona, logs = [], results }: NeuralMonologueProps) {
+export function NeuralMonologue({ state, step, persona, logs = [], results, currentStepData }: NeuralMonologueProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [currentTime, setCurrentTime] = useState("");
 
@@ -43,7 +33,7 @@ export function NeuralMonologue({ state, step, persona, logs = [], results }: Ne
     if (containerRef.current) {
       containerRef.current.scrollTop = containerRef.current.scrollHeight;
     }
-  }, [logs, step]);
+  }, [logs, step, currentStepData]);
 
   return (
     <div className="flex flex-col h-full gap-4">
@@ -70,7 +60,11 @@ export function NeuralMonologue({ state, step, persona, logs = [], results }: Ne
         {/* Terminal Body */}
         <div 
           ref={containerRef}
-          className="flex-1 p-6 font-mono text-xs overflow-y-auto scrollbar-hide space-y-4"
+          className="flex-1 p-6 font-mono text-xs overflow-y-scroll space-y-4"
+          style={{
+            scrollbarWidth: 'thin',
+            scrollbarColor: '#4ade80 #18181b'
+          }}
         >
           {state === "idle" && (
             <div className="h-full flex items-center justify-center text-zinc-600 italic">
@@ -114,6 +108,202 @@ export function NeuralMonologue({ state, step, persona, logs = [], results }: Ne
               </motion.div>
             ))}
           </AnimatePresence>
+
+          {/* Real-time Diagnostic Data */}
+          {currentStepData && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="space-y-2 mt-3 p-3 rounded-lg bg-zinc-800/50 border border-emerald-500/20 max-h-[400px] overflow-y-auto scrollbar-hide"
+            >
+              {/* Confusion Score */}
+              {currentStepData.confusion_score !== undefined && (
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <Activity className={cn(
+                        "w-3 h-3",
+                        currentStepData.confusion_score >= 7 ? "text-red-500" :
+                        currentStepData.confusion_score >= 4 ? "text-amber-500" :
+                        "text-emerald-500"
+                      )} />
+                      <span className="text-[9px] uppercase tracking-wider text-zinc-500">
+                        Confusion
+                      </span>
+                    </div>
+                    <span className={cn(
+                      "text-xs font-bold font-mono",
+                      currentStepData.confusion_score >= 7 ? "text-red-500" :
+                      currentStepData.confusion_score >= 4 ? "text-amber-500" :
+                      "text-emerald-500"
+                    )}>
+                      {currentStepData.confusion_score}/10
+                    </span>
+                  </div>
+                  <div className="h-1.5 bg-zinc-900 rounded-full overflow-hidden">
+                    <div 
+                      className={cn(
+                        "h-full transition-all",
+                        currentStepData.confusion_score >= 7 ? "bg-red-500" :
+                        currentStepData.confusion_score >= 4 ? "bg-amber-500" :
+                        "bg-emerald-500"
+                      )}
+                      style={{ width: `${(currentStepData.confusion_score / 10) * 100}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Dwell Time */}
+              {currentStepData.dwell_time_ms !== undefined && currentStepData.dwell_time_ms > 0 && (
+                <div className="pt-2 border-t border-white/5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <Activity className="w-3 h-3 text-purple-500" />
+                      <span className="text-[9px] uppercase tracking-wider text-zinc-500">
+                        Duration
+                      </span>
+                    </div>
+                    <span className="text-xs font-mono text-purple-400">
+                      {(currentStepData.dwell_time_ms / 1000).toFixed(1)}s
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Network Logs */}
+              {currentStepData.network_logs && currentStepData.network_logs.length > 0 && (
+                <div className="pt-2 border-t border-white/5">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <Network className="w-3 h-3 text-blue-500" />
+                    <span className="text-[9px] uppercase tracking-wider text-zinc-500">
+                      Network
+                    </span>
+                  </div>
+                  <div className="space-y-0.5 font-mono text-[9px]">
+                    {currentStepData.network_logs.slice(0, 2).map((log: any, i: number) => (
+                      <div key={i} className="flex items-center gap-1.5">
+                        <span className={cn(
+                          "font-bold w-8",
+                          log.status >= 500 ? "text-red-500" :
+                          log.status >= 400 ? "text-amber-500" :
+                          "text-emerald-500"
+                        )}>
+                          {log.status}
+                        </span>
+                        <span className="text-zinc-600 w-10">{log.method}</span>
+                        <span className="text-zinc-500 truncate flex-1 text-[8px]">{log.url}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Console Logs */}
+              {currentStepData.console_logs && currentStepData.console_logs.length > 0 && (
+                <div className="pt-2 border-t border-white/5">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <Terminal className="w-3 h-3 text-yellow-500" />
+                    <span className="text-[9px] uppercase tracking-wider text-zinc-500">
+                      Console
+                    </span>
+                  </div>
+                  <div className="space-y-0.5 font-mono text-[8px]">
+                    {currentStepData.console_logs.slice(0, 2).map((log: string, i: number) => (
+                      <div key={i} className="text-zinc-400 truncate">{log}</div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* F-Score if available */}
+              {currentStepData.f_score !== undefined && (
+                <div className="pt-2 border-t border-white/5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <Zap className="w-3 h-3 text-amber-500" />
+                      <span className="text-[9px] uppercase tracking-wider text-zinc-500">
+                        F-Score
+                      </span>
+                    </div>
+                    <span className="text-xs font-bold font-mono text-amber-500">
+                      {currentStepData.f_score}/100
+                    </span>
+                  </div>
+                  <div className="h-1.5 bg-zinc-900 rounded-full overflow-hidden mt-1">
+                    <div 
+                      className="h-full bg-gradient-to-r from-emerald-500 via-amber-500 to-red-500 transition-all"
+                      style={{ width: `${currentStepData.f_score}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Diagnosis if failed */}
+              {currentStepData.diagnosis && (
+                <div className="pt-2 border-t border-white/5">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <AlertTriangle className="w-3 h-3 text-red-500" />
+                    <span className="text-[9px] uppercase tracking-wider text-red-500">
+                      Issue
+                    </span>
+                    {currentStepData.severity && (
+                      <span className={cn(
+                        "text-[8px] font-bold px-1.5 py-0.5 rounded ml-auto",
+                        currentStepData.severity.includes('P0') && "text-red-500 bg-red-500/10",
+                        currentStepData.severity.includes('P1') && "text-orange-500 bg-orange-500/10",
+                        currentStepData.severity.includes('P2') && "text-yellow-500 bg-yellow-500/10",
+                        currentStepData.severity.includes('P3') && "text-blue-500 bg-blue-500/10"
+                      )}>
+                        {currentStepData.severity.split(' - ')[0]}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[9px] text-zinc-300 leading-relaxed">
+                    {currentStepData.diagnosis}
+                  </p>
+                  <div className="flex items-center justify-between mt-1.5">
+                    {currentStepData.responsible_team && (
+                      <span className="text-[8px] text-zinc-600">
+                        → <span className="text-emerald-500">{currentStepData.responsible_team}</span>
+                      </span>
+                    )}
+                    {currentStepData.alert_sent && (
+                      <motion.div
+                        initial={{ scale: 0.8, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-red-500/10 border border-red-500/30"
+                      >
+                        <Zap className="w-2.5 h-2.5 text-red-400 animate-pulse" />
+                        <span className="text-[7px] font-bold uppercase tracking-wider text-red-400">
+                          Alert Sent
+                        </span>
+                      </motion.div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* UX Issues */}
+              {currentStepData.ux_issues && currentStepData.ux_issues.length > 0 && (
+                <div className="pt-2 border-t border-white/5">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <Eye className="w-3 h-3 text-cyan-500" />
+                    <span className="text-[9px] uppercase tracking-wider text-zinc-500">
+                      UX Issues
+                    </span>
+                  </div>
+                  <div className="space-y-0.5">
+                    {currentStepData.ux_issues.slice(0, 2).map((issue: string, i: number) => (
+                      <div key={i} className="text-[8px] text-zinc-400 leading-relaxed">
+                        • {issue}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </motion.div>
+          )}
 
           {/* Show test results when complete */}
           {results && state === "complete" && (

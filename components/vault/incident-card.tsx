@@ -15,6 +15,10 @@ export interface Incident {
   revenueLoss: number;
   cloudPosition: { x: number; y: number };
   monologue: string;
+  confusion_score?: number;
+  network_logs?: Array<{method: string; url: string; status: number}>;
+  console_logs?: string[];
+  ux_issues?: string[];
 }
 
 interface IncidentCardProps {
@@ -182,6 +186,77 @@ export function IncidentCard({ incident, index }: IncidentCardProps) {
                     <p className="text-zinc-300 leading-relaxed italic">
                       {">"} "{incident.monologue}"
                     </p>
+                    
+                    {/* Confusion Score Display */}
+                    {incident.confusion_score !== undefined && (
+                      <div className="p-3 rounded-xl bg-white/5 border border-white/10 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <AlertTriangle className={cn(
+                            "w-3 h-3",
+                            incident.confusion_score >= 7 ? "text-red-500" :
+                            incident.confusion_score >= 4 ? "text-amber-500" :
+                            "text-emerald-500"
+                          )} />
+                          <span className={cn(
+                            "text-[9px] uppercase tracking-widest font-bold",
+                            incident.confusion_score >= 7 ? "text-red-500/80" :
+                            incident.confusion_score >= 4 ? "text-amber-500/80" :
+                            "text-emerald-500/80"
+                          )}>
+                            User Confusion: {incident.confusion_score}/10
+                          </span>
+                        </div>
+                        <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
+                          <div 
+                            className={cn(
+                              "h-full transition-all",
+                              incident.confusion_score >= 7 ? "bg-red-500" :
+                              incident.confusion_score >= 4 ? "bg-amber-500" :
+                              "bg-emerald-500"
+                            )}
+                            style={{ width: `${(incident.confusion_score / 10) * 100}%` }}
+                          />
+                        </div>
+                        <p className="text-[10px] text-zinc-500">
+                          {incident.confusion_score >= 7 
+                            ? "CRITICAL: User showing signs of severe confusion and frustration" 
+                            : incident.confusion_score >= 4 
+                            ? "WARNING: Moderate confusion detected, user may abandon flow"
+                            : "Minimal confusion - user progressing naturally"}
+                        </p>
+                      </div>
+                    )}
+                    
+                    {/* Network Logs Display */}
+                    {incident.network_logs && incident.network_logs.length > 0 && (
+                      <div className="p-3 rounded-xl bg-white/5 border border-white/10 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <Terminal className="w-3 h-3 text-blue-500" />
+                          <span className="text-[9px] uppercase tracking-widest text-blue-500/80 font-bold">Network Activity</span>
+                        </div>
+                        <div className="space-y-1">
+                          {incident.network_logs.slice(0, 3).map((log, i) => (
+                            <div key={i} className="flex items-center gap-2 text-[9px]">
+                              <span className={cn(
+                                "font-bold",
+                                log.status >= 500 ? "text-red-500" :
+                                log.status >= 400 ? "text-amber-500" :
+                                "text-emerald-500"
+                              )}>
+                                {log.status}
+                              </span>
+                              <span className="text-zinc-600">{log.method}</span>
+                              <span className="text-zinc-500 truncate">{log.url}</span>
+                            </div>
+                          ))}
+                          {incident.network_logs.length > 3 && (
+                            <p className="text-[8px] text-zinc-600 italic mt-1">
+                              +{incident.network_logs.length - 3} more requests
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    )}
                     
                     <div className="p-3 rounded-xl bg-white/5 border border-white/10 space-y-2">
                       <div className="flex items-center gap-2">

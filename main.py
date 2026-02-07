@@ -174,8 +174,8 @@ Your job:
 
 RULES:
 - Perform ONE action per turn.
-- Action types: Tap, Input, Scroll, KeyboardPress, Sleep, GoToPage, GoBack, Hover
-- For Tap/Input/Scroll/Hover, reference an element by its numeric ID from the elements list.
+- Action types: Tap, Input, Scroll, KeyboardPress, Sleep, GoToPage, GoBack, Hover, Select
+- For Tap/Input/Scroll/Hover/Select, reference an element by its numeric ID from the elements list.
 - For Input, provide the value to type. Use realistic test data:
   - Email: ai.test.user@example.com
   - Password: SecurePass123!
@@ -186,6 +186,29 @@ RULES:
 - If you need to scroll to find more elements, use Scroll.
 - DO NOT click social login buttons (Google, Apple, Facebook) - use email signup.
 
+DROPDOWN/SELECT HANDLING (CRITICAL):
+- For country/region selectors, dropdowns, and comboboxes:
+  1. First TAP the dropdown element to open it (look for elements like "Select", "Choose", or arrow icons)
+  2. Wait for options to appear (they may be in a new list/menu)
+  3. Then TAP the specific option you want to select
+- If you see a dropdown showing "Select" or a placeholder, TAP it first to reveal options
+- After tapping a dropdown, the next step should be tapping the actual country/option
+- Look for elements with text like country names, or list items that appeared after opening
+- For native <select> elements, use Select action with the option value
+
+COUNTRY SELECTION STRATEGY:
+- When selecting a country, first tap the dropdown to open it
+- IMPORTANT: Many financial/trading sites RESTRICT certain countries (US, UK, etc). If you search for a country and get "No result found", try a DIFFERENT country immediately!
+- ALWAYS pick from VISIBLE countries in the dropdown list. Good options: Indonesia, Malaysia, Singapore, Japan, Germany, France, Australia, Brazil, India
+- DO NOT keep retrying the same country if it fails or shows "No result found"
+- If a search shows "No result found", clear it and TAP directly on a visible country from the list
+- If dropdown has many items, scroll within the dropdown to find options
+
+AVOIDING REPETITION:
+- Check PREVIOUS ACTIONS history - do NOT repeat an action that already failed
+- If you tried searching for a country and it failed, try a DIFFERENT country or tap a visible option
+- If stuck for 2+ steps on the same element, try an alternative approach
+
 RESPONSE FORMAT (valid JSON only, NO markdown fences, NO extra text):
 {"observation":"<what you see>","reasoning":"<why this action, from persona perspective>","action":{"type":"Tap","element_id":5,"value":null,"element_description":"Sign up button"},"ux_issues":["issue1"],"confusion_score":2,"done":false,"done_reason":null}
 
@@ -195,9 +218,16 @@ CONFUSION SCORE: 0=clear, 1-3=minor, 4-6=moderate, 7-9=high, 10=stuck"""
 def build_planner_prompt(persona_cfg, device_cfg, elements_json, page_url, page_title, step_num, history):
     history_text = ""
     if history:
-        history_text = "\n\nPREVIOUS ACTIONS:\n"
+        history_text = "\n\nPREVIOUS ACTIONS (learn from failures - DO NOT repeat failed actions):\n"
         for h in history[-5:]:
-            history_text += f"  Step {h['step']}: {h['action_desc']} -> {h['outcome']}\n"
+            status_marker = "⚠️ FAILED" if "FAIL" in h['outcome'] or "No result" in h['outcome'] else "✓"
+            history_text += f"  Step {h['step']}: {h['action_desc']} -> {h['outcome']} {status_marker}\n"
+        
+        # Check for repeated failures
+        recent_actions = [h['action_desc'] for h in history[-3:]]
+        if len(recent_actions) >= 2 and recent_actions[-1] == recent_actions[-2]:
+            history_text += "\n  ⚠️ WARNING: You are repeating the same action! Try something DIFFERENT.\n"
+    
     return f"""CURRENT STATE:
 - Step: {step_num}
 - URL: {page_url}
@@ -289,6 +319,12 @@ def _build_action_dict(action_type, element_id, value):
         action["locate"]["id"] = str(element_id) if element_id is not None else "0"
         action["param"]["value"] = value or ""
         action["param"]["clear_before_type"] = True
+    elif action_type == 'Select':
+        # Select action for native <select> elements or custom dropdowns
+        action["type"] = "Tap"  # Fall back to Tap for custom dropdowns
+        action["locate"]["id"] = str(element_id) if element_id is not None else "0"
+        if value:
+            action["param"]["value"] = value  # Option value to select
     elif action_type == 'KeyboardPress':
         action["param"]["value"] = value or "Enter"
     elif action_type == 'Sleep':
@@ -344,6 +380,7 @@ async def autonomous_signup_test(
     locale: str = 'en-US',
     max_steps: int = 15,
     screenshot_callback = None,
+    diagnostic_callback = None,
     headless: bool = False,
 ) -> Dict[str, Any]:
     """
@@ -351,6 +388,7 @@ async def autonomous_signup_test(
     
     Args:
         screenshot_callback: Optional async callback(screenshot_path, step, action) for streaming
+        diagnostic_callback: Optional async callback(step, diagnostic_data) for streaming analysis results
 
     Uses:
     - BrowserSessionPool: browser lifecycle
@@ -670,7 +708,7 @@ async def autonomous_signup_test(
                     },
                 }
 
-                # Save step report
+                # Build initial step report (confusion score, ux issues, evidence collected first)
                 step_report = {
                     'step_id': step_num,
                     'timestamp': datetime.now().isoformat(),
@@ -686,17 +724,30 @@ async def autonomous_signup_test(
                     'outcome': dual_diagnosis if dual_diagnosis else {'status': 'OK' if success else 'FAIL'},
                     'evidence': handoff['evidence'],
                 }
+
+                # Feature 2 pipeline - adds diagnosis, severity, team, f_score to handoff['outcome']
+                pipeline_result = run_specter_pipeline(handoff)
+                
+                # Update step_report with enriched outcome (now has diagnosis, severity, team, f_score)
+                step_report['outcome'] = handoff.get('outcome', step_report['outcome'])
+                
+                # Save complete step report with diagnosis
                 with open(os.path.join(reports_dir, f"step_{step_num:02d}_report.json"), 'w') as f:
                     json.dump(step_report, f, indent=2)
-
-                # Feature 2 pipeline
-                pipeline_result = run_specter_pipeline(handoff)
+                
                 results.append({
                     'step': step_num, 'action': action_desc_text,
                     'result': pipeline_result, 'dwell_time': dwell_time_ms,
                     'confusion': confusion,
                 })
                 print(f"  Specter: {pipeline_result}")
+                
+                # Broadcast complete diagnostic data to frontend (after diagnosis)
+                if diagnostic_callback:
+                    try:
+                        await diagnostic_callback(step_num, step_report)
+                    except Exception as cb_err:
+                        print(f"  Diagnostic callback error: {cb_err}")
 
             except Exception as e:
                 print(f"  Step error: {e}")
@@ -754,10 +805,22 @@ def run_specter_pipeline(handoff_packet: Dict[str, Any]) -> str:
     }
 
     final_packet = diagnose_failure(handoff_packet, use_vision=True)
+    
+    # 🚨 AUTOMATIC SLACK ESCALATION - Send alert for ALL issues
+    severity = final_packet.get('outcome', {}).get('severity', '')
+    responsible_team = final_packet.get('outcome', {}).get('responsible_team', 'Unknown')
+    
+    # Send Slack alert for every issue detected
     try:
+        print(f"  🚨 AUTO-ESCALATING to {responsible_team} team (Severity: {severity})")
         send_alert(final_packet)
+        print(f"  ✅ Slack alert sent to {responsible_team} team channel")
     except Exception as e:
-        print(f"  Slack alert skipped: {e}")
+        print(f"  ⚠️  Slack alert failed: {e}")
+        # Check if it's a channel_not_found error
+        if "channel_not_found" in str(e):
+            print(f"  💡 Solution: Invite bot to channel with /invite @Specter Bot")
+    
     return "FAIL"
 
 

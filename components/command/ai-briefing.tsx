@@ -2,9 +2,28 @@
 
 import { motion } from "framer-motion";
 import { Brain } from "lucide-react";
+import { useEffect, useState } from "react";
 
 export function AIBriefing() {
-  const text = "Critical friction detected in checkout flow. $148k recovery in progress via Autonomous Remediation.";
+  const [text, setText] = useState("Initializing Specter AI analysis...");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchBriefing() {
+      try {
+        const response = await fetch("http://localhost:8000/api/dashboard/stats");
+        if (response.ok) {
+          const data = await response.json();
+          setText(data.ai_briefing || "System stable. No critical issues detected.");
+        }
+      } catch (err) {
+        setText("Backend connection pending. Run tests to populate dashboard.");
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchBriefing();
+  }, []);
   
   return (
     <div className="w-full bg-zinc-900/40 border-b border-amber-500/10 backdrop-blur-md px-8 py-3 flex items-center gap-4 overflow-hidden">

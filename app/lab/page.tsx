@@ -21,6 +21,7 @@ export default function LabPage() {
   const [currentScreenshot, setCurrentScreenshot] = useState<string | null>(null);
   const [testResults, setTestResults] = useState<any>(null);
   const [logs, setLogs] = useState<string[]>([]);
+  const [currentStepData, setCurrentStepData] = useState<any>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
   // WebSocket connection
@@ -65,17 +66,65 @@ export default function LabPage() {
     } else if (data.type === "step_update") {
       setSimulationState("analyzing");
       setSimulationStep(prev => prev + 1);
-      addLog(`Step: ${data.action || "Processing..."}`);
+      addLog(`Step ${data.step || simulationStep + 1}: ${data.action || "Processing..."}`);
+      
+      // Update current step diagnostic data (if available immediately)
+      if (data.stepData) {
+        setCurrentStepData({
+          confusion_score: data.stepData.confusion_score,
+          network_logs: data.stepData.network_logs,
+          f_score: data.stepData.f_score,
+          diagnosis: data.stepData.diagnosis,
+          severity: data.stepData.severity,
+          responsible_team: data.stepData.responsible_team,
+          ux_issues: data.stepData.ux_issues,
+          alert_sent: data.stepData.alert_sent
+        });
+      }
+      
       if (data.screenshot) {
         console.log("Setting screenshot, length:", data.screenshot.length);
         setCurrentScreenshot(data.screenshot);
       } else {
         console.log("No screenshot in message");
       }
+    } else if (data.type === "diagnostic_update") {
+      // Separate diagnostic data broadcast after step analysis completes
+      if (data.diagnosticData) {
+        setCurrentStepData({
+          confusion_score: data.diagnosticData.confusion_score,
+          network_logs: data.diagnosticData.network_logs,
+          console_logs: data.diagnosticData.console_logs,
+          f_score: data.diagnosticData.f_score,
+          diagnosis: data.diagnosticData.diagnosis,
+          severity: data.diagnosticData.severity,
+          responsible_team: data.diagnosticData.responsible_team,
+          ux_issues: data.diagnosticData.ux_issues,
+          alert_sent: data.diagnosticData.alert_sent,
+          dwell_time_ms: data.diagnosticData.dwell_time_ms
+        });
+        
+        // Add concise diagnostic summary to terminal
+        if (data.diagnosticData.diagnosis) {
+          addLog(`🔍 ${data.diagnosticData.severity || 'Issue'} - ${data.diagnosticData.responsible_team}`);
+          if (data.diagnosticData.alert_sent) {
+            addLog(`   🚨 Alert sent to ${data.diagnosticData.responsible_team} team`);
+          }
+        } else if (data.diagnosticData.ux_issues && data.diagnosticData.ux_issues.length > 0) {
+          // UX issues detected but not critical enough for alarm
+          addLog(`⚠️  UX Issues detected (${data.diagnosticData.ux_issues.length}) - Review recommended`);
+        } else if (data.diagnosticData.confusion_score > 3) {
+          // High confusion but no specific diagnosis
+          addLog(`⚠️  Elevated confusion detected (${data.diagnosticData.confusion_score}/10)`);
+        } else {
+          addLog(`✓ Analysis complete - No critical issues`);
+        }
+      }
     } else if (data.type === "test_complete") {
       setSimulationState("complete");
       setTestResults(data.results);
       addLog("Test completed");
+      addLog(`Final Results: ${data.results?.passed || 0} passed, ${data.results?.failed || 0} failed`);
     } else if (data.type === "test_error") {
       setSimulationState("idle");
       addLog(`Error: ${data.error}`);
@@ -119,7 +168,7 @@ export default function LabPage() {
           device: deviceMap[device] || "desktop",
           network: networkMap[network] || "wifi",
           persona: personaMap[persona] || "normal",
-          max_steps: 4
+          max_steps: 15
         })
       });
 
@@ -141,6 +190,7 @@ export default function LabPage() {
     setLogs([]);
     setTestResults(null);
     setCurrentScreenshot(null);
+    setCurrentStepData(null);
   };
 
   return (
@@ -167,6 +217,7 @@ export default function LabPage() {
             step={simulationStep} 
             persona={persona}
             logs={logs}
+            currentStepData={currentStepData}
             results={testResults}
           />
         </div>

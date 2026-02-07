@@ -1,9 +1,10 @@
 "use client";
 
-import { Map, Zap, Activity } from "lucide-react";
+import { Map, Zap, Activity, GitBranch } from "lucide-react";
 import { RegionalMap } from "./regional-map";
 import { CompetitorBar } from "./competitor-bar";
 import { FScoreWave } from "./f-score-wave";
+import { RootCausePanel } from "./root-cause-panel";
 
 export function IntelligencePanel() {
   return (
@@ -31,6 +32,15 @@ export function IntelligencePanel() {
           <h3 className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest font-bold">Competitive Tension</h3>
         </div>
         <CompetitorBar />
+      </div>
+
+      {/* Root Cause Intelligence */}
+      <div className="rounded-[2.5rem] bg-zinc-900/40 border border-white/5 p-6 flex flex-col shadow-sm">
+        <div className="flex items-center gap-2 mb-4">
+          <GitBranch className="w-4 h-4 text-emerald-500" />
+          <h3 className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest font-bold">Recurring Patterns</h3>
+        </div>
+        <RootCausePanel />
       </div>
 
       {/* F-Score Waveform */}

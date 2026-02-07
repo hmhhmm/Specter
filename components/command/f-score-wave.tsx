@@ -1,12 +1,35 @@
 "use client";
 
 import { motion } from "framer-motion";
+import { useEffect, useState } from "react";
 
 export function FScoreWave() {
+  const [avgFScore, setAvgFScore] = useState(0.74);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchStats() {
+      try {
+        const response = await fetch("http://localhost:8000/api/dashboard/stats");
+        if (response.ok) {
+          const data = await response.json();
+          if (data.avg_f_score > 0) {
+            setAvgFScore(data.avg_f_score / 100);
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching F-score:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchStats();
+  }, []);
+
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-end gap-3 mb-6">
-        <span className="text-5xl font-bold font-bricolage text-white">0.74</span>
+        <span className="text-5xl font-bold font-bricolage text-white">{loading ? "..." : avgFScore.toFixed(2)}</span>
         <div className="flex flex-col mb-1.5">
           <span className="text-[9px] font-mono text-emerald-500 uppercase tracking-widest font-bold">F-Score</span>
           <span className="text-[8px] font-mono text-zinc-600 uppercase tracking-widest leading-none">Index Value</span>
