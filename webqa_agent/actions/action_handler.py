@@ -119,7 +119,7 @@ class ActionHandler:
             PosixPath('my_reports/screenshots')
         """
         if cls._save_screenshots_locally and cls._screenshot_session_dir is None:
-            timestamp = os.getenv('WEBQA_REPORT_TIMESTAMP') or datetime.now().strftime('%Y-%m-%d_%H-%M-%S_%f')
+            timestamp = os.getenv('WEBQA_REPORT_TIMESTAMP') or datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S_%f')
             cls._screenshot_session_timestamp = timestamp
 
             if custom_report_dir:

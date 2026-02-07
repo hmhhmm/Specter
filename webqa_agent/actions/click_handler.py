@@ -78,6 +78,11 @@ class ClickHandler:
         # Clear previous errors
         action_handler = ActionHandler()
         action_handler.page = page
+        
+        # Get viewport dimensions
+        viewport = page.viewport_size
+        viewport_width = viewport['width'] if viewport else 1920
+        viewport_height = viewport['height'] if viewport else 1080
 
         click_result = {
             'element': element_info,
@@ -87,6 +92,7 @@ class ClickHandler:
             'network_errors': [],
             'response_errors': [],
             'screenshot_before': None,
+            'screenshot_before_path': None,
             'screenshot_after': None,
             'screenshot_after_path': None,
             'new_page_screenshot': None,
@@ -94,6 +100,8 @@ class ClickHandler:
             'click_method': None,
             'click_coordinates': None,
             'has_new_page': False,
+            'viewport_width': viewport_width,
+            'viewport_height': viewport_height,
         }
 
         selector = element_info.get('selector')
@@ -101,6 +109,15 @@ class ClickHandler:
         click_success = False
 
         logging.debug(f'Clicking element: {element_info}')
+        
+        # Capture BEFORE screenshot
+        screenshot_b64_before, screenshot_path_before = await action_handler.b64_page_screenshot(
+            file_name=f'element_{element_index}_before_click',
+            context='test'
+        )
+        click_result['screenshot_before'] = screenshot_b64_before
+        click_result['screenshot_before_path'] = screenshot_path_before
+        logging.debug('Before click screenshot saved')
 
         context = page.context
         new_page = None
@@ -164,6 +181,17 @@ class ClickHandler:
             locator_str = f'xpath={xpath}'
             try:
                 await self._scroll_into_view_safely(page, locator_str)
+                
+                # Capture click coordinates before clicking
+                element = await page.query_selector(locator_str)
+                if element:
+                    box = await element.bounding_box()
+                    if box:
+                        click_result['click_coordinates'] = {
+                            'x': int(box['x'] + box['width'] / 2),
+                            'y': int(box['y'] + box['height'] / 2)
+                        }
+                
                 await page.click(locator_str, timeout=click_timeout)
                 click_result['click_method'] = locator_str
                 logging.debug(f'Successfully clicked using xpath: {xpath}')
@@ -175,6 +203,17 @@ class ClickHandler:
         if selector:
             try:
                 await self._scroll_into_view_safely(page, selector)
+                
+                # Capture click coordinates before clicking
+                element = await page.query_selector(selector)
+                if element:
+                    box = await element.bounding_box()
+                    if box:
+                        click_result['click_coordinates'] = {
+                            'x': int(box['x'] + box['width'] / 2),
+                            'y': int(box['y'] + box['height'] / 2)
+                        }
+                
                 await page.click(selector, timeout=click_timeout)
                 click_result['click_method'] = selector
                 logging.debug(f'Successfully clicked using selector: {selector}')
@@ -198,6 +237,14 @@ class ClickHandler:
                     logging.debug(f'query_selector failed for xpath: {e}')
 
             if element_handle:
+                # Capture click coordinates before clicking
+                box = await element_handle.bounding_box()
+                if box:
+                    click_result['click_coordinates'] = {
+                        'x': int(box['x'] + box['width'] / 2),
+                        'y': int(box['y'] + box['height'] / 2)
+                    }
+                
                 await page.evaluate('el => el.click()', element_handle)
                 click_result['click_method'] = f'js_evaluate_click:{selector or xpath}'
                 logging.debug('Successfully clicked using JS evaluate')
