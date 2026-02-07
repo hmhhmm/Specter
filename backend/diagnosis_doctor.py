@@ -1,4 +1,5 @@
-# diagnosis_doctor.py (Vision-Enhanced Edition)
+"""AI-powered failure diagnosis module."""
+
 import json
 import os
 import base64
@@ -11,17 +12,16 @@ client = anthropic.Anthropic(api_key=CLAUDE_API_KEY)
 
 def diagnose_failure(handoff_packet, use_vision=True):
     """
-    AI-powered failure diagnosis with optional vision analysis.
+    Analyze failure using AI with optional vision analysis.
     
     Args:
         handoff_packet: Failure context and evidence
-        use_vision: If True, sends screenshots to Claude for visual analysis
+        use_vision: Enable screenshot analysis
+        
+    Returns:
+        Updated handoff_packet with diagnosis
     """
-    
-    if use_vision:
-        print("🧠 Specter (Claude Sonnet + Vision) is diagnosing...")
-    else:
-        print("🧠 Specter (Claude Haiku) is diagnosing...")
+    print("Diagnosing with Claude{}...".format(" + Vision" if use_vision else ""))
     
     # Get the deterministic severity we calculated
     calc_severity = handoff_packet['outcome'].get('calculated_severity', 'P3')
@@ -108,27 +108,48 @@ Return valid JSON (no markdown):
                     "text": "↑ AFTER: Screenshot taken after user action. Compare with BEFORE to identify what changed (or didn't change when expected)."
                 })
         except Exception as e:
-            print(f"⚠️  Vision analysis failed, falling back to text-only: {e}")
+            print(f"Warning: Vision analysis failed, falling back to text-only: {e}")
             use_vision = False
 
     try:
-        # Choose model based on vision usage
-        model = "claude-3-haiku-20240307" if use_vision else "claude-3-haiku-20240307"
+        # Choose model based on vision usage - use Claude 3.5 Sonnet for vision
+        model = "claude-3-5-sonnet-20240620" if use_vision else "claude-3-haiku-20240307"
         
         message = client.messages.create(
             model=model,
             max_tokens=2048,
             messages=[{"role": "user", "content": message_content}]
         )
-        ai_analysis = json.loads(message.content[0].text)
+        
+        # Extract response text
+        response_text = message.content[0].text.strip()
+        
+        # Remove markdown code blocks if present
+        if response_text.startswith("```"):
+            # Remove ```json and ``` markers
+            response_text = response_text.split('\n', 1)[1] if '\n' in response_text else response_text
+            if response_text.endswith("```"):
+                response_text = response_text.rsplit("```", 1)[0]
+            response_text = response_text.strip()
+        
+        # Parse JSON
+        ai_analysis = json.loads(response_text)
         handoff_packet['outcome'].update(ai_analysis)
         
-        # Log vision insights if available
         if use_vision and 'visual_issues' in ai_analysis:
-            print(f"👁️  Visual Analysis: {len(ai_analysis.get('visual_issues', []))} issues found")
+            print(f"Visual Analysis: {len(ai_analysis.get('visual_issues', []))} issues found")
         
+    except json.JSONDecodeError as e:
+        print(f"Error: Claude JSON parse failed: {e}")
+        print(f"Raw response: {response_text if 'response_text' in locals() else 'N/A'}")
+        handoff_packet['outcome'].update({
+            "diagnosis": "Analysis Failed - Invalid JSON",
+            "severity": calc_severity,
+            "responsible_team": "Manual Review",
+            "recommendations": ["Review logs manually", "Check screenshot evidence"]
+        })
     except Exception as e:
-        print(f"❌ Claude Error: {e}")
+        print(f"Error: Claude API failed: {e}")
         handoff_packet['outcome'].update({
             "diagnosis": "Analysis Failed",
             "severity": calc_severity,
