@@ -65,7 +65,7 @@ export default function LabPage() {
       <div className="relative z-10 flex flex-col h-screen">
         <SpecterNav />
 
-        <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-8 px-8 py-4 overflow-hidden mt-20">
+        <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-8 px-8 py-4 overflow-hidden mt-28">
           <div className="relative min-h-0 flex items-center justify-center">
             <DeviceEmulator
               state={simulationState}

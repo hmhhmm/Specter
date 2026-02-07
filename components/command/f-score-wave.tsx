@@ -6,10 +6,10 @@ export function FScoreWave() {
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-end gap-3 mb-6">
-        <span className="text-5xl font-bold font-bricolage text-white">0.74</span>
+        <span className="text-5xl font-bold font-bricolage text-red-500">8.2</span>
         <div className="flex flex-col mb-1.5">
-          <span className="text-[9px] font-mono text-emerald-500 uppercase tracking-widest font-bold">F-Score</span>
-          <span className="text-[8px] font-mono text-zinc-600 uppercase tracking-widest leading-none">Index Value</span>
+          <span className="text-[9px] font-mono text-red-500 uppercase tracking-widest font-bold">Friction Index</span>
+          <span className="text-[8px] font-mono text-zinc-600 uppercase tracking-widest leading-none">Aggregated Score</span>
         </div>
       </div>
       
@@ -17,25 +17,25 @@ export function FScoreWave() {
         <div className="absolute inset-0 opacity-10 pointer-events-none bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:10px_10px]" />
         
         <div className="relative h-24 w-full flex items-center">
-          <svg viewBox="0 0 100 40" className="w-full h-full stroke-emerald-500/50 fill-none stroke-[1.5]">
+          <svg viewBox="0 0 100 40" className="w-full h-full stroke-red-500/50 fill-none stroke-[1.5]">
             <motion.path
-              d="M0 20 L10 20 L15 5 L20 35 L25 20 L35 20 L40 5 L45 35 L50 20 L60 20 L65 10 L70 30 L75 20 L85 20 L90 5 L95 35 L100 20"
+              d="M0 20 L5 5 L10 35 L15 10 L20 30 L25 5 L30 35 L35 15 L40 25 L45 5 L50 35 L55 10 L60 30 L65 5 L70 35 L75 15 L80 25 L85 5 L90 35 L95 10 L100 20"
               initial={{ pathLength: 0 }}
               animate={{ pathLength: 1 }}
-              transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+              transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
             />
             <motion.path
-              d="M0 20 L10 20 L15 5 L20 35 L25 20 L35 20 L40 5 L45 35 L50 20 L60 20 L65 10 L70 30 L75 20 L85 20 L90 5 L95 35 L100 20"
+              d="M0 20 L5 5 L10 35 L15 10 L20 30 L25 5 L30 35 L35 15 L40 25 L45 5 L50 35 L55 10 L60 30 L65 5 L70 35 L75 15 L80 25 L85 5 L90 35 L95 10 L100 20"
               initial={{ pathLength: 0, opacity: 0.5 }}
               animate={{ pathLength: 1, opacity: 1 }}
-              transition={{ duration: 3, repeat: Infinity, ease: "linear", delay: 1 }}
-              className="stroke-emerald-400 blur-sm"
+              transition={{ duration: 2, repeat: Infinity, ease: "linear", delay: 0.5 }}
+              className="stroke-red-400 blur-sm"
             />
           </svg>
         </div>
 
         <p className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest leading-relaxed mt-4">
-          Calculated based on <span className="text-zinc-300">Entropy Score</span> and <span className="text-zinc-300">Semantic Distance</span> of user interaction patterns.
+          Visualized <span className="text-red-400">Chaos Waveform</span>. High spikes indicate "Rage Clicks" and unhandled UI state locks.
         </p>
       </div>
     </div>

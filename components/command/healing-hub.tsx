@@ -41,7 +41,7 @@ export function HealingHub() {
               <Terminal className="w-3 h-3 text-zinc-500" />
               <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest font-bold">Proposed Patch</span>
             </div>
-            <span className="text-[8px] font-mono text-zinc-700 uppercase tracking-widest">globals.css</span>
+            <span className="text-[8px] font-mono text-zinc-700 uppercase tracking-widest">trade-panel.tsx</span>
           </div>
           
           <div className="flex-1 bg-[#080808] rounded-2xl border border-white/5 p-5 font-mono text-[10px] leading-relaxed relative overflow-hidden flex flex-col group/code">
@@ -49,16 +49,20 @@ export function HealingHub() {
             
             <div className="flex-1 overflow-y-auto custom-scrollbar">
               <div className="flex gap-4 opacity-40">
-                <span className="w-4 shrink-0 text-right select-none">12</span>
-                <p className="text-zinc-400">.checkout-button {"{"}</p>
+                <span className="w-4 shrink-0 text-right select-none">42</span>
+                <p className="text-zinc-400">{"<input"}</p>
               </div>
               <div className="flex gap-4 bg-red-500/5 -mx-5 px-5 py-1 border-l-2 border-red-500/50">
-                <span className="w-4 shrink-0 text-right text-red-500/40 select-none">13</span>
-                <p className="text-red-400/90">-  color: var(--gray-mute);</p>
+                <span className="w-4 shrink-0 text-right text-red-500/40 select-none">43</span>
+                <p className="text-red-400/90">-  type="text"</p>
               </div>
               <div className="flex gap-4 bg-emerald-500/10 -mx-5 px-5 py-1 border-l-2 border-emerald-500/50 relative">
-                <span className="w-4 shrink-0 text-right text-emerald-500/40 select-none">14</span>
-                <p className="text-emerald-500/90">+  color: var(--emerald-glow);</p>
+                <span className="w-4 shrink-0 text-right text-emerald-500/40 select-none">44</span>
+                <p className="text-emerald-500/90">+  type="text"</p>
+              </div>
+              <div className="flex gap-4 bg-emerald-500/10 -mx-5 px-5 py-1 border-l-2 border-emerald-500/50">
+                <span className="w-4 shrink-0 text-right text-emerald-500/40 select-none">45</span>
+                <p className="text-emerald-500/90">+  inputMode="decimal"</p>
                 <motion.div 
                   initial={{ x: "-100%" }}
                   animate={{ x: "100%" }}
@@ -66,13 +70,9 @@ export function HealingHub() {
                   className="absolute inset-0 bg-emerald-500/5 w-1/4 skew-x-12 pointer-events-none"
                 />
               </div>
-              <div className="flex gap-4 bg-emerald-500/10 -mx-5 px-5 py-1 border-l-2 border-emerald-500/50">
-                <span className="w-4 shrink-0 text-right text-emerald-500/40 select-none">15</span>
-                <p className="text-emerald-500/90">+  box-shadow: 0 0 20px rgba(16,185,129,0.2);</p>
-              </div>
               <div className="flex gap-4 opacity-40">
-                <span className="w-4 shrink-0 text-right select-none">16</span>
-                <p className="text-zinc-400">{"}"}</p>
+                <span className="w-4 shrink-0 text-right select-none">46</span>
+                <p className="text-zinc-400">/&gt;</p>
               </div>
             </div>
             
@@ -84,10 +84,10 @@ export function HealingHub() {
             >
                <div className="flex items-center gap-2">
                  <Sparkles className="w-3 h-3 text-emerald-500" />
-                 <span className="text-[9px] font-mono text-emerald-400 uppercase tracking-widest font-bold">Heuristic Analysis</span>
+                 <span className="text-[9px] font-mono text-emerald-400 uppercase tracking-widest font-bold">Vision Diagnosis</span>
                </div>
                <p className="text-[10px] text-zinc-500 leading-relaxed italic">
-                 "Observed 4 rage-click events per session on mobile viewports. Primary cause: low-contrast visibility. Applying perceptual lift."
+                 "Ghost Agent #0841 observed 8.2/10 friction score. Standard keyboard detected on currency input. Applying mobile input-mode patch."
                </p>
             </motion.div>
           </div>

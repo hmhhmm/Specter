@@ -26,7 +26,7 @@ export default function CommandPage() {
       <div className="relative z-10 flex flex-col min-h-screen">
         <SpecterNav />
 
-        <div className="mt-20">
+        <div className="mt-28">
           <AIBriefing />
         </div>
 

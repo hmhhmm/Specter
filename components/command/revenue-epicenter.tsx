@@ -10,15 +10,15 @@ export function RevenueEpicenter() {
   
   useEffect(() => {
     const timer = setTimeout(() => {
-      setRevenue(148200);
+      setRevenue(50500);
     }, 500);
     return () => clearTimeout(timer);
   }, []);
 
   const segments = [
-    { label: "Checkout Flow", value: 60, color: "oklch(0.7 0.2 40)" },
-    { label: "Signup Flow", value: 30, color: "oklch(0.7 0.2 40 / 0.7)" },
-    { label: "Verification", value: 10, color: "oklch(0.7 0.2 40 / 0.4)" },
+    { label: "P0: Layout & Z-Index", value: 42, color: "oklch(0.7 0.2 40)" },
+    { label: "P1: Contrast & I18n", value: 35, color: "oklch(0.7 0.2 40 / 0.7)" },
+    { label: "P2: UX Friction", value: 23, color: "oklch(0.7 0.2 40 / 0.4)" },
   ];
 
   // Calculate SVG paths for donut

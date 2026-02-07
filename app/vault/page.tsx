@@ -23,7 +23,7 @@ export default function VaultPage() {
       <div className="relative z-10 flex flex-col min-h-screen">
         <SpecterNav />
 
-        <div className="flex-1 px-8 py-12 max-w-7xl mx-auto w-full mb-20 mt-20">
+        <div className="flex-1 px-8 py-12 max-w-7xl mx-auto w-full mb-20 mt-28">
           <VaultHeader />
           <VaultFilters
             activeFilter={activeFilter}
