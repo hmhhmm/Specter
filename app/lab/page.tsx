@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { MissionHeader } from "@/components/lab/mission-header";
+import { SpecterNav } from "@/components/landing/specter-nav";
 import { ControlDeck } from "@/components/lab/control-deck";
 import { DeviceEmulator } from "@/components/lab/device-emulator";
 import { NeuralMonologue } from "@/components/lab/neural-monologue";
@@ -11,12 +11,17 @@ import { motion, AnimatePresence } from "framer-motion";
 export type SimulationState = "idle" | "scanning" | "analyzing" | "complete";
 
 export default function LabPage() {
-  const [simulationState, setSimulationState] = useState<SimulationState>("idle");
+  const [simulationState, setSimulationState] =
+    useState<SimulationState>("idle");
   const [simulationStep, setSimulationStep] = useState(0);
   const [persona, setPersona] = useState("senior");
   const [device, setDevice] = useState("iphone-15");
   const [network, setNetwork] = useState("4g");
   const [isVoiceEnabled, setIsVoiceEnabled] = useState(true);
+  const [targetUrl, setTargetUrl] = useState("novatrade.io/dashboard");
+  const [objective, setObjective] = useState(
+    "Audit the withdrawal flow for UX friction on mobile viewports.",
+  );
 
   // Simulation logic
   useEffect(() => {
@@ -29,8 +34,8 @@ export default function LabPage() {
     } else if (simulationState === "analyzing") {
       if (simulationStep < 8) {
         timeout = setTimeout(() => {
-          setSimulationStep(prev => prev + 1);
-        }, 1500); // Staggered log appearance
+          setSimulationStep((prev) => prev + 1);
+        }, 4500); // Increased to 4.5s: 1.5s for glide, 3s for reading/observation
       } else {
         setSimulationState("complete");
       }
@@ -58,22 +63,30 @@ export default function LabPage() {
 
       {/* Page Content */}
       <div className="relative z-10 flex flex-col h-screen">
-        <MissionHeader />
-        
-        <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-8 px-8 py-6 overflow-hidden mb-32">
-          <DeviceEmulator 
-            state={simulationState} 
-            step={simulationStep} 
-            device={device}
-          />
-          <NeuralMonologue 
-            state={simulationState} 
-            step={simulationStep} 
-            persona={persona}
-          />
+        <SpecterNav />
+
+        <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-8 px-8 py-4 overflow-hidden mt-28">
+          <div className="relative min-h-0 flex items-center justify-center">
+            <DeviceEmulator
+              state={simulationState}
+              step={simulationStep}
+              device={device}
+            />
+          </div>
+          <div className="relative min-h-0">
+            <NeuralMonologue
+              state={simulationState}
+              step={simulationStep}
+              persona={persona}
+              objective={objective}
+            />
+          </div>
         </div>
 
-        <ControlDeck 
+        {/* Spacer for Fixed Bottom UI (ControlDeck + StatusBar) */}
+        <div className="h-40 flex-shrink-0" />
+
+        <ControlDeck
           state={simulationState}
           onStart={handleStartSimulation}
           onReset={handleResetSimulation}
@@ -85,10 +98,14 @@ export default function LabPage() {
           setNetwork={setNetwork}
           isVoiceEnabled={isVoiceEnabled}
           setIsVoiceEnabled={setIsVoiceEnabled}
+          targetUrl={targetUrl}
+          setTargetUrl={setTargetUrl}
+          objective={objective}
+          setObjective={setObjective}
         />
 
-        <StatusBar 
-          state={simulationState} 
+        <StatusBar
+          state={simulationState}
           onTerminate={handleResetSimulation}
         />
       </div>

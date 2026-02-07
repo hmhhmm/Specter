@@ -28,16 +28,16 @@ export function IntelligencePanel() {
       <div className="rounded-[2.5rem] bg-zinc-900/40 border border-white/5 p-6 flex flex-col shadow-sm">
         <div className="flex items-center gap-2 mb-6">
           <Zap className="w-4 h-4 text-amber-500" />
-          <h3 className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest font-bold">Competitive Tension</h3>
+          <h3 className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest font-bold">Anxiety Indices (vs Industry)</h3>
         </div>
         <CompetitorBar />
       </div>
 
-      {/* F-Score Waveform */}
+      {/* Friction Index Waveform */}
       <div className="rounded-[2.5rem] bg-zinc-900/40 border border-white/5 p-6 flex flex-col flex-1 shadow-sm overflow-hidden">
         <div className="flex items-center gap-2 mb-6">
-          <Activity className="w-4 h-4 text-emerald-500" />
-          <h3 className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest font-bold">Average Frustration</h3>
+          <Activity className="w-4 h-4 text-red-500" />
+          <h3 className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest font-bold">Friction Index</h3>
         </div>
         <FScoreWave />
       </div>

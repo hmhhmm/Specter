@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import { VaultHeader } from "@/components/vault/vault-header";
 import { VaultFilters } from "@/components/vault/vault-filters";
 import { IncidentGrid } from "@/components/vault/incident-grid";
-import { MissionHeader } from "@/components/lab/mission-header";
+import { SpecterNav } from "@/components/landing/specter-nav";
 import { StatusBar } from "@/components/lab/status-bar";
 import { useState } from "react";
 
@@ -21,15 +21,21 @@ export default function VaultPage() {
 
       {/* Page Content */}
       <div className="relative z-10 flex flex-col min-h-screen">
-        <MissionHeader />
-        
-        <div className="flex-1 px-8 py-12 max-w-7xl mx-auto w-full mb-20">
+        <SpecterNav />
+
+        <div className="flex-1 px-8 py-12 max-w-7xl mx-auto w-full mb-20 mt-28">
           <VaultHeader />
-          <VaultFilters activeFilter={activeFilter} onFilterChange={setActiveFilter} />
+          <VaultFilters
+            activeFilter={activeFilter}
+            onFilterChange={setActiveFilter}
+          />
           <IncidentGrid activeFilter={activeFilter} />
         </div>
 
-        <StatusBar state="idle" onTerminate={() => window.location.href = '/'} />
+        <StatusBar
+          state="idle"
+          onTerminate={() => (window.location.href = "/")}
+        />
       </div>
 
       {/* Background Decorative Grid */}

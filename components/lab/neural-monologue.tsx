@@ -4,28 +4,44 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import { SimulationState } from "@/app/lab/page";
 import { cn } from "@/lib/utils";
-import { Terminal, Cpu, Eye, Zap, AlertTriangle, ShieldCheck } from "lucide-react";
+import { Terminal, Cpu, Eye, Zap, AlertTriangle, ShieldCheck, Globe } from "lucide-react";
 
 interface NeuralMonologueProps {
   state: SimulationState;
   step: number;
   persona: string;
+  objective: string;
 }
 
 const LOG_DATA = [
-  { type: "SYSTEM", icon: Cpu, color: "text-blue-400", text: "Initializing browser context. Target: orbitapparel.com/signup..." },
-  { type: "VISION", icon: Eye, color: "text-emerald-400", text: "DOM loaded. Analyzing structure... Found primary form elements." },
-  { type: "VISION", icon: Eye, color: "text-amber-400", text: "CTA contrast ratio check: 'Create Account' button vs. background - 1.2:1. WARNING: Below accessibility standards." },
-  { type: "ACTION", icon: Zap, color: "text-purple-400", text: "Inputting email: testuser_specter@ai.net" },
-  { type: "COGNITION", icon: Cpu, color: "text-emerald-400", text: "Analyzing field focus. User 'Power User' persona active. Expecting quick progression." },
-  { type: "COGNITION", icon: AlertTriangle, color: "text-red-400", text: "[FRUSTRATION DETECTED] Confidence score dropping to 45%. No clear error validation visible." },
-  { type: "ACTION", icon: Zap, color: "text-purple-400", text: "Pausing. Hovering over 'Create Account' button to trigger tooltip. No response." },
-  { type: "STATUS", icon: ShieldCheck, color: "text-emerald-500", text: "AI Agent entering exploratory loop. Requesting human intervention." },
+  { type: "SYSTEM", icon: Cpu, color: "text-blue-400", text: "Initializing browser context. Target: novatrade.io/dashboard..." },
+  { type: "VISION", icon: Eye, color: "text-emerald-400", text: "Viewport: Mobile (390x844). Analyzing z-index stack... [CRITICAL] Chat widget z-9999 overlapping 'Sell' button." },
+  { type: "COGNITION", icon: AlertTriangle, color: "text-red-400", text: "Data Overflow detected. BTC Price '$10,420.50' exceeds container width. Text clipped at viewport edge." },
+  { type: "VISION", icon: Eye, color: "text-amber-400", text: "Contrast check: 'Transaction Fee: $2.50' - Fee VALUE invisible. Color #0a0a0c on #0a0a0c background." },
+  { type: "ACTION", icon: Zap, color: "text-purple-400", text: "Tapping 'Amount' input. Mobile keyboard: ABC triggered. Expected: numeric keypad (123). UX friction: HIGH." },
+  { type: "COGNITION", icon: Globe, color: "text-emerald-400", text: "Switching language to DE. Button 'Handel bestätigen' exceeds fixed 180px container. Text clipped." },
+  { type: "ACTION", icon: Zap, color: "text-purple-400", text: "Executing 'Withdraw' intent. Click registered. No state change. No error message. Silent failure confirmed." },
+  { type: "STATUS", icon: ShieldCheck, color: "text-emerald-500", text: "[TERMINAL] Global loading spinner activated. UI locked. All interactions blocked. Session terminated." },
 ];
 
-export function NeuralMonologue({ state, step, persona }: NeuralMonologueProps) {
+export function NeuralMonologue({
+  state,
+  step,
+  persona,
+  objective,
+}: NeuralMonologueProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [currentTime, setCurrentTime] = useState("");
+
+  const dynamicLogs = [
+    {
+      type: "SYSTEM",
+      icon: Cpu,
+      color: "text-blue-400",
+      text: `Objective Received: "${objective}"`,
+    },
+    ...LOG_DATA.slice(1),
+  ];
 
   useEffect(() => {
     const updateTime = () => {
@@ -68,7 +84,7 @@ export function NeuralMonologue({ state, step, persona }: NeuralMonologueProps) 
         {/* Terminal Body */}
         <div 
           ref={containerRef}
-          className="flex-1 p-6 font-mono text-xs overflow-y-auto scrollbar-hide space-y-4"
+          className="flex-1 p-4 font-mono text-[11px] overflow-y-auto scrollbar-hide space-y-3"
         >
           {state === "idle" && (
             <div className="h-full flex items-center justify-center text-zinc-600 italic">
@@ -90,27 +106,27 @@ export function NeuralMonologue({ state, step, persona }: NeuralMonologueProps) 
           )}
 
           <AnimatePresence>
-            {LOG_DATA.slice(0, step).map((log, i) => {
+            {dynamicLogs.slice(0, step).map((log, i) => {
               const Icon = log.icon;
               return (
                 <motion.div 
                   key={i}
                   initial={{ opacity: 0, x: -10 }}
                   animate={{ opacity: 1, x: 0 }}
-                  className="group flex gap-4 items-start border-l-2 border-transparent hover:border-emerald-500/30 pl-2 transition-colors duration-300"
+                  className="group flex gap-3 items-start border-l-2 border-transparent hover:border-emerald-500/30 pl-2 transition-colors duration-300"
                 >
-                  <div className="flex-shrink-0 flex flex-col items-center pt-1">
-                    <div className={cn("w-6 h-6 rounded-lg bg-zinc-800 flex items-center justify-center border border-white/5 group-hover:scale-110 transition-transform", log.color)}>
-                      <Icon className="w-3 h-3" />
+                  <div className="flex-shrink-0 flex flex-col items-center pt-0.5">
+                    <div className={cn("w-5 h-5 rounded-md bg-zinc-800 flex items-center justify-center border border-white/5 group-hover:scale-110 transition-transform", log.color)}>
+                      <Icon className="w-2.5 h-2.5" />
                     </div>
                   </div>
                   
-                  <div className="flex-1 space-y-1">
-                    <div className="flex items-center gap-3">
-                      <span className="text-[9px] text-zinc-600">[{currentTime}]</span>
-                      <span className={cn("text-[9px] font-bold uppercase tracking-widest", log.color)}>{log.type}</span>
+                  <div className="flex-1 space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[8px] text-zinc-600">[{currentTime}]</span>
+                      <span className={cn("text-[8px] font-bold uppercase tracking-widest", log.color)}>{log.type}</span>
                     </div>
-                    <p className="text-zinc-300 leading-relaxed group-hover:text-white transition-colors">
+                    <p className="text-zinc-300 leading-normal group-hover:text-white transition-colors">
                       {log.text}
                     </p>
                   </div>
@@ -119,7 +135,7 @@ export function NeuralMonologue({ state, step, persona }: NeuralMonologueProps) 
             })}
           </AnimatePresence>
 
-          {state === "analyzing" && step < LOG_DATA.length && (
+          {state === "analyzing" && step < dynamicLogs.length && (
             <motion.div 
               animate={{ opacity: [0.3, 1, 0.3] }}
               transition={{ duration: 1.5, repeat: Infinity }}

@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import { Brain } from "lucide-react";
 
 export function AIBriefing() {
-  const text = "Critical friction detected in checkout flow. $148k recovery in progress via Autonomous Remediation.";
+  const text = "Found 7 critical traps in novatrade.io dashboard. $50.5k revenue leak detected. Patching z-index and overflow vulnerabilities.";
   
   return (
     <div className="w-full bg-zinc-900/40 border-b border-amber-500/10 backdrop-blur-md px-8 py-3 flex items-center gap-4 overflow-hidden">

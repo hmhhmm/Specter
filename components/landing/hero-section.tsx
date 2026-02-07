@@ -64,9 +64,9 @@ function ElegantShape({
             "absolute inset-0",
             "bg-gradient-to-r to-transparent",
             gradient,
-            "backdrop-blur-[1px]",
-            "ring-1 ring-emerald-500/10",
-            "shadow-[0_2px_16px_-2px_rgba(16,185,129,0.1)]",
+            "backdrop-blur-[2px]",
+            "ring-1 ring-emerald-500/20",
+            "shadow-[0_2px_32px_-2px_rgba(16,185,129,0.2)]",
             "after:absolute after:inset-0",
             "after:bg-[radial-gradient(circle_at_50%_50%,rgba(16,185,129,0.1),transparent_70%)]",
             "after:rounded-[inherit]"
@@ -93,15 +93,15 @@ export function HeroSection() {
   };
 
   return (
-    <section className="relative flex min-h-[85vh] w-full items-center justify-center overflow-hidden bg-zinc-950 pt-32 pb-16">
-      <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/[0.05] via-transparent to-zinc-900/[0.05] blur-3xl" />
-
+    <section className="relative flex min-h-[85vh] w-full items-center justify-center overflow-hidden bg-transparent pt-32 pb-16">
+      <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/[0.15] via-transparent to-zinc-900/[0.15] blur-3xl opacity-70" />
+      
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <ElegantShape
           borderRadius={24}
           className="top-[-10%] left-[-15%]"
           delay={0.3}
-          gradient="from-emerald-500/[0.15]"
+          gradient="from-emerald-500/[0.25]"
           height={500}
           rotate={-8}
           width={300}
@@ -111,7 +111,7 @@ export function HeroSection() {
           borderRadius={20}
           className="right-[-20%] bottom-[-5%]"
           delay={0.5}
-          gradient="from-zinc-500/[0.1]"
+          gradient="from-emerald-500/[0.15]"
           height={200}
           rotate={15}
           width={600}
@@ -121,7 +121,7 @@ export function HeroSection() {
           borderRadius={32}
           className="top-[40%] left-[-5%]"
           delay={0.4}
-          gradient="from-emerald-600/[0.1]"
+          gradient="from-emerald-600/[0.2]"
           height={300}
           rotate={24}
           width={300}
@@ -131,7 +131,7 @@ export function HeroSection() {
           borderRadius={12}
           className="top-[5%] right-[10%]"
           delay={0.6}
-          gradient="from-emerald-400/[0.08]"
+          gradient="from-emerald-400/[0.15]"
           height={100}
           rotate={-20}
           width={250}
