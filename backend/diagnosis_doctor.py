@@ -38,11 +38,14 @@ SEVERITY DEFINITIONS (Read carefully):
 
 STRICT RULES:
 1. Respect the Calculated Severity: {calc_severity}. Do not override unless evidence contradicts.
-2. Team Assignment Logic:
-   - 500/502 Errors -> "Backend"
-   - 400/404 Errors -> "Frontend"
-   - Visual Alignment/CSS/UX -> "Design"
-   - Unclear/Multiple Teams -> "QA"
+2. MANDATORY: responsible_team MUST be EXACTLY one of: "Backend", "Frontend", "Design", "QA"
+   - NO OTHER VALUES ALLOWED (not "Manual Review", not "Unknown", ONLY the 4 teams above)
+   
+3. Team Assignment Decision Tree:
+   - Has 500/502/503 error? -> "Backend"
+   - Has 400/404 error? -> "Frontend"  
+   - Visual/CSS/Layout/UX issues only? -> "Design"
+   - Cannot determine OR multiple teams? -> "QA"
 
 CONTEXT:
 - Persona: "{handoff_packet['persona']}"
@@ -61,9 +64,11 @@ TASK:
 Return valid JSON (no markdown):
 - diagnosis: Short technical summary (Max 15 words).
 - severity: "{calc_severity}" (Confirm this exact string).
-- responsible_team: "Backend", "Frontend", "Design", or "QA".
+- responsible_team: MUST be EXACTLY one of these 4 strings: "Backend", "Frontend", "Design", "QA" (no other values accepted).
 - visual_issues: List of UI problems observed (if using vision).
 - recommendations: Array of 2-3 actionable fixes.
+
+IMPORTANT: If you write anything other than "Backend", "Frontend", "Design", or "QA" for responsible_team, the system will crash. Choose one of the 4 valid teams.
 """
 
     # Prepare message content
@@ -142,6 +147,13 @@ Return valid JSON (no markdown):
         
         # Parse JSON
         ai_analysis = json.loads(response_text)
+        
+        # VALIDATE: Ensure responsible_team is one of the 4 valid teams
+        valid_teams = ["Backend", "Frontend", "Design", "QA"]
+        if ai_analysis.get('responsible_team') not in valid_teams:
+            print(f"⚠️  Invalid team '{ai_analysis.get('responsible_team')}' - forcing to QA")
+            ai_analysis['responsible_team'] = "QA"
+        
         handoff_packet['outcome'].update(ai_analysis)
         
         if use_vision and 'visual_issues' in ai_analysis:
@@ -153,7 +165,7 @@ Return valid JSON (no markdown):
         handoff_packet['outcome'].update({
             "diagnosis": "Analysis Failed - Invalid JSON",
             "severity": calc_severity,
-            "responsible_team": "Manual Review",
+            "responsible_team": "QA",
             "recommendations": ["Review logs manually", "Check screenshot evidence"]
         })
     except Exception as e:
@@ -161,7 +173,7 @@ Return valid JSON (no markdown):
         handoff_packet['outcome'].update({
             "diagnosis": "Analysis Failed",
             "severity": calc_severity,
-            "responsible_team": "Manual Review",
+            "responsible_team": "QA",
             "recommendations": ["Review logs manually", "Check screenshot evidence"]
         })
     
