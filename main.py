@@ -56,7 +56,54 @@ try:
     AUTONOMOUS_AVAILABLE = True
 except ImportError:
     AUTONOMOUS_AVAILABLE = False
-    print("⚠️  Autonomous mode requires: pip install playwright langchain langchain-anthropic")
+    print("Autonomous mode requires: pip install playwright langchain langchain-anthropic")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# RED DOT DEBUG OVERLAY - Visual Click Feedback
+# ═══════════════════════════════════════════════════════════════════════════
+
+RED_DOT_JS = """
+(coords) => {
+    const old = document.getElementById('__ghost_dot__');
+    if (old) old.remove();
+
+    const dot = document.createElement('div');
+    dot.id = '__ghost_dot__';
+    
+    // Use fixed positioning (viewport coordinates)
+    // coords[0] and coords[1] are already viewport-relative from mouse.click()
+    dot.style.cssText = `
+        position: fixed;
+        left: ${coords[0] - 8}px;
+        top: ${coords[1] - 8}px;
+        width: 16px;
+        height: 16px;
+        background: rgba(255, 0, 0, 0.8);
+        border: 3px solid white;
+        border-radius: 50%;
+        z-index: 2147483647;
+        pointer-events: none;
+        box-shadow: 0 0 10px 4px rgba(255,0,0,0.8);
+        animation: pulse 0.5s ease-out;
+    `;
+    
+    // Add pulse animation
+    const style = document.createElement('style');
+    style.textContent = `
+        @keyframes pulse {
+            0% { transform: scale(0.5); opacity: 0; }
+            50% { transform: scale(1.2); opacity: 1; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+    `;
+    document.head.appendChild(style);
+    
+    document.body.appendChild(dot);
+    setTimeout(() => { dot.style.opacity = '0'; dot.style.transition = 'opacity 0.5s'; }, 2000);
+    setTimeout(() => { dot.remove(); style.remove(); }, 2500);
+}
+"""
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -187,6 +234,10 @@ async def analyze_ui_with_vision(
         if isinstance(screenshot_b64, str) and 'base64,' in screenshot_b64:
             screenshot_b64 = screenshot_b64.split('base64,')[1]
         
+        # Exponential backoff for rate limits
+        delay = 4.0
+        max_retries = 5
+        
         prompt = f"""You are a UX Quality Assurance expert analyzing this interface.
 
 CONTEXT:
@@ -264,30 +315,59 @@ Analyze the screenshot now. Be STRICT - flag even minor usability issues."""
 
         client = anthropic.Anthropic(api_key=os.getenv("CLAUDE_API_KEY"))
         
-        message = client.messages.create(
-            model="claude-3-haiku-20240307",  # Fast for real-time analysis
-            max_tokens=2048,
-            messages=[{
-                "role": "user",
-                "content": [
-                    {
-                        "type": "image",
-                        "source": {
-                            "type": "base64",
-                            "media_type": "image/png",
-                            "data": screenshot_b64
-                        }
-                    },
-                    {
-                        "type": "text",
-                        "text": prompt
-                    }
-                ]
-            }]
-        )
+        # Retry with exponential backoff on rate limits
+        for attempt in range(1, max_retries + 1):
+            try:
+                message = client.messages.create(
+                    model="claude-3-haiku-20240307",  # Fast for real-time analysis
+                    max_tokens=2048,
+                    messages=[{
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": "image/png",
+                                    "data": screenshot_b64
+                                }
+                            },
+                            {
+                                "type": "text",
+                                "text": prompt
+                            }
+                        ]
+                    }]
+                )
+                
+                analysis = json.loads(message.content[0].text)
+                return analysis
+                
+            except json.JSONDecodeError as je:
+                print(f"   ⚠️  Vision analysis JSON parse failed (attempt {attempt}/{max_retries})")
+                if attempt == max_retries:
+                    break
+                await asyncio.sleep(1.0)
+                
+            except Exception as e:
+                err_msg = str(e).lower()
+                if "rate limit" in err_msg or "429" in err_msg or "overloaded" in err_msg:
+                    if attempt < max_retries:
+                        print(f"   ⏳ Rate limited (attempt {attempt}/{max_retries}). Waiting {delay:.0f}s...")
+                        await asyncio.sleep(delay)
+                        delay = min(delay * 2, 60.0)  # 4s → 8s → 16s → 32s → 60s
+                        continue
+                print(f"   ⚠️  Vision analysis failed: {e}")
+                break
         
-        analysis = json.loads(message.content[0].text)
-        return analysis
+        # All retries exhausted
+        return {
+            'issues': [],
+            'recommended_action': None,
+            'accessibility_score': 0,
+            'elderly_friendly': False,
+            'network_ready': False
+        }
         
     except Exception as e:
         print(f"   ⚠️  Vision analysis failed: {e}")
@@ -353,6 +433,30 @@ async def autonomous_signup_test(
     # Enable screenshot saving
     ActionHandler.set_screenshot_config(save_screenshots=True)
     
+    # Network and console log capture
+    network_logs = []
+    console_logs = []
+    
+    def attach_listeners(page):
+        """Hook into Playwright page events for network and console capture."""
+        
+        def on_response(response):
+            status = response.status
+            # Capture 4xx/5xx and all API-like calls
+            if status >= 400 or "/api" in response.url:
+                network_logs.append({
+                    "status": status,
+                    "url": response.url,
+                    "method": response.request.method,
+                })
+        
+        def on_console(msg):
+            if msg.type in ("error", "warning"):
+                console_logs.append(f"[{msg.type}] {msg.text}")
+        
+        page.on("response", on_response)
+        page.on("console", on_console)
+    
     async with async_playwright() as p:
         # Launch browser with device emulation
         browser = await p.chromium.launch(
@@ -369,6 +473,9 @@ async def autonomous_signup_test(
         )
         
         page = await context.new_page()
+        
+        # Attach network and console listeners
+        attach_listeners(page)
         
         # Apply network throttling
         cdp = await context.new_cdp_session(page)
@@ -411,6 +518,10 @@ async def autonomous_signup_test(
         
         print(f"📋 Executing {len(steps)} autonomous steps...\n")
         
+        # Create reports directory for individual step JSONs
+        reports_dir = os.path.join("reports", f"test_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}")
+        os.makedirs(reports_dir, exist_ok=True)
+        
         results = []
         
         for idx, step in enumerate(steps, 1):
@@ -425,20 +536,55 @@ async def autonomous_signup_test(
             
             start_time = datetime.now()
             
+            # Clear logs before this step
+            network_logs.clear()
+            console_logs.clear()
+            
             try:
+                # Check if page is still alive
+                if page.is_closed():
+                    print(f"   ❌ ERROR: Browser page closed unexpectedly")
+                    results.append({
+                        'step': idx,
+                        'goal': step['goal'],
+                        'result': 'FAIL',
+                        'error': 'Browser page closed',
+                    })
+                    break
+                
                 # 1. OBSERVE - Capture current UI state
-                screenshot_before, screenshot_before_path = await action_handler.b64_page_screenshot(
-                    file_name=f'autonomous_step_{idx}_before',
-                    context='autonomous'
-                )
+                try:
+                    screenshot_before, screenshot_before_path = await action_handler.b64_page_screenshot(
+                        file_name=f'autonomous_step_{idx}_before',
+                        context='autonomous'
+                    )
+                except Exception as ss_err:
+                    print(f"   ❌ Screenshot failed: {ss_err}")
+                    results.append({
+                        'step': idx,
+                        'goal': step['goal'],
+                        'result': 'FAIL',
+                        'error': f'Screenshot capture failed: {ss_err}',
+                    })
+                    break
                 
                 # 2. VISION-BASED ANALYSIS - Claude analyzes UI
-                ui_analysis = await analyze_ui_with_vision(
-                    screenshot_before,
-                    step['goal'],
-                    persona_cfg,
-                    device_cfg
-                )
+                if screenshot_before is None:
+                    print(f"   ⚠️  No screenshot available, using fallback analysis")
+                    ui_analysis = {
+                        'issues': ['Screenshot capture failed'],
+                        'recommended_action': None,
+                        'accessibility_score': 0,
+                        'elderly_friendly': False,
+                        'network_ready': False
+                    }
+                else:
+                    ui_analysis = await analyze_ui_with_vision(
+                        screenshot_before,
+                        step['goal'],
+                        persona_cfg,
+                        device_cfg
+                    )
                 
                 # Check for accessibility issues
                 if ui_analysis.get('issues'):
@@ -455,14 +601,23 @@ async def autonomous_signup_test(
                     action_details = ui_analysis['recommended_action'].get('details', {})
                     
                     if action_type == 'click':
-                        # Use vision-predicted coordinates
+                        # Use vision-predicted coordinates (0-1 ratios)
                         click_x = action_details.get('x', 0.5)
                         click_y = action_details.get('y', 0.5)
                         viewport = page.viewport_size
                         abs_x = int(click_x * viewport['width'])
                         abs_y = int(click_y * viewport['height'])
+                        
+                        # Inject red dot BEFORE clicking (viewport coordinates)
+                        try:
+                            await page.evaluate(RED_DOT_JS, [abs_x, abs_y])
+                            await asyncio.sleep(0.5)  # Let dot appear before click
+                        except Exception:
+                            pass  # Ignore if injection fails
+                        
+                        # Click at the same viewport coordinates
                         await page.mouse.click(abs_x, abs_y)
-                        action = f"Clicked at ({click_x:.2f}, {click_y:.2f}) based on vision"
+                        action = f"Clicked at ({click_x:.2f}, {click_y:.2f}) = viewport ({abs_x}, {abs_y})px"
                     
                     elif action_type == 'fill':
                         # Find field by vision-predicted coordinates
@@ -489,6 +644,21 @@ async def autonomous_signup_test(
                     elif idx == 4:
                         submit_btn = await page.query_selector('button[type="submit"], input[type="submit"]')
                         if submit_btn:
+                            # Get button center in viewport coordinates
+                            try:
+                                box = await submit_btn.bounding_box()
+                                if box:
+                                    # bounding_box() returns page coordinates, convert to viewport
+                                    scroll_pos = await page.evaluate('() => ({ x: window.scrollX, y: window.scrollY })')
+                                    btn_x = box['x'] + box['width'] / 2 - scroll_pos['x']
+                                    btn_y = box['y'] + box['height'] / 2 - scroll_pos['y']
+                                    
+                                    # Inject red dot at viewport coordinates
+                                    await page.evaluate(RED_DOT_JS, [btn_x, btn_y])
+                                    await asyncio.sleep(0.5)  # Let dot appear
+                            except Exception as e:
+                                pass
+                            
                             await submit_btn.click()
                             action = "Clicked submit button"
                 
@@ -502,10 +672,15 @@ async def autonomous_signup_test(
                 
                 # 3. CAPTURE AFTER STATE
                 await asyncio.sleep(1)  # UI update
-                screenshot_after, screenshot_after_path = await action_handler.b64_page_screenshot(
-                    file_name=f'autonomous_step_{idx}_after',
-                    context='autonomous'
-                )
+                try:
+                    screenshot_after, screenshot_after_path = await action_handler.b64_page_screenshot(
+                        file_name=f'autonomous_step_{idx}_after',
+                        context='autonomous'
+                    )
+                except Exception as ss_err:
+                    print(f"   ⚠️  After screenshot failed: {ss_err}")
+                    screenshot_after = screenshot_before
+                    screenshot_after_path = screenshot_before_path
                 
                 # Use actual click coordinates from vision analysis
                 touch_x = click_x
@@ -532,13 +707,37 @@ async def autonomous_signup_test(
                     'evidence': {
                         'screenshot_before_path': _resolve_screenshot_path(screenshot_before_path) if screenshot_before_path else 'backend/assets/mock_before.jpg',
                         'screenshot_after_path': _resolve_screenshot_path(screenshot_after_path) if screenshot_after_path else 'backend/assets/mock_after.jpg',
-                        'network_logs': [],  # Would be populated in full version
-                        'console_logs': [],  # Would be populated in full version
+                        'network_logs': list(network_logs),  # Real network error logs
+                        'console_logs': list(console_logs),  # Real console error logs
                         'expected_outcome': step['expectation'],
                         'actual_outcome': action,
                         'ui_analysis': ui_analysis,  # Vision-based UI assessment
                     }
                 }
+                
+                # Save individual step JSON report
+                step_report = {
+                    'step_id': idx,
+                    'timestamp': datetime.now().isoformat(),
+                    'persona': persona_cfg['name'],
+                    'device': device_cfg['name'],
+                    'network': network_cfg['name'],
+                    'action_taken': action,
+                    'agent_expectation': step['expectation'],
+                    'dwell_time_ms': dwell_time_ms,
+                    'ux_insight': {
+                        'accessibility_score': ui_analysis.get('accessibility_score', 0),
+                        'elderly_friendly': ui_analysis.get('elderly_friendly', False),
+                        'issues': ui_analysis.get('issues', []),
+                    },
+                    'evidence': handoff['evidence'],
+                }
+                
+                step_report_path = os.path.join(reports_dir, f"step_{idx:02d}_report.json")
+                with open(step_report_path, 'w') as f:
+                    json.dump(step_report, f, indent=2)
+                
+                handoff = handoff
                 
                 # 5. SPECTER ANALYSIS (Feature 2)
                 result = run_specter_pipeline(handoff)
@@ -573,13 +772,20 @@ async def autonomous_signup_test(
         failed = len(results) - passed
         avg_dwell = sum(r.get('dwell_time', 0) for r in results) / len(results) if results else 0
         
+        # Count captured errors
+        total_network_errors = sum(len(r.get('network_logs', [])) for r in results if 'network_logs' in r)
+        total_console_errors = sum(len(r.get('console_logs', [])) for r in results if 'console_logs' in r)
+        
         print("═" * 70)
         print("🎬 AUTONOMOUS TEST COMPLETE")
         print("═" * 70)
         print(f"✅ Passed: {passed}/{len(results)}")
         print(f"❌ Failed: {failed}/{len(results)}")
         print(f"⏱️  Avg Dwell Time: {avg_dwell:.0f}ms")
+        print(f"🌐 Network Errors: {total_network_errors}")
+        print(f"🔴 Console Errors: {total_console_errors}")
         print(f"📊 Status: {'PASS' if failed == 0 else 'FAIL'}")
+        print(f"📁 Reports: {reports_dir}")
         print("═" * 70 + "\n")
         
         return {
