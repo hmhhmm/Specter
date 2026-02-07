@@ -27,6 +27,7 @@ export function SpecterNav() {
             <Database className="w-4 h-4" />
             Vault
           </Link>
+          <Link href="/command" className="hover:text-emerald-500 transition-colors">Command</Link>
           <Link href="#docs" className="hover:text-emerald-500 transition-colors">Docs</Link>
         </div>
 

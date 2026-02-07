@@ -23,6 +23,7 @@ export function MissionHeader() {
             <Database className="w-3 h-3" />
             Vault
           </Link>
+          <Link href="/command" className="hover:text-emerald-500 transition-colors">Command</Link>
         </div>
 
         <div className="h-4 w-px bg-white/10 hidden md:block" />

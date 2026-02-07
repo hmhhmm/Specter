@@ -48,8 +48,8 @@ export function VaultHeader() {
 
         <div className="flex gap-4">
           <motion.div 
-            initial={{ opacity: 0, s: 0.9 }}
-            animate={{ opacity: 1, s: 1 }}
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: 0.2 }}
             className="p-4 rounded-2xl bg-zinc-900/40 border border-white/5 backdrop-blur-sm flex items-center gap-4 min-w-[200px]"
           >
@@ -63,8 +63,8 @@ export function VaultHeader() {
           </motion.div>
 
           <motion.div 
-            initial={{ opacity: 0, s: 0.9 }}
-            animate={{ opacity: 1, s: 1 }}
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: 0.3 }}
             className="p-4 rounded-2xl bg-zinc-900/40 border border-red-500/10 backdrop-blur-sm flex items-center gap-4 min-w-[240px]"
           >
