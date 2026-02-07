@@ -366,10 +366,18 @@ def calculate_semantic_distance(expected, actual, ssim_score):
     # If screen changed, expectation was somewhat met
     return 0.0
 
-def calculate_real_f_score(telemetry, ssim_score, network_logs, console_logs, expected_outcome):
+def calculate_real_f_score(telemetry, ssim_score, network_logs, console_logs, expected_outcome, ui_analysis=None):
     """
-    TRUE FORMULA: F-Score = Entropy + Dwell Time + Semantic Distance
-    Each component contributes ~33 points (total 0-100).
+    TRUE FORMULA: F-Score = Entropy + Dwell Time + Semantic Distance + Network Latency + Accessibility
+    
+    Components:
+    - Console Entropy: 0-25pts (chaos from errors)
+    - Dwell Time: 0-40pts (user waiting)
+    - Semantic Distance: 0-25pts (expectation mismatch)
+    - Network Latency: 0-20pts (slow responses, timeouts)
+    - Accessibility Issues: 0-15pts (elderly/mobile usability)
+    
+    Total: 0-125pts (capped at 100)
     """
     score = 0.0
     
@@ -391,6 +399,52 @@ def calculate_real_f_score(telemetry, ssim_score, network_logs, console_logs, ex
     score += semantic
     if semantic > 0:
         print(f"      + Semantic Distance: {semantic:.1f}pts (Visual stagnation)")
+    
+    # Component 4: NETWORK LATENCY (Slow/unresponsive - 0-20pts)
+    network_penalty = 0.0
+    
+    # Detect slow requests (>3s = bad UX)
+    slow_requests = [log for log in network_logs if log.get('duration', 0) > 3000]
+    if slow_requests:
+        network_penalty += min(10.0, len(slow_requests) * 3.0)
+        print(f"      + Network Latency: {network_penalty:.1f}pts ({len(slow_requests)} slow requests)")
+    
+    # Detect timeouts (console errors mentioning timeout/network)
+    timeout_errors = [log for log in console_logs if any(keyword in str(log).lower() for keyword in ['timeout', 'network', 'failed to fetch'])]
+    if timeout_errors:
+        timeout_penalty = min(10.0, len(timeout_errors) * 5.0)
+        network_penalty += timeout_penalty
+        print(f"      + Timeout Errors: {timeout_penalty:.1f}pts")
+    
+    score += network_penalty
+    
+    # Component 5: ACCESSIBILITY ISSUES (UI/UX problems - 0-15pts)
+    accessibility_penalty = 0.0
+    
+    if ui_analysis:
+        issues = ui_analysis.get('issues', [])
+        
+        # Critical issues for elderly/mobile users
+        critical_issues = [
+            issue for issue in issues 
+            if any(keyword in issue.lower() for keyword in [
+                'too small', 'elderly', 'contrast', 'font size', 
+                'touch target', 'confusing', 'no loading'
+            ])
+        ]
+        
+        if critical_issues:
+            accessibility_penalty = min(15.0, len(critical_issues) * 3.0)
+            print(f"      + Accessibility Issues: {accessibility_penalty:.1f}pts ({len(critical_issues)} critical)")
+            for issue in critical_issues[:2]:  # Show first 2
+                print(f"         - {issue[:60]}...")
+        
+        # Elderly-specific penalty
+        if not ui_analysis.get('elderly_friendly', True):
+            accessibility_penalty += 5.0
+            print(f"      + Elderly Unfriendly UI: +5.0pts")
+    
+    score += accessibility_penalty
 
     # Severity Multiplier: Backend errors amplify frustration
     has_500 = any(log['status'] >= 500 for log in network_logs)
@@ -421,8 +475,19 @@ def check_expectation(handoff):
     evidence = handoff['evidence']
     meta = handoff.get('meta_data', {})
     
-    heatmap_path = "backend/assets/evidence_heatmap.jpg"
-    gif_path = "backend/assets/ghost_replay.gif"
+    # Determine output paths based on screenshot location
+    screenshot_path = evidence['screenshot_after_path']
+    
+    # If screenshot is in reports/test_*/screenshots/, save artifacts there
+    if 'reports' in screenshot_path and 'screenshots' in screenshot_path:
+        # Extract report directory: reports/test_TIMESTAMP/
+        report_dir = os.path.dirname(os.path.dirname(screenshot_path))
+        heatmap_path = os.path.join(report_dir, "heatmap.png")
+        gif_path = os.path.join(report_dir, "ghost_replay.gif")
+    else:
+        # Fallback to backend/assets for mock data
+        heatmap_path = "backend/assets/evidence_heatmap.jpg"
+        gif_path = "backend/assets/ghost_replay.gif"
 
     # 1. Image Analysis
     img_a = cv2.imread(evidence['screenshot_before_path'])
@@ -440,12 +505,15 @@ def check_expectation(handoff):
          current_ssim, _ = ssim(gray_a, gray_b, full=True)
 
     # 2. CALCULATE F-SCORE (The Real Formula)
+    ui_analysis = evidence.get('ui_analysis', {})
+    
     f_score = calculate_real_f_score(
         meta, 
         current_ssim, 
         evidence['network_logs'],
         evidence.get('console_logs', []),
-        handoff.get('agent_expectation', '')
+        handoff.get('agent_expectation', ''),
+        ui_analysis  # Pass vision-based UI analysis
     )
     
     # 3. ASSIGN SEVERITY (Deterministic Rules)

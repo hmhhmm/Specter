@@ -39,6 +39,19 @@ def get_cursor_from_selenium_action(element, driver):
         
         # coords = {'click_coords': (x, y), 'touch_x': ratio_x, 'touch_y': ratio_y}
     """
+    
+    Example:
+        from selenium import webdriver
+        from selenium.webdriver.common.by import By
+        
+        driver = webdriver.Chrome()
+        driver.get("https://example.com")
+        
+        element = driver.find_element(By.ID, "signup-button")
+        coords = get_cursor_from_selenium_action(element, driver)
+        
+        # coords = {'click_coords': (x, y), 'touch_x': ratio_x, 'touch_y': ratio_y}
+    """
     # Get element position and size
     location = element.location
     size = element.size
