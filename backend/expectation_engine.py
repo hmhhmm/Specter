@@ -62,21 +62,6 @@ def generate_heatmap(img_path, output_path, x_ratio, y_ratio, intensity=0.5):
     cv2.imwrite(output_path, heatmap_img)
     return output_path
 
-def detect_cursor_in_screenshot(img_path):
-    """
-    Attempts to detect cursor position in screenshot using template matching.
-    Returns (x, y) coordinates or None if cursor not found.
-    """
-    img = cv2.imread(img_path)
-    if img is None:
-        return None
-    
-    # Create a simple cursor template (white arrow - common cursor)
-    # In production, you'd have multiple cursor templates
-    # For now, we return None and rely on telemetry data
-    # NOTE: Most screenshots don't capture cursor - use browser automation coords instead
-    return None
-
 def add_click_indicator(img, x, y, frame_num=0, total_frames=12):
     """
     Professional click animation with ripple effect and shadow.
@@ -250,7 +235,7 @@ def add_diagnostic_overlay(img, frame_info, f_score=None, severity=None, error_m
         if len(error_msg) > max_chars:
             error_msg = error_msg[:max_chars-3] + "..."
         
-        cv2.putText(error_banner, f"⚠ {error_msg}", (10, 32), font, 0.5, (255, 255, 255), 1)
+        cv2.putText(error_banner, f"Warning: {error_msg}", (10, 32), font, 0.5, (255, 255, 255), 1)
     else:
         error_banner[:] = (30, 30, 30)  # Dark gray (same as top, no error)
     
@@ -328,10 +313,18 @@ def generate_ghost_replay(img_a_path, img_b_path, output_path, click_x=0.5, clic
     frames.append(frame)
     
     try:
+        # Ensure output directory exists
+        output_dir = os.path.dirname(output_path)
+        if output_dir:
+            os.makedirs(output_dir, exist_ok=True)
+        
         # 300ms per frame = 4.8 second total loop
         imageio.mimsave(output_path, frames, duration=300, loop=0)
     except TypeError:
         imageio.mimsave(output_path, frames, fps=3.33)
+    except Exception as e:
+        print(f"Warning: Failed to save GIF: {e}")
+        return None
     
     return output_path
 
@@ -470,7 +463,7 @@ def determine_severity_rule(f_score, network_logs):
     return "P3"     # Cosmetic
 
 def check_expectation(handoff):
-    print(f"🔎 Checking Step {handoff['step_id']}...")
+    print(f"Checking Step {handoff['step_id']}...")
     
     evidence = handoff['evidence']
     meta = handoff.get('meta_data', {})
@@ -522,7 +515,7 @@ def check_expectation(handoff):
     # 4. DECISION
     # If score > 50, we consider it a failure worth reporting
     if f_score > 50:
-        print(f"   📊 Final F-Score: {f_score:.1f}/100 ({severity_label})")
+        print(f"   Final F-Score: {f_score:.1f}/100 ({severity_label})")
         
         # Calculate intensity for heatmap (0.0-1.0)
         intensity = min(1.0, f_score / 100.0)

@@ -40,7 +40,6 @@ from typing import Dict, Any, List, Optional
 from backend.expectation_engine import check_expectation
 from backend.diagnosis_doctor import diagnose_failure
 from backend.escalation_webhook import send_alert
-from backend.mock_data import get_mock_handoff
 from backend.webqa_bridge import _resolve_screenshot_path
 
 # Raw Anthropic SDK
@@ -113,8 +112,8 @@ DEVICES = {
         'has_touch': True, 'is_mobile': True,
     },
     'desktop': {
-        'name': 'Desktop 1920x1080',
-        'viewport': {'width': 1920, 'height': 1080},
+        'name': 'Desktop 1280x720',
+        'viewport': {'width': 1280, 'height': 720},
         'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         'has_touch': False, 'is_mobile': False,
     },
@@ -344,9 +343,14 @@ async def autonomous_signup_test(
     persona: str = 'normal',
     locale: str = 'en-US',
     max_steps: int = 15,
+    screenshot_callback = None,
+    headless: bool = False,
 ) -> Dict[str, Any]:
     """
     Autonomous signup testing -- AI decides every step.
+    
+    Args:
+        screenshot_callback: Optional async callback(screenshot_path, step, action) for streaming
 
     Uses:
     - BrowserSessionPool: browser lifecycle
@@ -383,7 +387,7 @@ async def autonomous_signup_test(
     browser_config = {
         'browser_type': 'chromium',
         'viewport': device_cfg['viewport'],
-        'headless': False,
+        'headless': headless,
         'language': locale,
     }
 
@@ -502,6 +506,13 @@ async def autonomous_signup_test(
                 )
 
                 await crawler.remove_marker()
+                
+                # Stream screenshot to frontend if callback provided
+                if screenshot_callback:
+                    # Convert relative path to absolute using screenshot_dir
+                    from pathlib import Path
+                    abs_screenshot_path = str(Path(screenshot_dir) / Path(screenshot_path).name)
+                    await screenshot_callback(abs_screenshot_path, step_num, "Observing page")
 
                 page_url, page_title = await session.get_url()
 
@@ -760,14 +771,12 @@ def parse_args():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python main.py                                        # Demo mode (mock data)
-  python main.py autonomous https://deriv.com/signup   # Full autonomous test
-  python main.py autonomous https://example.com --persona elderly --device iphone13
-  python main.py autonomous https://example.com --network 3g --max-steps 20
+  python main.py https://deriv.com/signup
+  python main.py https://example.com --persona elderly --device iphone13
+  python main.py https://example.com --network 3g --max-steps 20
         """
     )
-    parser.add_argument('mode', nargs='?', default='demo', choices=['demo', 'autonomous'])
-    parser.add_argument('url', nargs='?', help='URL to test')
+    parser.add_argument('url', help='URL to test')
     parser.add_argument('--persona', default='normal', choices=PERSONAS.keys())
     parser.add_argument('--device', default='desktop', choices=DEVICES.keys())
     parser.add_argument('--network', default='wifi', choices=NETWORKS.keys())
@@ -779,25 +788,10 @@ Examples:
 async def main_async():
     args = parse_args()
     os.makedirs("backend/assets", exist_ok=True)
-
-    if args.mode == 'autonomous':
-        if not args.url:
-            print("URL required: python main.py autonomous <URL>")
-            sys.exit(1)
-        return await autonomous_signup_test(
-            url=args.url, device=args.device, network=args.network,
-            persona=args.persona, locale=args.locale, max_steps=args.max_steps,
-        )
-    else:
-        print("=" * 60)
-        print("SPECTER -- Demo Mode (Mock Data)")
-        print("=" * 60)
-        print("Testing Feature 2: Diagnosis Engine")
-        print("(Use 'python main.py autonomous <URL>' for Feature 1)\n")
-        packet = get_mock_handoff()
-        result = run_specter_pipeline(packet)
-        print(f"\nPipeline Complete: {result}")
-        return {'status': result}
+    return await autonomous_signup_test(
+        url=args.url, device=args.device, network=args.network,
+        persona=args.persona, locale=args.locale, max_steps=args.max_steps,
+    )
 
 
 def main():

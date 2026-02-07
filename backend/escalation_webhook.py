@@ -1,4 +1,5 @@
-# escalation_webhook.py (Rich Media Edition)
+"""Slack alert notification module."""
+
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 import os
@@ -6,31 +7,42 @@ from dotenv import load_dotenv
 
 load_dotenv(os.path.join("backend", ".env"))
 SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN")
-# CHECK YOUR CHANNEL ID!
 CHANNEL_ID = os.getenv("SLACK_CHANNEL_ID")
 
 client = WebClient(token=SLACK_BOT_TOKEN)
 
 def send_alert(final_packet):
+    """
+    Send failure alert to Slack with evidence.
+    
+    Args:
+        final_packet: Complete failure analysis data
+    """
     outcome = final_packet['outcome']
     
-    # 1. Grab the new Rich Media assets
-    # Use GIF if available, otherwise use static image
-    evidence_path = outcome.get('gif_path', final_packet['evidence']['screenshot_after_path'])
-    f_score = outcome.get('f_score', 'N/A')
+    gif_path = outcome.get('gif_path')
+    if gif_path and os.path.exists(gif_path):
+        evidence_path = gif_path
+    else:
+        evidence_path = final_packet['evidence']['screenshot_after_path']
+        if not os.path.exists(evidence_path):
+            print(f"Warning: Screenshot not found at {evidence_path}")
+            evidence_path = final_packet['evidence'].get('screenshot_before_path')
+            if not evidence_path or not os.path.exists(evidence_path):
+                print("Error: No valid evidence files found")
+                return
     
-    print(f"Uploading Evidence (GIF) to Slack...")
+    f_score = outcome.get('f_score', 'N/A')
+    print(f"Uploading evidence ({'GIF' if gif_path and os.path.exists(gif_path) else 'Screenshot'}) to Slack...")
 
     try:
-        # 2. Upload the Evidence
         file_response = client.files_upload_v2(
             channel=CHANNEL_ID,
             file=evidence_path,
-            title=f"Ghost Replay: {outcome.get('visual_observation', 'Failure')}",
-            initial_comment=f"🚨 *Specter Alert: {outcome['severity']}* | 😡 *Frustration Score: {f_score}/100*"
+            title=f"Failure Evidence: {outcome.get('visual_observation', 'Analysis')}",
+            initial_comment=f"*Alert: {outcome['severity']}* | *F-Score: {f_score}/100*"
         )
         
-        # 3. Thread the Details + Heatmap Note
         thread_ts = None
         try:
             file_shares = file_response.get('file', {}).get('shares', {})
@@ -42,9 +54,9 @@ def send_alert(final_packet):
         client.chat_postMessage(
             channel=CHANNEL_ID,
             thread_ts=thread_ts,
-            text=f"*Diagnosis:* {outcome.get('diagnosis', 'N/A')}\n🔥 *Heatmap Analysis:* `Generated in backend/assets/evidence_heatmap.jpg`\n🔍 *Logs:* `{final_packet['evidence']['network_logs'][0]}`"
+            text=f"*Diagnosis:* {outcome.get('diagnosis', 'N/A')}\n*Heatmap:* Generated in reports\n*Logs:* {final_packet['evidence']['network_logs'][0]}"
         )
-        print("Alert Sent with GIF & Score!")
+        print("Alert sent successfully")
         
     except SlackApiError as e:
         print(f"Slack API Error: {e.response['error']}")

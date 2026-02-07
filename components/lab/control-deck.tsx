@@ -1,0 +1,224 @@
+"use client";
+
+import { motion } from "framer-motion";
+import { 
+  User, 
+  Briefcase, 
+  ShoppingCart, 
+  Smartphone, 
+  Monitor, 
+  Signal, 
+  SignalLow, 
+  Wifi, 
+  Volume2, 
+  VolumeX,
+  Play,
+  RotateCcw
+} from "lucide-react";
+import { 
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from "@/components/ui/select";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { GlowButton } from "@/components/ui/glow-button";
+import { SimulationState } from "@/app/lab/page";
+import { cn } from "@/lib/utils";
+
+interface ControlDeckProps {
+  state: SimulationState;
+  onStart: () => void;
+  onReset: () => void;
+  url: string;
+  setUrl: (v: string) => void;
+  persona: string;
+  setPersona: (v: string) => void;
+  device: string;
+  setDevice: (v: string) => void;
+  network: string;
+  setNetwork: (v: string) => void;
+  isVoiceEnabled: boolean;
+  setIsVoiceEnabled: (v: boolean) => void;
+}
+
+export function ControlDeck({
+  state,
+  onStart,
+  onReset,
+  url,
+  setUrl,
+  persona,
+  setPersona,
+  device,
+  setDevice,
+  network,
+  setNetwork,
+  isVoiceEnabled,
+  setIsVoiceEnabled
+}: ControlDeckProps) {
+  const isRunning = state !== "idle" && state !== "complete";
+
+  return (
+    <motion.div 
+      initial={{ y: 100, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      transition={{ delay: 0.5, duration: 0.8 }}
+      className="fixed bottom-12 left-1/2 -translate-x-1/2 z-40 w-full max-w-5xl px-6"
+    >
+      <div className={cn(
+        "relative rounded-[2rem] border border-white/10 bg-zinc-950/80 backdrop-blur-2xl px-8 py-4 shadow-2xl transition-all duration-500 min-h-[80px] flex items-center",
+        isRunning ? "border-emerald-500/30 shadow-emerald-500/10" : ""
+      )}>
+        <div className="flex items-center justify-between w-full gap-4">
+          {/* URL Input */}
+          <div className="flex items-center gap-4">
+            <div className="space-y-1">
+              <Label className="text-[9px] font-mono uppercase tracking-[0.2em] text-zinc-500 ml-1">Target URL</Label>
+              <input
+                type="url"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                disabled={isRunning}
+                placeholder="https://example.com"
+                className="w-[280px] bg-white/5 border border-white/10 rounded-xl font-mono text-[10px] h-9 px-3 text-white placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-emerald-500/50 disabled:opacity-50"
+              />
+            </div>
+          </div>
+
+          {/* Persona & Device Section */}
+          <div className="flex items-center gap-4">
+            <div className="space-y-1">
+              <Label className="text-[9px] font-mono uppercase tracking-[0.2em] text-zinc-500 ml-1">Persona</Label>
+              <Select value={persona} onValueChange={setPersona} disabled={isRunning}>
+                <SelectTrigger className="w-[160px] bg-white/5 border-white/10 rounded-xl font-mono text-[10px] h-9">
+                  <SelectValue placeholder="Select Persona" />
+                </SelectTrigger>
+                <SelectContent className="bg-zinc-900 border-white/10 rounded-xl">
+                  <SelectItem value="senior" className="focus:bg-emerald-500/20 focus:text-white text-[10px]">
+                    <div className="flex items-center gap-2">
+                      <User className="w-3 h-3" />
+                      <span>Tech-Illiterate Senior</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="pro" className="focus:bg-emerald-500/20 focus:text-white text-[10px]">
+                    <div className="flex items-center gap-2">
+                      <Briefcase className="w-3 h-3" />
+                      <span>Impatient Pro</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="casual" className="focus:bg-emerald-500/20 focus:text-white text-[10px]">
+                    <div className="flex items-center gap-2">
+                      <ShoppingCart className="w-3 h-3" />
+                      <span>Casual Shopper</span>
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-[9px] font-mono uppercase tracking-[0.2em] text-zinc-500 ml-1">Device</Label>
+              <Select value={device} onValueChange={setDevice} disabled={isRunning}>
+                <SelectTrigger className="w-[140px] bg-white/5 border-white/10 rounded-xl font-mono text-[10px] h-9">
+                  <SelectValue placeholder="Select Device" />
+                </SelectTrigger>
+                <SelectContent className="bg-zinc-900 border-white/10 rounded-xl">
+                  <SelectItem value="iphone-15" className="focus:bg-emerald-500/20 focus:text-white text-[10px]">
+                    <div className="flex items-center gap-2">
+                      <Smartphone className="w-3 h-3" />
+                      <span>iPhone 15 Pro</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="s23" className="focus:bg-emerald-500/20 focus:text-white text-[10px]">
+                    <div className="flex items-center gap-2">
+                      <Smartphone className="w-3 h-3" />
+                      <span>Samsung S23</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="desktop" className="focus:bg-emerald-500/20 focus:text-white text-[10px]">
+                    <div className="flex items-center gap-2">
+                      <Monitor className="w-3 h-3" />
+                      <span>Desktop Chrome</span>
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="h-8 w-px bg-white/5 mx-2" />
+
+          {/* Network Section */}
+          <div className="space-y-1">
+            <Label className="text-[9px] font-mono uppercase tracking-[0.2em] text-zinc-500 ml-1">Network</Label>
+            <ToggleGroup 
+              type="single" 
+              value={network} 
+              onValueChange={(v) => v && setNetwork(v)}
+              disabled={isRunning}
+              className="bg-white/5 p-1 rounded-xl border border-white/10"
+            >
+              <ToggleGroupItem value="5g" className="rounded-lg data-[state=on]:bg-emerald-500/20 data-[state=on]:text-emerald-500 h-7 px-2">
+                <Signal className="w-3 h-3" />
+              </ToggleGroupItem>
+              <ToggleGroupItem value="4g" className="rounded-lg data-[state=on]:bg-emerald-500/20 data-[state=on]:text-emerald-500 h-7 px-2">
+                <SignalLow className="w-3 h-3" />
+              </ToggleGroupItem>
+              <ToggleGroupItem value="3g" className="rounded-lg data-[state=on]:bg-emerald-500/20 data-[state=on]:text-emerald-500 h-7 px-2">
+                <Wifi className="w-3 h-3" />
+              </ToggleGroupItem>
+            </ToggleGroup>
+          </div>
+
+          <div className="h-8 w-px bg-white/5 mx-2" />
+
+          {/* Voice & Action Section */}
+          <div className="flex items-center gap-6">
+            <div className="flex items-center gap-3">
+              {isVoiceEnabled ? <Volume2 className="w-3.5 h-3.5 text-emerald-500" /> : <VolumeX className="w-3.5 h-3.5 text-zinc-600" />}
+              <div className="space-y-0">
+                <Label htmlFor="voice-mode" className="text-[9px] font-mono uppercase tracking-widest text-zinc-500">Voice</Label>
+                <Switch 
+                  id="voice-mode" 
+                  checked={isVoiceEnabled} 
+                  onCheckedChange={setIsVoiceEnabled}
+                  className="data-[state=checked]:bg-emerald-500 h-4 w-8 scale-75"
+                />
+              </div>
+            </div>
+
+            {state === "idle" ? (
+              <GlowButton onClick={onStart} className="px-5 py-0 rounded-xl h-10 text-[10px]">
+                <Play className="w-3 h-3 fill-current" />
+                Launch Agent
+              </GlowButton>
+            ) : (
+              <button 
+                onClick={onReset}
+                className="flex items-center gap-2 px-5 h-10 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition-colors font-mono text-[10px] uppercase tracking-widest"
+              >
+                <RotateCcw className={cn("w-3 h-3", isRunning && "animate-spin-slow")} />
+                {state === "complete" ? "Reset Link" : "Resetting..."}
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Neural Waveform Overlay when running */}
+        {isRunning && (
+          <div className="absolute top-0 left-0 right-0 h-[2px] overflow-hidden rounded-full px-12">
+            <motion.div 
+              animate={{ x: ["-100%", "100%"] }}
+              transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+              className="h-full w-1/3 bg-gradient-to-r from-transparent via-emerald-500 to-transparent"
+            />
+          </div>
+        )}
+      </div>
+    </motion.div>
+  );
+}
