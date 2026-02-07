@@ -26,7 +26,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { GlowButton } from "@/components/ui/glow-button";
-import { SimulationState } from "@/app/lab/page.tsx";
+import { SimulationState } from "@/app/lab/page";
 import { cn } from "@/lib/utils";
 
 interface ControlDeckProps {

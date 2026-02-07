@@ -2,7 +2,7 @@
 
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
-import { SimulationState } from "@/app/lab/page.tsx";
+import { SimulationState } from "@/app/lab/page";
 import { Power, ShieldAlert, Cpu } from "lucide-react";
 
 interface StatusBarProps {

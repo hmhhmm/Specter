@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { SimulationState } from "@/app/lab/page.tsx";
+import { SimulationState } from "@/app/lab/page";
 import { cn } from "@/lib/utils";
 import { AlertCircle, Target, Search } from "lucide-react";
 

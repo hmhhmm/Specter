@@ -2,7 +2,7 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
-import { SimulationState } from "@/app/lab/page.tsx";
+import { SimulationState } from "@/app/lab/page";
 import { cn } from "@/lib/utils";
 import { Terminal, Cpu, Eye, Zap, AlertTriangle, ShieldCheck } from "lucide-react";
 
