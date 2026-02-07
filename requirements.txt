@@ -6,3 +6,4 @@ scikit-image
 numpy
 python-dotenv
 requests
+imageio
