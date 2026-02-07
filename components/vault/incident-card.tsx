@@ -10,11 +10,13 @@ export interface Incident {
   id: string;
   severity: string;
   title: string;
+  type: "z-index" | "overflow" | "contrast" | "keyboard" | "i18n" | "phantom" | "dead-end";
   device: string;
   confidence: number;
   revenueLoss: number;
   cloudPosition: { x: number; y: number };
   monologue: string;
+  remediation: string;
 }
 
 interface IncidentCardProps {
@@ -102,7 +104,10 @@ export function IncidentCard({ incident, index }: IncidentCardProps) {
               </div>
 
               <div className="mb-6">
-                <EvidencePreview cloudPosition={incident.cloudPosition} />
+                <EvidencePreview 
+                  cloudPosition={incident.cloudPosition} 
+                  type={incident.type}
+                />
               </div>
 
               <div className="mt-auto pt-4 border-t border-white/5 grid grid-cols-2 gap-4">
@@ -186,10 +191,10 @@ export function IncidentCard({ incident, index }: IncidentCardProps) {
                     <div className="p-3 rounded-xl bg-white/5 border border-white/10 space-y-2">
                       <div className="flex items-center gap-2">
                         <Eye className="w-3 h-3 text-amber-500" />
-                        <span className="text-[9px] uppercase tracking-widest text-amber-500/80 font-bold">Visual Anomaly Detected</span>
+                        <span className="text-[9px] uppercase tracking-widest text-amber-500/80 font-bold">Recommended Fix</span>
                       </div>
-                      <p className="text-[10px] text-zinc-500">
-                        Agent persona "Senior" flagged this as high-friction. Observed user-like "rage clicking" on non-interactive elements near the fold.
+                      <p className="text-[10px] text-zinc-400 leading-relaxed">
+                        {incident.remediation}
                       </p>
                     </div>
                   </div>

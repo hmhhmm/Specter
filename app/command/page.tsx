@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { MissionHeader } from "@/components/lab/mission-header";
+import { SpecterNav } from "@/components/landing/specter-nav";
 import { StatusBar } from "@/components/lab/status-bar";
 import { AIBriefing } from "@/components/command/ai-briefing";
 import { IntelligencePanel } from "@/components/command/intelligence-panel";
@@ -24,9 +24,11 @@ export default function CommandPage() {
 
       {/* Page Content */}
       <div className="relative z-10 flex flex-col min-h-screen">
-        <MissionHeader />
-        
-        <AIBriefing />
+        <SpecterNav />
+
+        <div className="mt-20">
+          <AIBriefing />
+        </div>
 
         <div className="flex-1 p-6 md:p-8 max-w-[1600px] mx-auto w-full mb-10">
           <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr_350px] gap-6 h-full">
@@ -59,7 +61,10 @@ export default function CommandPage() {
           </div>
         </div>
 
-        <StatusBar state="complete" onTerminate={() => window.location.href = '/'} />
+        <StatusBar
+          state="complete"
+          onTerminate={() => (window.location.href = "/")}
+        />
       </div>
     </main>
   );

@@ -17,7 +17,7 @@ export function VaultHeader() {
         </div>
         <div className="h-px w-12 bg-zinc-800" />
         <div className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">
-          Last Scan: 00:04:12 ago
+          Last Scan: 00:01:24 ago
         </div>
       </motion.div>
 
@@ -42,7 +42,7 @@ export function VaultHeader() {
             </motion.span>
           </h1>
           <p className="text-zinc-500 font-mono text-sm max-w-xl">
-            Retrospective analysis of AI-detected friction points, visual regressions, and business impact vectors.
+            Retrospective analysis of AI-detected friction points, visual regressions, and business impact vectors for <span className="text-emerald-500/80">novatrade.io</span>.
           </p>
         </div>
 
@@ -58,7 +58,7 @@ export function VaultHeader() {
             </div>
             <div>
               <div className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest mb-1">Active Cases</div>
-              <div className="text-2xl font-bold font-bricolage text-white">12</div>
+              <div className="text-2xl font-bold font-bricolage text-white">07</div>
             </div>
           </motion.div>
 
@@ -73,7 +73,7 @@ export function VaultHeader() {
             </div>
             <div>
               <div className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest mb-1">Revenue at Risk</div>
-              <div className="text-2xl font-bold font-bricolage text-red-500">$42,850<span className="text-xs font-normal opacity-50 ml-1">/mo</span></div>
+              <div className="text-2xl font-bold font-bricolage text-red-500">$50,500<span className="text-xs font-normal opacity-50 ml-1">/mo</span></div>
             </div>
           </motion.div>
         </div>

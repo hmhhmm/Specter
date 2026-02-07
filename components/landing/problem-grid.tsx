@@ -91,7 +91,7 @@ function FeatureCard({
   const accentHex = accentColor === "emerald" ? "#10b981" : accentColor === "red" ? "#ef4444" : "#3b82f6";
   const bgGradient = useTransform(
     [mouseX, mouseY],
-    ([x, y]) => `radial-gradient(600px circle at ${x}px ${y}px, ${accentHex}15, transparent 40%)`
+    ([x, y]) => `radial-gradient(800px circle at ${x}px ${y}px, ${accentHex}20, transparent 40%)`
   );
 
   return (
@@ -141,10 +141,24 @@ function FeatureCard({
 
 export function ProblemGrid() {
   return (
-    <section id="features" className="relative py-32 bg-zinc-950 overflow-hidden">
+    <section id="features" className="relative py-32 bg-transparent overflow-hidden">
       {/* Decorative Orbs */}
-      <div className="absolute top-1/2 left-0 -translate-y-1/2 w-[500px] h-[500px] bg-emerald-500/5 blur-[120px] rounded-full pointer-events-none" />
-      <div className="absolute bottom-0 right-0 w-[600px] h-[600px] bg-emerald-500/5 blur-[120px] rounded-full pointer-events-none" />
+      <div className="absolute top-1/2 left-0 -translate-y-1/2 w-[600px] h-[600px] bg-emerald-500/[0.08] blur-[120px] rounded-full pointer-events-none animate-pulse" />
+      <div className="absolute bottom-0 right-0 w-[800px] h-[800px] bg-emerald-500/[0.08] blur-[120px] rounded-full pointer-events-none animate-pulse" style={{ animationDelay: '2s' }} />
+
+      {/* Horizontal Data Beams */}
+      <div className="absolute inset-0 pointer-events-none">
+        <motion.div 
+          animate={{ x: ["-100%", "100%"] }}
+          transition={{ duration: 10, repeat: Infinity, ease: "linear" }}
+          className="absolute top-[20%] left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-emerald-500/25 to-transparent"
+        />
+        <motion.div 
+          animate={{ x: ["100%", "-100%"] }}
+          transition={{ duration: 15, repeat: Infinity, ease: "linear" }}
+          className="absolute top-[60%] left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-emerald-500/15 to-transparent"
+        />
+      </div>
 
       <div className="max-w-7xl mx-auto px-6">
         <motion.div 
