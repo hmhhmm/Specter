@@ -6,7 +6,6 @@ import asyncio
 import os
 import subprocess
 import sys
-import threading
 import traceback
 from pathlib import Path
 
@@ -552,83 +551,6 @@ def cmd_gen(args):
     asyncio.run(run_tests(cfg, execution_mode='gen', workers=workers))
 
 
-def cmd_ui(args):
-    """Launch Gradio web UI."""
-    # Set language if provided
-    if args.lang:
-        os.environ['GRADIO_LANGUAGE'] = args.lang
-
-    # Check gradio
-    try:
-        import gradio
-    except ImportError:
-        print("❌ Gradio is not installed. Install with: uv add \"gradio>5.44.0\"")
-        sys.exit(1)
-
-    # Optional version check
-    try:
-        from packaging import version
-        required = '5.44.0'
-        if version.parse(gradio.__version__) <= version.parse(required):
-            print(f'❌ Gradio version {gradio.__version__} detected, need >= {required}')
-            print(f"Install/upgrade: uv add \"gradio>={required}\"")
-            sys.exit(1)
-    except ImportError:
-        pass
-
-    # Import UI factory
-    try:
-        from app_gradio.demo_gradio import (create_gradio_interface,
-                                            process_queue)
-    except ImportError as e:
-        print(f'❌ Failed to import Gradio app: {e}')
-        sys.exit(1)
-
-    # Ensure Playwright browsers
-    ok = asyncio.run(check_playwright_browsers_async())
-    if not ok:
-        print('🔍 Playwright browsers missing, installing chromium ...')
-        try:
-            subprocess.run([sys.executable, '-m', 'playwright', 'install', 'chromium'], check=True)
-            ok = asyncio.run(check_playwright_browsers_async())
-        except Exception as e:
-            print(f'❌ Failed to install Playwright browsers: {e}')
-            print('Please run manually: playwright install chromium')
-            sys.exit(1)
-
-    if not ok:
-        print('❌ Playwright browsers still unavailable. Please run: playwright install chromium')
-        sys.exit(1)
-
-    # Start queue processor thread
-    def _run_queue():
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        loop.run_until_complete(process_queue())
-
-    queue_thread = threading.Thread(target=_run_queue, daemon=True)
-    queue_thread.start()
-
-    language = os.getenv('GRADIO_LANGUAGE', 'en-US')
-    print('🚀 Starting WebQA Agent Gradio UI ...')
-    print(f'🌐 Language: {language}')
-    print(f'🔗 http://{args.host}:{args.port}')
-    print('💡 Set GRADIO_LANGUAGE=en-US or zh-CN to switch interface language.')
-
-    app = create_gradio_interface(language=language)
-    try:
-        app.launch(
-            server_name=args.host,
-            server_port=args.port,
-            share=False,
-            show_error=True,
-            inbrowser=not args.no_browser,
-        )
-    except Exception as e:
-        print(f'❌ Failed to launch Gradio UI: {e}')
-        sys.exit(1)
-
-
 # ============================================================================
 # Main Entry Point
 # ============================================================================
@@ -650,10 +572,6 @@ Examples:
   webqa-agent gen -c myconfig.yaml          Gen mode with custom config
   webqa-agent run -c config_run.yaml        Run mode with custom config
   webqa-agent run -c config_folder -w 4     Run mode with 4 workers
-
-  # Launch web UI
-  webqa-agent ui                            Start Gradio interface
-  webqa-agent ui --lang zh-CN               Start with Chinese interface
 
 Modes:
   - Gen Mode: AI-driven test generation (function, UX, performance, security)
@@ -736,34 +654,6 @@ Documentation: https://github.com/MigoXLab/webqa-agent
         metavar='N',
         help='Number of parallel workers (1=serial, >1=parallel). Priority: CLI arg > config max_concurrent_tests > default 2'
     )
-    # ui command
-    ui_parser = subparsers.add_parser(
-        'ui',
-        help='Launch Gradio web UI',
-        description='Start the Gradio interface for WebQA Agent.'
-    )
-    ui_parser.add_argument(
-        '--lang', '-l',
-        default=os.getenv('GRADIO_LANGUAGE', 'en-US'),
-        help='Interface language (en-US or zh-CN). Defaults to GRADIO_LANGUAGE env or en-US.'
-    )
-    ui_parser.add_argument(
-        '--host',
-        default='0.0.0.0',
-        help='Host to bind (default: 0.0.0.0)'
-    )
-    ui_parser.add_argument(
-        '--port',
-        type=int,
-        default=7860,
-        help='Port to serve (default: 7860)'
-    )
-    ui_parser.add_argument(
-        '--no-browser',
-        action='store_true',
-        help='Do not auto-open browser'
-    )
-
     return parser
 
 
@@ -794,8 +684,7 @@ def main():
         cmd_gen(args)
     elif args.command == 'run':
         cmd_run(args)
-    elif args.command == 'ui':
-        cmd_ui(args)
+
 
 
 if __name__ == '__main__':

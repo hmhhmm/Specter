@@ -104,17 +104,21 @@ class _BrowserSession:
 
             cfg = self.browser_config
             self._playwright = await async_playwright().start()
+
+            browser_args = [
+                '--disable-dev-shm-usage',
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-gpu',
+                '--force-device-scale-factor=1',
+                f'--window-size={cfg["viewport"]["width"]},{cfg["viewport"]["height"]}',
+            ]
+            if not self.disable_tab_interception:
+                browser_args.append('--block-new-web-contents')
+
             self._browser = await self._playwright.chromium.launch(
                 headless=cfg['headless'],
-                args=[
-                    '--disable-dev-shm-usage',
-                    '--no-sandbox',
-                    '--disable-setuid-sandbox',
-                    '--disable-gpu',
-                    '--force-device-scale-factor=1',
-                    f'--window-size={cfg["viewport"]["width"]},{cfg["viewport"]["height"]}',
-                    '--block-new-web-contents',
-                ],
+                args=browser_args,
             )
             self._context = await self._browser.new_context(
                 viewport=cfg['viewport'],
