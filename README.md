@@ -1,7 +1,7 @@
 # Specter.AI - Sentient Mystery Shoppers for QA
 
 > **Live Demo:** [https://specter-green.vercel.app/](https://specter-green.vercel.app/)  
-> *(Note: The Vision-based Ghost Engine requires persistent Node.js runtimes for browser automation. The Vercel deployment above serves the high-fidelity Frontend experience, while the Agentic Backend is hosted on a dedicated infrastructure provider to bypass serverless browser binary constraints.)*
+> *(Note: The Vercel deployment above serves the high-fidelity Frontend experience. The Vision-based Ghost Engine backend is not yet publicly hosted, as real-time browser automation requires persistent Node.js environments and dedicated system-level dependencies that exceed standard serverless deployment capabilities.)*
 
 ## 👻 Vision
 Specter.AI replaces brittle, rigid testing scripts with **"Sentient Mystery Shoppers."** 
