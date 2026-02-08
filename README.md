@@ -1,36 +1,56 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Specter.AI - Sentient Mystery Shoppers for QA
 
-## Getting Started
+> **Live Demo:** [https://specter-green.vercel.app/](https://specter-green.vercel.app/)  
+> *(Note: The Vision-based Ghost Engine requires persistent Node.js runtimes for browser automation. The Vercel deployment above serves the high-fidelity Frontend experience, while the Agentic Backend is hosted on a dedicated infrastructure provider to bypass serverless browser binary constraints.)*
 
-First, run the development server:
+## 👻 Vision
+Specter.AI replaces brittle, rigid testing scripts with **"Sentient Mystery Shoppers."** 
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+Traditional QA tests for *code existence* (is this button in the DOM?). Specter tests for **Human Impact** (can a tech-illiterate senior actually see and click this button?). By combining **Multimodal AI (Vision)** with autonomous browser navigation, Specter detects "Financial Anxiety" bugs—silent killers of conversion like z-index collisions, layout shifts, and accessibility failures that traditional logs never catch.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+---
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 🚀 Key Features
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 1. The Specter Lab (Real-time Vision)
+Points an autonomous agent at any URL with a natural language objective. Watch the **Neural Link** as the AI "thinks" and "sees" through emulated devices, detecting friction points in real-time using its Glass Layer architecture.
 
-## Learn More
+### 2. Incident Vault (Evidence Repo)
+A high-fidelity repository of detected regressions. Each incident includes:
+- **Digital Twin Blueprints:** Technical X-ray visualizations of the visual failure.
+- **Neural Monologue:** The AI's internal reasoning for why this bug causes churn.
+- **Revenue Leak Impact:** Data-driven quantification of the financial risk.
 
-To learn more about Next.js, take a look at the following resources:
+### 3. Command Center (Autonomous Remediation)
+The "Grand Finale" where detected bugs are quantified into a **Projected Annual Revenue Leak**. Specter doesn't just find bugs; it autonomously drafts and proposes **GitHub Pull Requests** to fix them.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+---
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 🛠️ Technical Stack
 
-## Deploy on Vercel
+- **Frontend:** Next.js 16 (App Router), Tailwind CSS 4, Framer Motion
+- **UI Components:** Kokonut UI, Shadcn UI, PromptKit
+- **Agentic Core:** Playwright v1.58, Stagehand, GPT-4o-Vision
+- **Runtime:** Node.js v24 (LTS)
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+---
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## 🏗️ Project Architecture: The "Glass Layer"
+To ensure zero DOM pollution during analysis, Specter uses a unique **Glass Layer Architecture**. The target application is loaded in a sandboxed environment, while the AI's annotations, cursor movements, and scanlines are rendered on a transparent overlay. This ensures the demo reflects true external, vision-based analysis exactly as a human would experience it.
+
+---
+
+## 🛠️ Local Development
+
+1. **Install Dependencies:**
+   ```bash
+   npm install
+   ```
+
+2. **Run Dev Server:**
+   ```bash
+   npm run dev
+   ```
+
+3. **Backend Ghost Engine:**
+   Requires a dedicated Node environment. See `MOCK_ENGINE_SPECS.md` for technical handoff details.
