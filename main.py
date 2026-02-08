@@ -381,6 +381,7 @@ async def autonomous_signup_test(
     max_steps: int = 15,
     screenshot_callback = None,
     diagnostic_callback = None,
+    log_callback = None,
     headless: bool = False,
 ) -> Dict[str, Any]:
     """
@@ -389,6 +390,7 @@ async def autonomous_signup_test(
     Args:
         screenshot_callback: Optional async callback(screenshot_path, step, action) for streaming
         diagnostic_callback: Optional async callback(step, diagnostic_data) for streaming analysis results
+        log_callback: Optional async callback(message) for streaming log messages
 
     Uses:
     - BrowserSessionPool: browser lifecycle
@@ -407,19 +409,25 @@ async def autonomous_signup_test(
 
     client = _get_anthropic_client()
     if not client:
-        print("No API key. Set CLAUDE_API_KEY or ANTHROPIC_API_KEY in backend/.env")
+        msg = "No API key. Set CLAUDE_API_KEY or ANTHROPIC_API_KEY in backend/.env"
+        print(msg)
+        if log_callback:
+            await log_callback(msg)
         return {'status': 'ERROR', 'reason': 'No API key'}
 
-    print("\n" + "=" * 70)
-    print("SPECTER AUTONOMOUS AGENT (webqa_agent + raw Anthropic)")
+    # Helper to log both to console and frontend
+    async def log(message: str):
+        print(message)
+        if log_callback:
+            await log_callback(message)
+
+    await log("Starting autonomous test...")
+    await log(f"URL: {url}")
+    await log(f"Device: {device_cfg['name']}")
+    await log(f"Network: {network_cfg['name']}")
+    await log(f"Persona: {persona_cfg['name']} -- {persona_cfg['desc']}")
+
     print("=" * 70)
-    print(f"  URL: {url}")
-    print(f"  Device: {device_cfg['name']}")
-    print(f"  Network: {network_cfg['name']}")
-    print(f"  Persona: {persona_cfg['name']} -- {persona_cfg['desc']}")
-    print(f"  Locale: {locale}")
-    print(f"  Max Steps: {max_steps}")
-    print("=" * 70 + "\n")
 
     # -- 1. Browser via BrowserSessionPool --
     browser_config = {
@@ -464,10 +472,10 @@ async def autonomous_signup_test(
         page.on("console", on_console)
 
         # -- 2. Navigate --
-        print(f"Navigating to {url}...")
+        await log(f"Navigating to {url}...")
         await session.navigate_to(url)
         await asyncio.sleep(3)
-        print("Page loaded\n")
+        await log("Page loaded")
 
         # -- 3. Initialize webqa_agent tools --
         ActionHandler.set_screenshot_config(save_screenshots=True)
@@ -486,15 +494,14 @@ async def autonomous_signup_test(
         scroll_handler = ScrollHandler(page)
 
         # -- 4. Autonomous Loop --
-        print(f"AI will decide actions based on persona: {persona_cfg['name']}\n")
+        await log(f"AI will decide actions based on persona: {persona_cfg['name']}")
 
         results = []
         history = []
         confusion_scores = []
 
         for step_num in range(1, max_steps + 1):
-            print(f"{'~' * 55}")
-            print(f"Step {step_num}/{max_steps}")
+            await log(f"Step {step_num}/{max_steps}")
 
             # Persona timing
             if step_num > 1 and persona_cfg['hesitation'] > 0:

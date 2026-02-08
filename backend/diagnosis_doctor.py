@@ -199,7 +199,7 @@ IMPORTANT:
 
     try:
         # Choose model based on vision usage - use Claude 3.5 Sonnet for vision
-        model = "claude-3-5-sonnet-20240620" if use_vision else "claude-3-haiku-20240307"
+        model = "claude-3-5-sonnet-20241022" if use_vision else "claude-3-haiku-20240307"
         
         message = client.messages.create(
             model=model,

@@ -192,6 +192,18 @@ async def run_test_background(test_id: str, config: TestConfig):
             except Exception as e:
                 print(f"Error broadcasting diagnostic data: {e}")
         
+        # Create callback for log streaming
+        async def log_callback(message: str):
+            """Called to stream log messages to frontend."""
+            try:
+                await manager.broadcast({
+                    "type": "log",
+                    "test_id": test_id,
+                    "message": message
+                })
+            except Exception as e:
+                print(f"Error broadcasting log: {e}")
+        
         # Run autonomous test with streaming
         result = await autonomous_signup_test(
             url=config.url,
@@ -201,6 +213,7 @@ async def run_test_background(test_id: str, config: TestConfig):
             max_steps=config.max_steps,
             screenshot_callback=screenshot_callback,
             diagnostic_callback=diagnostic_callback,
+            log_callback=log_callback,
             headless=True
         )
         

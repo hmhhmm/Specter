@@ -14,7 +14,7 @@ export default function LabPage() {
   const [simulationState, setSimulationState] = useState<SimulationState>("idle");
   const [simulationStep, setSimulationStep] = useState(0);
   const [url, setUrl] = useState("https://deriv.com/signup");
-  const [persona, setPersona] = useState("senior");
+  const [persona, setPersona] = useState("normal");
   const [device, setDevice] = useState("iphone-15");
   const [network, setNetwork] = useState("4g");
   const [isVoiceEnabled, setIsVoiceEnabled] = useState(true);
@@ -30,20 +30,23 @@ export default function LabPage() {
     
     ws.onopen = () => {
       console.log("WebSocket connected");
-      addLog("Connected to Specter backend");
+      setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] Connected to Specter backend`]);
     };
     
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data);
+      console.log("WebSocket message received:", data.type, data);
       handleWebSocketMessage(data);
     };
     
     ws.onerror = (error) => {
       console.error("WebSocket error:", error);
+      setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] WebSocket connection error`]);
     };
     
     ws.onclose = () => {
       console.log("WebSocket disconnected");
+      setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] WebSocket disconnected`]);
     };
     
     wsRef.current = ws;
@@ -58,11 +61,12 @@ export default function LabPage() {
   };
 
   const handleWebSocketMessage = (data: any) => {
-    console.log("WebSocket message received:", data.type, data);
-    
     if (data.type === "test_started") {
       setSimulationState("scanning");
       addLog(`Test started: ${data.test_id}`);
+    } else if (data.type === "log") {
+      // Backend log message streaming
+      addLog(data.message);
     } else if (data.type === "step_update") {
       setSimulationState("analyzing");
       setSimulationStep(prev => prev + 1);
@@ -163,13 +167,6 @@ export default function LabPage() {
         "3g": "3g"
       };
 
-      // Map UI persona names to backend persona names  
-      const personaMap: Record<string, string> = {
-        "senior": "elderly",
-        "pro": "cautious",
-        "casual": "normal"
-      };
-
       const response = await fetch("http://localhost:8000/api/test/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -177,7 +174,7 @@ export default function LabPage() {
           url: url,
           device: deviceMap[device] || "desktop",
           network: networkMap[network] || "wifi",
-          persona: personaMap[persona] || "normal",
+          persona: persona,
           max_steps: 15
         })
       });
@@ -204,7 +201,7 @@ export default function LabPage() {
   };
 
   return (
-    <main className="relative min-h-screen bg-[#050505] text-white overflow-hidden selection:bg-emerald-500/30">
+    <main className="relative min-h-screen bg-[#050505] text-white overflow-y-auto selection:bg-emerald-500/30">
       {/* Ambient Effects */}
       <div className="fixed inset-0 pointer-events-none z-50 overflow-hidden opacity-[0.03]">
         <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] brightness-100 contrast-150"></div>

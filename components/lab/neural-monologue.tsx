@@ -4,7 +4,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import { SimulationState } from "@/app/lab/page";
 import { cn } from "@/lib/utils";
-import { Terminal, Cpu, Eye, Zap, AlertTriangle, ShieldCheck, Network, Activity, GitBranch } from "lucide-react";
+import { Terminal, Cpu, Eye, Zap, AlertTriangle, ShieldCheck, Network, Activity, GitBranch, Settings } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 interface NeuralMonologueProps {
   state: SimulationState;
@@ -18,6 +19,7 @@ interface NeuralMonologueProps {
 export function NeuralMonologue({ state, step, persona, logs = [], results, currentStepData }: NeuralMonologueProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [currentTime, setCurrentTime] = useState("");
+  const [isAutoScrollEnabled, setIsAutoScrollEnabled] = useState(true);
 
   useEffect(() => {
     const updateTime = () => {
@@ -29,21 +31,36 @@ export function NeuralMonologue({ state, step, persona, logs = [], results, curr
     return () => clearInterval(interval);
   }, []);
 
+  // Reset auto-scroll when test starts
   useEffect(() => {
-    if (containerRef.current) {
+    if (state === "scanning" || state === "analyzing") {
+      setIsAutoScrollEnabled(true);
+    }
+  }, [state]);
+
+  useEffect(() => {
+    if (containerRef.current && isAutoScrollEnabled) {
       containerRef.current.scrollTop = containerRef.current.scrollHeight;
     }
-  }, [logs, step, currentStepData]);
+  }, [logs, step, currentStepData, isAutoScrollEnabled]);
+
+  const handleScroll = () => {
+    if (containerRef.current) {
+      const { scrollTop, scrollHeight, clientHeight } = containerRef.current;
+      const isAtBottom = scrollHeight - scrollTop - clientHeight < 50;
+      setIsAutoScrollEnabled(isAtBottom);
+    }
+  };
+
+  // Disable auto-scroll on any user interaction
+  const handleUserInteraction = () => {
+    setIsAutoScrollEnabled(false);
+  };
 
   return (
     <div className="flex flex-col h-full gap-4">
       {/* Terminal Container */}
-      <motion.div 
-        initial={{ x: 50, opacity: 0 }}
-        animate={{ x: 0, opacity: 1 }}
-        transition={{ duration: 0.8, delay: 0.2 }}
-        className="flex-1 rounded-[2rem] border border-white/5 bg-zinc-900/30 backdrop-blur-2xl overflow-hidden flex flex-col shadow-2xl"
-      >
+      <div className="flex-1 rounded-[2rem] border border-white/5 bg-zinc-900/30 backdrop-blur-2xl overflow-hidden flex flex-col shadow-2xl">
         {/* Terminal Header */}
         <div className="px-6 py-4 border-b border-white/5 flex items-center justify-between bg-white/5">
           <div className="flex items-center gap-3">
@@ -57,15 +74,28 @@ export function NeuralMonologue({ state, step, persona, logs = [], results, curr
           </div>
         </div>
 
-        {/* Terminal Body */}
-        <div 
-          ref={containerRef}
-          className="flex-1 p-6 font-mono text-xs overflow-y-scroll space-y-4"
-          style={{
-            scrollbarWidth: 'thin',
-            scrollbarColor: '#4ade80 #18181b'
-          }}
-        >
+        {/* Tabs for Logs and Control */}
+        <Tabs defaultValue="logs" className="flex-1 flex flex-col">
+          <div className="px-6 pt-3 border-b border-white/5">
+            <TabsList>
+              <TabsTrigger value="logs">Logs</TabsTrigger>
+              <TabsTrigger value="control">Control</TabsTrigger>
+            </TabsList>
+          </div>
+
+          {/* Logs Tab */}
+          <TabsContent value="logs" className="flex-1 overflow-hidden">
+            <div 
+              ref={containerRef}
+              onScroll={handleScroll}
+              onWheel={handleUserInteraction}
+              onTouchMove={handleUserInteraction}
+              className="h-full p-6 font-mono text-xs overflow-y-scroll space-y-4"
+              style={{
+                scrollbarWidth: 'thin',
+                scrollbarColor: '#4ade80 #18181b'
+              }}
+            >
           {state === "idle" && (
             <div className="h-full flex items-center justify-center text-zinc-600 italic">
               Waiting for link initialization...
@@ -334,7 +364,43 @@ export function NeuralMonologue({ state, step, persona, logs = [], results, curr
               <span className="text-[10px] uppercase tracking-widest italic">Thinking...</span>
             </motion.div>
           )}
-        </div>
+            </div>
+          </TabsContent>
+
+          {/* Control Tab */}
+          <TabsContent value="control" className="flex-1 overflow-hidden">
+            <div className="h-full p-6 space-y-4">
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-zinc-400">
+                  <Settings className="w-4 h-4" />
+                  <span className="text-xs font-mono uppercase tracking-wider">Test Controls</span>
+                </div>
+                
+                <div className="space-y-2 text-xs">
+                  <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+                    <div className="text-zinc-500 mb-1">Current State</div>
+                    <div className="text-white font-mono">{state.toUpperCase()}</div>
+                  </div>
+                  
+                  <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+                    <div className="text-zinc-500 mb-1">Steps Completed</div>
+                    <div className="text-white font-mono">{step}</div>
+                  </div>
+                  
+                  <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+                    <div className="text-zinc-500 mb-1">Active Persona</div>
+                    <div className="text-white font-mono capitalize">{persona}</div>
+                  </div>
+                  
+                  <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+                    <div className="text-zinc-500 mb-1">Log Entries</div>
+                    <div className="text-white font-mono">{logs.length}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </TabsContent>
+        </Tabs>
 
         {/* Terminal Footer Info */}
         <div className="px-6 py-3 border-t border-white/5 bg-black/20 flex items-center justify-between">
@@ -350,7 +416,7 @@ export function NeuralMonologue({ state, step, persona, logs = [], results, curr
           </div>
           <span className="text-[9px] text-zinc-700 uppercase tracking-widest">Encrypted Stream v4.2</span>
         </div>
-      </motion.div>
+      </div>
     </div>
   );
 }
