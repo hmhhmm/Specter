@@ -181,7 +181,11 @@ RULES:
   - Password: SecurePass123!
   - Name: Test User
   - Phone: +1234567890
-- When the flow is complete (success page, confirmation, or form submitted), set "done": true.
+- Set "done": true when you see:
+  * Success/confirmation page ("Account Created", "Welcome", "Verify Email")
+  * Final submission confirmation ("You're all set", "Check your email")
+  * Error that blocks ALL progress ("Service Unavailable", infinite loading)
+  * Stuck in a loop (same action failing 3+ times)
 - If you see a cookie consent banner, dismiss it first.
 - If you need to scroll to find more elements, use Scroll.
 - DO NOT click social login buttons (Google, Apple, Facebook) - use email signup.
@@ -212,21 +216,45 @@ AVOIDING REPETITION:
 RESPONSE FORMAT (valid JSON only, NO markdown fences, NO extra text):
 {"observation":"<what you see>","reasoning":"<why this action, from persona perspective>","action":{"type":"Tap","element_id":5,"value":null,"element_description":"Sign up button"},"ux_issues":["issue1"],"confusion_score":2,"done":false,"done_reason":null}
 
-CONFUSION SCORE: 0=clear, 1-3=minor, 4-6=moderate, 7-9=high, 10=stuck"""
+UX ISSUES TO DETECT:
+- Form or important elements are below the fold (not visible without scrolling) after clicking a CTA
+- No auto-scroll to bring user attention to the expected next step
+- Form placement: signup form should be immediately visible after clicking "Create Account" or "Sign Up"
+- Confusing layout, unclear next steps, poor contrast, small buttons
+- Missing feedback (no loading state, no error messages, no confirmation)
+
+CONFUSION SCORE (rate the CURRENT PAGE, not your action):
+- 0-1: Crystal clear, obvious next step
+- 2-3: Slightly unclear labels or small buttons
+- 4-6: Confusing layout, hard to find elements, unclear flow
+- 7-8: Highly confusing, ambiguous options, poor UX
+- 9-10: Completely stuck, no clear path forward, page broken
+
+If an action FAILS or nothing changes, increase confusion score on next step!"""
 
 
 def build_planner_prompt(persona_cfg, device_cfg, elements_json, page_url, page_title, step_num, history):
     history_text = ""
+    failure_warning = ""
+    
     if history:
         history_text = "\n\nPREVIOUS ACTIONS (learn from failures - DO NOT repeat failed actions):\n"
+        failed_count = 0
         for h in history[-5:]:
             status_marker = "⚠️ FAILED" if "FAIL" in h['outcome'] or "No result" in h['outcome'] else "✓"
             history_text += f"  Step {h['step']}: {h['action_desc']} -> {h['outcome']} {status_marker}\n"
+            if "FAIL" in h['outcome']:
+                failed_count += 1
         
         # Check for repeated failures
         recent_actions = [h['action_desc'] for h in history[-3:]]
         if len(recent_actions) >= 2 and recent_actions[-1] == recent_actions[-2]:
             history_text += "\n  ⚠️ WARNING: You are repeating the same action! Try something DIFFERENT.\n"
+            failure_warning = "\n⚠️ CRITICAL: Last action did nothing or failed. Increase confusion_score (7-10) and try different approach!"
+        
+        # If last action failed, remind to increase confusion score
+        if history and "FAIL" in history[-1].get('outcome', ''):
+            failure_warning = "\n⚠️ Last action FAILED - set confusion_score higher (6-9) to reflect the difficulty!"
     
     return f"""CURRENT STATE:
 - Step: {step_num}
@@ -235,7 +263,7 @@ def build_planner_prompt(persona_cfg, device_cfg, elements_json, page_url, page_
 - Device: {device_cfg['name']} ({device_cfg['viewport']['width']}x{device_cfg['viewport']['height']})
 - Persona: {persona_cfg['name']} -- {persona_cfg['desc']}
 - Persona Behavior: {persona_cfg['behavior']}
-{history_text}
+{history_text}{failure_warning}
 
 INTERACTIVE ELEMENTS ON PAGE:
 {elements_json}
@@ -378,7 +406,7 @@ async def autonomous_signup_test(
     network: str = 'wifi',
     persona: str = 'normal',
     locale: str = 'en-US',
-    max_steps: int = 15,
+    max_steps: int = 5,
     screenshot_callback = None,
     diagnostic_callback = None,
     headless: bool = False,
@@ -742,6 +770,27 @@ async def autonomous_signup_test(
                 })
                 print(f"  Specter: {pipeline_result}")
                 
+                # AUTO-STOP DETECTION: Prevent wasted tokens on stuck flows
+                if len(results) >= 3:
+                    last_3_results = [r['result'] for r in results[-3:]]
+                    last_3_actions = [r['action'] for r in results[-3:]]
+                    
+                    # Stop if stuck in failure loop (3 consecutive failures)
+                    if all(result == 'FAIL' for result in last_3_results):
+                        print()
+                        print("  🛑 AUTO-STOP: 3 consecutive failures detected")
+                        print("  Flow appears stuck - stopping early to save tokens")
+                        results.append({'step': step_num + 1, 'result': 'DONE', 'reason': 'Auto-stopped: stuck in failure loop'})
+                        break
+                    
+                    # Stop if repeating same action (likely stuck)
+                    if last_3_actions[0] == last_3_actions[1] == last_3_actions[2]:
+                        print()
+                        print("  🛑 AUTO-STOP: Same action repeated 3 times")
+                        print(f"  Stuck on: {last_3_actions[0]}")
+                        results.append({'step': step_num + 1, 'result': 'DONE', 'reason': 'Auto-stopped: action repetition detected'})
+                        break
+                
                 # Broadcast complete diagnostic data to frontend (after diagnosis)
                 if diagnostic_callback:
                     try:
@@ -773,7 +822,166 @@ async def autonomous_signup_test(
     print(f"  Avg Confusion: {avg_confusion:.1f}/10" +
           (" (High!)" if avg_confusion >= 7 else " (Moderate)" if avg_confusion >= 4 else ""))
     print(f"  Reports: {reports_dir}")
-    print("=" * 70 + "\n")
+    print("=" * 70)
+    
+    # 🚨 SEND SUMMARY ALERT ONCE AT END (if there were failures)
+    if failed > 0:
+        print("\n📊 FINAL ANALYSIS SUMMARY")
+        print("=" * 70)
+        
+        # Collect ALL issues from all steps (not just most severe)
+        all_issue_reports = []
+        most_severe_report = None
+        severity_rank = {'P0': 0, 'P1': 1, 'P2': 2, 'P3': 3}
+        
+        for step_file in sorted(os.listdir(reports_dir)):
+            if step_file.startswith('step_') and step_file.endswith('_report.json'):
+                with open(os.path.join(reports_dir, step_file), 'r') as f:
+                    report = json.load(f)
+                    outcome = report.get('outcome', {})
+                    dual_diag = report.get('evidence', {}).get('dual_diagnosis', {})
+                    
+                    # Check if there's an issue in EITHER outcome OR dual_diagnosis
+                    has_outcome_issue = outcome.get('status') in ['FAILED', 'UX_ISSUE'] and outcome.get('diagnosis')
+                    has_dual_diag_issue = dual_diag.get('status') == 'FAILED'
+                    
+                    if has_outcome_issue or has_dual_diag_issue:
+                        # If outcome is empty but dual_diagnosis exists, copy it to outcome for PDF rendering
+                        if not outcome.get('diagnosis') and has_dual_diag_issue:
+                            report['outcome'] = {
+                                'status': dual_diag['status'],
+                                'diagnosis': dual_diag.get('diagnosis', ''),
+                                'severity': dual_diag.get('severity', 'P2'),
+                                'responsible_team': dual_diag.get('responsible_team', 'QA'),
+                                'visual_observation': dual_diag.get('visual_observation', ''),
+                                'recommendations': []  # dual_diagnosis doesn't have recommendations
+                            }
+                            outcome = report['outcome']
+                        
+                        all_issue_reports.append(report)
+                        
+                        current_severity = outcome.get('severity', 'P3')
+                        current_rank = severity_rank.get(current_severity.split(' - ')[0], 3)
+                        
+                        if most_severe_report is None:
+                            most_severe_report = report
+                        else:
+                            best_rank = severity_rank.get(most_severe_report['outcome'].get('severity', 'P3').split(' - ')[0], 3)
+                            if current_rank < best_rank:
+                                most_severe_report = report
+        
+        # Group issues by team and send separate PDFs to each team
+        if all_issue_reports:
+            try:
+                # Group reports by responsible team
+                from collections import defaultdict
+                issues_by_team = defaultdict(list)
+                overall_most_severe = all_issue_reports[0]
+                
+                for report in all_issue_reports:
+                    team = report['outcome'].get('responsible_team', 'QA')
+                    issues_by_team[team].append(report)
+                    
+                    # Track overall most severe for frontend update
+                    current_severity = report['outcome'].get('severity', 'P3')
+                    best_severity = overall_most_severe['outcome'].get('severity', 'P3')
+                    current_rank = severity_rank.get(current_severity.split(' - ')[0], 3)
+                    best_rank = severity_rank.get(best_severity.split(' - ')[0], 3)
+                    if current_rank < best_rank:
+                        overall_most_severe = report
+                
+                print(f"  📊 Issues found: {len(all_issue_reports)} steps across {len(issues_by_team)} teams")
+                teams_alerted = list(issues_by_team.keys())
+                
+                # Send separate alert to each team with only their issues
+                for team, team_issues in issues_by_team.items():
+                    # Find most severe issue for this team
+                    team_most_severe = team_issues[0]
+                    for issue in team_issues[1:]:
+                        current_severity = issue['outcome'].get('severity', 'P3')
+                        best_severity = team_most_severe['outcome'].get('severity', 'P3')
+                        current_rank = severity_rank.get(current_severity.split(' - ')[0], 3)
+                        best_rank = severity_rank.get(best_severity.split(' - ')[0], 3)
+                        if current_rank < best_rank:
+                            team_most_severe = issue
+                    
+                    # Build handoff packet for this team ONLY
+                    handoff_for_alert = {
+                        'step_id': team_most_severe['step_id'],
+                        'persona': team_most_severe['persona'],
+                        'action_taken': team_most_severe['action'],
+                        'agent_expectation': 'Complete signup flow',
+                        'outcome': team_most_severe['outcome'],
+                        'evidence': team_most_severe['evidence'],
+                        'meta_data': {
+                            'device_type': team_most_severe['device'],
+                            'network_type': team_most_severe['network']
+                        },
+                        'all_issues': team_issues  # Only this team's issues
+                    }
+                    
+                    severity = team_most_severe['outcome'].get('severity', 'P2')
+                    diagnosis = team_most_severe['outcome'].get('diagnosis', 'Issues detected')
+                    
+                    print(f"  🚨 Sending alert to {team} team")
+                    print(f"     Issues: {len(team_issues)} step(s), Severity: {severity}")
+                    print(f"     Diagnosis: {diagnosis[:80]}...")
+                    
+                    send_alert(handoff_for_alert)
+                    print(f"  ✅ {team} PDF sent to their Slack channel")
+                
+                # Send final diagnostic update to indicate alert has been sent
+                if diagnostic_callback:
+                    try:
+                        # Update the most severe report to indicate completion
+                        teams_text = ', '.join(teams_alerted)
+                        completion_update = {
+                            **overall_most_severe,
+                            'outcome': {
+                                **overall_most_severe['outcome'],
+                                'diagnosis': f"{overall_most_severe['outcome'].get('diagnosis', '')}\n\n✅ Analysis completed - PDFs sent to {teams_text} team(s)",
+                                'alert_sent': True,
+                                'analysis_complete': True
+                            }
+                        }
+                        await diagnostic_callback(overall_most_severe['step_id'], completion_update)
+                        print(f"  📤 Frontend updated with completion status")
+                    except Exception as cb_err:
+                        print(f"  Diagnostic callback error: {cb_err}")
+                
+            except Exception as e:
+                print(f"  ⚠️  Alert failed: {e}")
+                if "channel_not_found" in str(e):
+                    print(f"  💡 Solution: Invite bot to channel with /invite @Specter Bot")
+        
+        print("=" * 70 + "\n")
+    else:
+        print("  ✅ No alerts needed - all steps passed!")
+        
+        # Send completion update to frontend
+        if diagnostic_callback and len(results) > 0:
+            try:
+                # Send a success completion message for the last step
+                last_step = results[-1]['step']
+                completion_msg = {
+                    'step_id': last_step,
+                    'timestamp': datetime.now().isoformat(),
+                    'outcome': {
+                        'status': 'SUCCESS',
+                        'diagnosis': '✅ Analysis completed - All steps passed successfully',
+                        'analysis_complete': True,
+                        'f_score': 0,
+                        'severity': 'P3 - Cosmetic'
+                    },
+                    'evidence': {},
+                    'confusion_score': 0
+                }
+                await diagnostic_callback(last_step, completion_msg)
+                print(f"  📤 Frontend updated with completion status")
+            except Exception as cb_err:
+                print(f"  Diagnostic callback error: {cb_err}")
+        
+        print("=" * 70 + "\n")
 
     return {
         'status': 'PASS' if failed == 0 else 'FAIL',
@@ -799,7 +1007,7 @@ def run_specter_pipeline(handoff_packet: Dict[str, Any]) -> str:
     if result['status'] == "SUCCESS" and not has_ux_issues:
         return "PASS"
     
-    # If there are UX issues but test passed, create a UX-focused alert
+    # If there are UX issues but test passed, create a UX-focused alert (but don't send yet)
     if result['status'] == "SUCCESS" and has_ux_issues:
         handoff_packet['outcome'] = {
             "status": "UX_ISSUE",
@@ -811,16 +1019,9 @@ def run_specter_pipeline(handoff_packet: Dict[str, Any]) -> str:
         }
         final_packet = diagnose_failure(handoff_packet, use_vision=True)
         
-        # Send alert for UX issues
-        try:
-            responsible_team = final_packet.get('outcome', {}).get('responsible_team', 'Design')
-            print(f"  ⚠️  UX Issues ({len(ux_issues)}) detected - Alerting {responsible_team} team")
-            send_alert(final_packet)
-            print(f"  ✅ UX alert sent to {responsible_team} team channel")
-        except Exception as e:
-            print(f"  ⚠️  UX alert failed: {e}")
-            if "channel_not_found" in str(e):
-                print(f"  💡 Solution: Invite bot to channel with /invite @Specter Bot")
+        # Mark for alert but don't send yet (will send at end of test)
+        responsible_team = final_packet.get('outcome', {}).get('responsible_team', 'Design')
+        print(f"  ⚠️  UX Issues ({len(ux_issues)}) detected - Will alert {responsible_team} team at test end")
         
         return "PASS_WITH_UX_ISSUES"
 
@@ -835,20 +1036,10 @@ def run_specter_pipeline(handoff_packet: Dict[str, Any]) -> str:
 
     final_packet = diagnose_failure(handoff_packet, use_vision=True)
     
-    # 🚨 AUTOMATIC SLACK ESCALATION - Send alert for ALL issues
+    # Mark issue but don't send alert yet (will send summary at test end)
     severity = final_packet.get('outcome', {}).get('severity', '')
     responsible_team = final_packet.get('outcome', {}).get('responsible_team', 'Unknown')
-    
-    # Send Slack alert for every issue detected
-    try:
-        print(f"  🚨 AUTO-ESCALATING to {responsible_team} team (Severity: {severity})")
-        send_alert(final_packet)
-        print(f"  ✅ Slack alert sent to {responsible_team} team channel")
-    except Exception as e:
-        print(f"  ⚠️  Slack alert failed: {e}")
-        # Check if it's a channel_not_found error
-        if "channel_not_found" in str(e):
-            print(f"  💡 Solution: Invite bot to channel with /invite @Specter Bot")
+    print(f"  🔍 Issue detected: {severity} - {responsible_team} team (Alert queued for end)")
     
     return "FAIL"
 

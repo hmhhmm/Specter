@@ -17,7 +17,7 @@ from backend.escalation_webhook import send_alert
 def find_latest_test_reports(reports_dir="reports", limit=5):
     """Find the most recent test reports with failures."""
     if not os.path.exists(reports_dir):
-        print(f"❌ No reports directory found at: {reports_dir}")
+        print(f"No reports directory found at: {reports_dir}")
         return []
     
     # Get all test folders sorted by date (newest first)
@@ -68,11 +68,11 @@ def send_real_alerts(limit=3):
     reports = find_latest_test_reports(limit=limit)
     
     if not reports:
-        print("\n❌ No failed test reports found!")
+        print("\nNo failed test reports found!")
         print("   Run some tests first: python main.py <url>")
         return
     
-    print(f"\n✅ Found {len(reports)} failed test reports\n")
+    print(f"\nFound {len(reports)} failed test reports\n")
     
     for i, report in enumerate(reports, 1):
         print("="*60)
@@ -101,14 +101,14 @@ def send_real_alerts(limit=3):
         
         try:
             send_alert(packet)
-            print(f"   ✅ Alert sent successfully!")
+            print(f"   Alert sent successfully!")
         except Exception as e:
-            print(f"   ❌ Error: {e}")
+            print(f"   Error: {e}")
         
         print()
     
     print("="*60)
-    print("✅ DONE! Check your Slack channels:")
+    print("DONE! Check your Slack channels:")
     print("="*60)
     
     # Show which teams should have received alerts

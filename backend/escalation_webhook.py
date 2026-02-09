@@ -53,7 +53,11 @@ def send_alert(final_packet):
     # Get severity and f-score
     severity = outcome.get('severity', 'P3')
     f_score = outcome.get('f_score', 'N/A')
-    confusion_score = final_packet.get('confusion_score', 0)
+    
+    # Extract confusion_score from nested evidence structure
+    ui_analysis = final_packet.get('evidence', {}).get('ui_analysis', {})
+    confusion_score = ui_analysis.get('confusion_score', 0)
+    
     diagnosis = outcome.get('diagnosis', 'Issue detected')
     
     # ROOT CAUSE INTELLIGENCE - Find similar historical issues
@@ -129,12 +133,21 @@ def send_alert(final_packet):
 4. Result: Failure detected
 """
         
+        # Build UX Observations section (what LLM found)
+        ui_analysis = evidence.get('ui_analysis', {})
+        ux_issues = ui_analysis.get('issues', [])
+        ux_observations_text = ""
+        if ux_issues:
+            ux_observations_text = "\n*👁️ UX Observations (Issues Found):*\n" + "\n".join([
+                f"• {issue}" for issue in ux_issues[:5]
+            ]) + "\n"
+        
         detailed_message = f"""
 *Diagnosis:* {diagnosis}
 *F-Score (Frustration):* {f_score}/100
 *User Confusion:* {confusion_score}/10 {confusion_indicator}
 *Responsible Team:* {responsible_team}
-
+{ux_observations_text}
 {reproduction_steps}
 
 *Network Logs:*
@@ -172,14 +185,14 @@ def send_alert(final_packet):
             text=detailed_message
         )
         
-        print(f"✅ Alert sent successfully to {responsible_team} team in #{target_channel}")
+        print(f"Alert sent successfully to {responsible_team} team in #{target_channel}")
         
         # Generate and send PDF report to the team
         try:
-            print(f"\n📄 Generating PDF report for {responsible_team} team...")
+            print(f"\nGenerating PDF report for {responsible_team} team...")
             generate_and_send_alert_pdf(final_packet)
         except Exception as pdf_error:
-            print(f"⚠️  PDF generation failed (non-critical): {pdf_error}")
+            print(f"PDF generation failed (non-critical): {pdf_error}")
         
     except SlackApiError as e:
-        print(f"❌ Slack API Error: {e.response['error']}")
+        print(f"Slack API Error: {e.response['error']}")

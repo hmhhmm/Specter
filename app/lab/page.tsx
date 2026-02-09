@@ -14,9 +14,9 @@ export default function LabPage() {
   const [simulationState, setSimulationState] = useState<SimulationState>("idle");
   const [simulationStep, setSimulationStep] = useState(0);
   const [url, setUrl] = useState("https://deriv.com/signup");
-  const [persona, setPersona] = useState("senior");
+  const [persona, setPersona] = useState("normal");
   const [device, setDevice] = useState("iphone-15");
-  const [network, setNetwork] = useState("4g");
+  const [network, setNetwork] = useState("wifi");
   const [isVoiceEnabled, setIsVoiceEnabled] = useState(true);
   const [currentScreenshot, setCurrentScreenshot] = useState<string | null>(null);
   const [testResults, setTestResults] = useState<any>(null);
@@ -101,12 +101,15 @@ export default function LabPage() {
           responsible_team: data.diagnosticData.responsible_team,
           ux_issues: data.diagnosticData.ux_issues,
           alert_sent: data.diagnosticData.alert_sent,
+          analysis_complete: data.diagnosticData.analysis_complete,
           dwell_time_ms: data.diagnosticData.dwell_time_ms
         });
         
-        // Add concise diagnostic summary to terminal
+        // Add detailed diagnostic summary to terminal
         if (data.diagnosticData.diagnosis) {
-          addLog(`🔍 ${data.diagnosticData.severity || 'Issue'} - ${data.diagnosticData.responsible_team}`);
+          const severityBadge = data.diagnosticData.severity?.split(' - ')[0] || 'Issue';
+          addLog(`🔍 ${severityBadge} - ${data.diagnosticData.responsible_team}`);
+          addLog(`   📋 ${data.diagnosticData.diagnosis}`);
           if (data.diagnosticData.alert_sent) {
             addLog(`   🚨 Alert sent to ${data.diagnosticData.responsible_team} team`);
           }
@@ -156,30 +159,23 @@ export default function LabPage() {
         "macbook": "desktop"
       };
 
-      // Map UI network names to backend network names
-      const networkMap: Record<string, string> = {
-        "5g": "wifi",
-        "4g": "4g",
-        "3g": "3g"
+      // Network names now match backend directly (wifi, 4g, 3g)
+      // No mapping needed
+
+      const requestBody = {
+        url: url,
+        device: deviceMap[device] || "desktop",
+        network: network || "wifi",
+        persona: persona || "normal",
+        max_steps: 5
       };
 
-      // Map UI persona names to backend persona names  
-      const personaMap: Record<string, string> = {
-        "senior": "elderly",
-        "pro": "cautious",
-        "casual": "normal"
-      };
+      console.log("Starting test with config:", requestBody);
 
       const response = await fetch("http://localhost:8000/api/test/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          url: url,
-          device: deviceMap[device] || "desktop",
-          network: networkMap[network] || "wifi",
-          persona: personaMap[persona] || "normal",
-          max_steps: 15
-        })
+        body: JSON.stringify(requestBody)
       });
 
       if (!response.ok) {
@@ -205,13 +201,6 @@ export default function LabPage() {
 
   return (
     <main className="relative min-h-screen bg-[#050505] text-white overflow-hidden selection:bg-emerald-500/30">
-      {/* Ambient Effects */}
-      <div className="fixed inset-0 pointer-events-none z-50 overflow-hidden opacity-[0.03]">
-        <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] brightness-100 contrast-150"></div>
-      </div>
-      <div className="fixed inset-0 pointer-events-none z-50 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.1)_50%),linear-gradient(90deg,rgba(255,0,0,0.03),rgba(0,255,0,0.01),rgba(0,0,255,0.03))] bg-[length:100%_4px,3px_100%] pointer-events-none opacity-20"></div>
-
-      {/* Page Content */}
       <div className="relative z-10 flex flex-col h-screen">
         <MissionHeader />
         

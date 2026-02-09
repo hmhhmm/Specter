@@ -421,17 +421,21 @@ def calculate_real_f_score(telemetry, ssim_score, network_logs, console_logs, ex
         print(f"      + Console Entropy: {entropy:.1f}pts")
     
     # Component 2: DWELL TIME (User waiting - 0-40pts)
+    # 🔧 ADJUSTED: Only penalize excessive waiting (>5s), not normal thinking time
     dwell_ms = telemetry.get('dwell_time_ms', 0)
-    if dwell_ms > 2000:
-        dwell_penalty = min(40.0, (dwell_ms - 2000) / 100)
+    if dwell_ms > 5000:  # Changed from 2000ms to 5000ms
+        dwell_penalty = min(40.0, (dwell_ms - 5000) / 150)  # Reduced penalty rate
         score += dwell_penalty
         print(f"      + Dwell Time: {dwell_penalty:.1f}pts ({dwell_ms}ms wait)")
     
     # Component 3: SEMANTIC DISTANCE (Expectation mismatch - 0-25pts)
-    semantic = calculate_semantic_distance(expected_outcome, "actual", ssim_score)
-    score += semantic
-    if semantic > 0:
-        print(f"      + Semantic Distance: {semantic:.1f}pts (Visual stagnation)")
+    # 🔧 REDUCED WEIGHT: Only penalize heavy stagnation (SSIM > 0.95 = almost no change)
+    if ssim_score > 0.95:
+        semantic = min(15.0, (ssim_score - 0.95) * 300)  # Reduced from 25pts max
+        score += semantic
+        if semantic > 0:
+            print(f"      + Semantic Distance: {semantic:.1f}pts (Visual stagnation)")
+    # Don't penalize normal UI transitions (dropdowns opening, modals, etc)
     
     # Component 4: NETWORK LATENCY (Slow/unresponsive - 0-20pts)
     network_penalty = 0.0
@@ -486,7 +490,21 @@ def calculate_real_f_score(telemetry, ssim_score, network_logs, console_logs, ex
         print("      + Backend Error: +15.0pts")
 
     # Final Score (0-100)
-    return min(100.0, round(score, 1))
+    final_score = min(100.0, round(score, 1))
+    
+    # 🔧 TEMPORARY HARDCODED CAP: Prevent inflated scores on normal websites
+    # If no errors detected (no network issues, no console errors), cap at 35
+    has_errors = False
+    if network_logs:
+        has_errors = any(log.get('status', 0) >= 400 for log in network_logs)
+    if console_logs and not has_errors:
+        has_errors = any('error' in str(log).lower() for log in console_logs)
+    
+    if not has_errors and final_score > 35:
+        print(f"      ⚙️  Capping F-Score from {final_score} to 35 (no actual errors detected)")
+        final_score = 35.0
+    
+    return final_score
 
 def determine_severity_rule(f_score, network_logs, console_logs=None, ui_analysis=None):
     """
@@ -649,4 +667,5 @@ def check_expectation(handoff):
             "gif_path": gif_path
         }
 
-    return {"status": "SUCCESS", "reason": "Low Friction"}
+    # Always return f_score, even for SUCCESS (prevents defaulting to 100)
+    return {"status": "SUCCESS", "reason": "Low Friction", "f_score": f_score}

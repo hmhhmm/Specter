@@ -36,7 +36,7 @@ export function NeuralMonologue({ state, step, persona, logs = [], results, curr
   }, [logs, step, currentStepData]);
 
   return (
-    <div className="flex flex-col h-full gap-4">
+    <div className="flex flex-col gap-4" style={{ maxHeight: 'calc(100vh - 200px)' }}>
       {/* Terminal Container */}
       <motion.div 
         initial={{ x: 50, opacity: 0 }}
@@ -48,39 +48,30 @@ export function NeuralMonologue({ state, step, persona, logs = [], results, curr
         <div className="px-6 py-4 border-b border-white/5 flex items-center justify-between bg-white/5">
           <div className="flex items-center gap-3">
             <Terminal className="w-4 h-4 text-emerald-500" />
-            <span className="font-mono text-[10px] uppercase tracking-[0.3em] text-zinc-400">Neural Link: Internal Monologue</span>
-          </div>
-          <div className="flex gap-1.5">
-            <div className="w-2.5 h-2.5 rounded-full bg-white/5 border border-white/10" />
-            <div className="w-2.5 h-2.5 rounded-full bg-white/5 border border-white/10" />
-            <div className="w-2.5 h-2.5 rounded-full bg-white/5 border border-white/10" />
+            <span className="font-mono text-xs uppercase text-zinc-400">Test Output</span>
           </div>
         </div>
 
         {/* Terminal Body */}
         <div 
           ref={containerRef}
-          className="flex-1 p-6 font-mono text-xs overflow-y-scroll space-y-4"
+          className="flex-1 p-6 font-mono text-xs overflow-y-auto space-y-4"
           style={{
+            maxHeight: 'calc(100vh - 400px)',
             scrollbarWidth: 'thin',
             scrollbarColor: '#4ade80 #18181b'
           }}
         >
           {state === "idle" && (
-            <div className="h-full flex items-center justify-center text-zinc-600 italic">
-              Waiting for link initialization...
+            <div className="h-full flex items-center justify-center text-zinc-600">
+              Waiting for test...
             </div>
           )}
 
           {state === "scanning" && (
             <div className="space-y-2">
               <div className="flex items-center gap-2 text-emerald-500">
-                <span className="animate-pulse">{">"}</span>
-                <span>Establishing secure tunnel to target...</span>
-              </div>
-              <div className="flex items-center gap-2 text-emerald-500/60">
-                <span className="animate-pulse">{">"}</span>
-                <span>Calibrating vision sensors for persona: {persona.toUpperCase()}</span>
+                <span>Initializing test...</span>
               </div>
             </div>
           )}
@@ -141,6 +132,16 @@ export function NeuralMonologue({ state, step, persona, logs = [], results, curr
                           currentStepData.severity.includes('P3') && "text-blue-400 bg-blue-500/20 border border-blue-500/30"
                         )}>
                           {currentStepData.severity.split(' - ')[0]}
+                        </span>
+                      )}
+                      {/* Analysis status badge */}
+                      {currentStepData.analysis_complete ? (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full text-emerald-400 bg-emerald-500/20 border border-emerald-500/30">
+                          ✓ COMPLETE
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full text-amber-400 bg-amber-500/20 border border-amber-500/30 animate-pulse">
+                          ⚙ ANALYZING
                         </span>
                       )}
                     </div>
@@ -323,33 +324,8 @@ export function NeuralMonologue({ state, step, persona, logs = [], results, curr
               </div>
             </motion.div>
           )}
-
-          {state === "analyzing" && (
-            <motion.div 
-              animate={{ opacity: [0.3, 1, 0.3] }}
-              transition={{ duration: 1.5, repeat: Infinity }}
-              className="flex items-center gap-2 text-emerald-500/40 pl-2"
-            >
-              <span className="">_</span>
-              <span className="text-[10px] uppercase tracking-widest italic">Thinking...</span>
-            </motion.div>
-          )}
         </div>
 
-        {/* Terminal Footer Info */}
-        <div className="px-6 py-3 border-t border-white/5 bg-black/20 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-              <span className="text-[9px] text-zinc-500 uppercase tracking-widest">Persona: {persona}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-              <span className="text-[9px] text-zinc-500 uppercase tracking-widest">Confidence: {state === "idle" ? "0%" : "94.2%"}</span>
-            </div>
-          </div>
-          <span className="text-[9px] text-zinc-700 uppercase tracking-widest">Encrypted Stream v4.2</span>
-        </div>
       </motion.div>
     </div>
   );

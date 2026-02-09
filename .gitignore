@@ -2,6 +2,7 @@
 specs.md
 tasks.md
 .cursor/
+reports/
 
 # Python
 __pycache__/

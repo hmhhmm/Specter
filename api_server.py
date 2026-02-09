@@ -38,7 +38,7 @@ class TestConfig(BaseModel):
     device: str = "desktop"
     network: str = "wifi"
     persona: str = "normal"  # Always fast normal user
-    max_steps: int = 15
+    max_steps: int = 5
 
 class TestResult(BaseModel):
     step_id: str
@@ -179,7 +179,8 @@ async def run_test_background(test_id: str, config: TestConfig):
                     "severity": severity,
                     "responsible_team": outcome.get("responsible_team"),
                     "ux_issues": step_report.get("ux_issues", [])[:3],
-                    "alert_sent": alert_sent,
+                    "alert_sent": outcome.get("alert_sent", False),
+                    "analysis_complete": outcome.get("analysis_complete", False),
                     "dwell_time_ms": step_report.get("dwell_time_ms", 0)
                 }
                 

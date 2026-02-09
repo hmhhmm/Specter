@@ -98,22 +98,34 @@ export function ControlDeck({
                   <SelectValue placeholder="Select Persona" />
                 </SelectTrigger>
                 <SelectContent className="bg-zinc-900 border-white/10 rounded-xl">
-                  <SelectItem value="senior" className="focus:bg-emerald-500/20 focus:text-white text-[10px]">
+                  <SelectItem value="normal" className="focus:bg-emerald-500/20 focus:text-white text-[10px]">
                     <div className="flex items-center gap-2">
                       <User className="w-3 h-3" />
-                      <span>Tech-Illiterate Senior</span>
+                      <span>Normal User</span>
                     </div>
                   </SelectItem>
-                  <SelectItem value="pro" className="focus:bg-emerald-500/20 focus:text-white text-[10px]">
+                  <SelectItem value="cautious" className="focus:bg-emerald-500/20 focus:text-white text-[10px]">
                     <div className="flex items-center gap-2">
                       <Briefcase className="w-3 h-3" />
-                      <span>Impatient Pro</span>
+                      <span>Cautious User</span>
                     </div>
                   </SelectItem>
-                  <SelectItem value="casual" className="focus:bg-emerald-500/20 focus:text-white text-[10px]">
+                  <SelectItem value="elderly" className="focus:bg-emerald-500/20 focus:text-white text-[10px]">
+                    <div className="flex items-center gap-2">
+                      <User className="w-3 h-3" />
+                      <span>Elderly User (65+)</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="confused" className="focus:bg-emerald-500/20 focus:text-white text-[10px]">
                     <div className="flex items-center gap-2">
                       <ShoppingCart className="w-3 h-3" />
-                      <span>Casual Shopper</span>
+                      <span>Confused User</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="mobile_novice" className="focus:bg-emerald-500/20 focus:text-white text-[10px]">
+                    <div className="flex items-center gap-2">
+                      <User className="w-3 h-3" />
+                      <span>Mobile Novice</span>
                     </div>
                   </SelectItem>
                 </SelectContent>
@@ -162,14 +174,17 @@ export function ControlDeck({
               disabled={isRunning}
               className="bg-white/5 p-1 rounded-xl border border-white/10"
             >
-              <ToggleGroupItem value="5g" className="rounded-lg data-[state=on]:bg-emerald-500/20 data-[state=on]:text-emerald-500 h-7 px-2">
-                <Signal className="w-3 h-3" />
+              <ToggleGroupItem value="wifi" className="rounded-lg data-[state=on]:bg-emerald-500/20 data-[state=on]:text-emerald-500 h-7 px-3 text-[9px] font-mono">
+                <Wifi className="w-3 h-3 mr-1" />
+                WiFi
               </ToggleGroupItem>
-              <ToggleGroupItem value="4g" className="rounded-lg data-[state=on]:bg-emerald-500/20 data-[state=on]:text-emerald-500 h-7 px-2">
-                <SignalLow className="w-3 h-3" />
+              <ToggleGroupItem value="4g" className="rounded-lg data-[state=on]:bg-emerald-500/20 data-[state=on]:text-emerald-500 h-7 px-3 text-[9px] font-mono">
+                <Signal className="w-3 h-3 mr-1" />
+                4G
               </ToggleGroupItem>
-              <ToggleGroupItem value="3g" className="rounded-lg data-[state=on]:bg-emerald-500/20 data-[state=on]:text-emerald-500 h-7 px-2">
-                <Wifi className="w-3 h-3" />
+              <ToggleGroupItem value="3g" className="rounded-lg data-[state=on]:bg-emerald-500/20 data-[state=on]:text-emerald-500 h-7 px-3 text-[9px] font-mono">
+                <SignalLow className="w-3 h-3 mr-1" />
+                3G
               </ToggleGroupItem>
             </ToggleGroup>
           </div>
@@ -194,7 +209,7 @@ export function ControlDeck({
             {state === "idle" ? (
               <GlowButton onClick={onStart} className="px-5 py-0 rounded-xl h-10 text-[10px]">
                 <Play className="w-3 h-3 fill-current" />
-                Launch Agent
+                Start Test
               </GlowButton>
             ) : (
               <button 
@@ -202,22 +217,11 @@ export function ControlDeck({
                 className="flex items-center gap-2 px-5 h-10 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition-colors font-mono text-[10px] uppercase tracking-widest"
               >
                 <RotateCcw className={cn("w-3 h-3", isRunning && "animate-spin-slow")} />
-                {state === "complete" ? "Reset Link" : "Resetting..."}
+                {state === "complete" ? "Reset" : "Resetting..."}
               </button>
             )}
           </div>
         </div>
-
-        {/* Neural Waveform Overlay when running */}
-        {isRunning && (
-          <div className="absolute top-0 left-0 right-0 h-[2px] overflow-hidden rounded-full px-12">
-            <motion.div 
-              animate={{ x: ["-100%", "100%"] }}
-              transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-              className="h-full w-1/3 bg-gradient-to-r from-transparent via-emerald-500 to-transparent"
-            />
-          </div>
-        )}
       </div>
     </motion.div>
   );
