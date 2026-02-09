@@ -75,9 +75,9 @@ def generate_team_alert_pdf(final_packet, output_dir="reports/pdf_alerts"):
         title_style = ParagraphStyle(
             'CustomTitle',
             parent=styles['Heading1'],
-            fontSize=22,
+            fontSize=24,
             textColor=colors.HexColor('#1a1a1a'),
-            spaceAfter=20,
+            spaceAfter=30,
             alignment=TA_CENTER,
             fontName='Helvetica-Bold'
         )
@@ -85,17 +85,17 @@ def generate_team_alert_pdf(final_packet, output_dir="reports/pdf_alerts"):
         heading_style = ParagraphStyle(
             'CustomHeading',
             parent=styles['Heading2'],
-            fontSize=14,
+            fontSize=16,
             textColor=colors.HexColor('#2c5aa0'),
-            spaceAfter=10,
-            spaceBefore=10,
+            spaceAfter=12,
+            spaceBefore=12,
             fontName='Helvetica-Bold'
         )
         
         subheading_style = ParagraphStyle(
             'CustomSubHeading',
             parent=styles['Heading3'],
-            fontSize=11,
+            fontSize=12,
             textColor=colors.HexColor('#444444'),
             spaceAfter=6,
             fontName='Helvetica-Bold'
@@ -107,6 +107,16 @@ def generate_team_alert_pdf(final_packet, output_dir="reports/pdf_alerts"):
             fontSize=10,
             textColor=colors.HexColor('#333333'),
             spaceAfter=6,
+            fontName='Helvetica'
+        )
+        
+        info_style = ParagraphStyle(
+            'InfoStyle',
+            parent=body_style,
+            fontSize=9,
+            textColor=colors.HexColor('#555555'),
+            leftIndent=12,
+            spaceAfter=4,
             fontName='Helvetica'
         )
         
@@ -153,19 +163,20 @@ def generate_team_alert_pdf(final_packet, output_dir="reports/pdf_alerts"):
         
         overview_table = Table(overview_data, colWidths=[1.5*inch, 4.5*inch])
         overview_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#f0f0f0')),
+            ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#e8f4f8')),
             ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
             ('ALIGN', (0, 0), (0, -1), 'RIGHT'),
             ('ALIGN', (1, 0), (1, -1), 'LEFT'),
             ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
             ('FONTNAME', (1, 0), (1, -1), 'Helvetica'),
-            ('FONTSIZE', (0, 0), (-1, -1), 9),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cccccc')),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('LEFTPADDING', (0, 0), (-1, -1), 8),
-            ('RIGHTPADDING', (0, 0), (-1, -1), 8),
-            ('TOPPADDING', (0, 0), (-1, -1), 6),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ('LEFTPADDING', (0, 0), (-1, -1), 10),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 10),
+            ('TOPPADDING', (0, 0), (-1, -1), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+            ('ROWBACKGROUNDS', (0, 0), (-1, -1), [colors.HexColor('#e8f4f8'), colors.white]),
         ]))
         elements.append(overview_table)
         
@@ -184,7 +195,12 @@ def generate_team_alert_pdf(final_packet, output_dir="reports/pdf_alerts"):
         note_para = Paragraph(note_text, note_style)
         elements.append(note_para)
         
-        elements.append(Spacer(1, 0.2*inch))
+        elements.append(Spacer(1, 0.3*inch))
+        
+        # Add visual separator
+        separator = Paragraph("_" * 120, body_style)
+        elements.append(separator)
+        elements.append(Spacer(1, 0.3*inch))
         
         # ============ ALL ISSUES FOUND (COMPREHENSIVE SECTION) ============
         all_issues = final_packet.get('all_issues', [])
@@ -247,12 +263,20 @@ def generate_team_alert_pdf(final_packet, output_dir="reports/pdf_alerts"):
             
             elements.append(Spacer(1, 0.1*inch))
         
+        # Visual separator before diagnosis
+        separator = Paragraph("_" * 120, body_style)
+        elements.append(separator)
+        elements.append(Spacer(1, 0.3*inch))
+        
         # Diagnosis
         diagnosis_heading = Paragraph("🔍 Primary Diagnosis (Most Severe)", heading_style)
         elements.append(diagnosis_heading)
-        diagnosis_text = Paragraph(outcome.get('diagnosis', 'Analysis completed - see evidence for details'), body_style)
-        elements.append(diagnosis_text)
-        elements.append(Spacer(1, 0.15*inch))
+        
+        # Make diagnosis stand out with a colored box
+        diagnosis_text = outcome.get('diagnosis', 'Analysis completed - see evidence for details')
+        diagnosis_para = Paragraph(f"<b>{diagnosis_text}</b>", body_style)
+        elements.append(diagnosis_para)
+        elements.append(Spacer(1, 0.2*inch))
         
         # UX Observations (CONSOLIDATED FROM ALL STEPS)
         all_ux_issues = []
@@ -276,10 +300,12 @@ def generate_team_alert_pdf(final_packet, output_dir="reports/pdf_alerts"):
         if unique_ux_issues:
             ux_heading = Paragraph("👁️ All UX Observations", heading_style)
             elements.append(ux_heading)
+            
+            # Create a formatted list box for UX issues
             for i, issue in enumerate(unique_ux_issues, 1):
-                issue_para = Paragraph(f"{i}. {issue}", body_style)
+                issue_para = Paragraph(f"<b>{i}.</b> {issue}", info_style)
                 elements.append(issue_para)
-            elements.append(Spacer(1, 0.15*inch))
+            elements.append(Spacer(1, 0.2*inch))
         
         # Network Logs (ENHANCED - Show even when empty)
         network_heading = Paragraph("🌐 Network Logs", heading_style)
@@ -298,12 +324,12 @@ def generate_team_alert_pdf(final_packet, output_dir="reports/pdf_alerts"):
                 if duration > 0:
                     log_text += f" ({duration}ms)"
                 
-                log_para = Paragraph(f"• {log_text}", body_style)
+                log_para = Paragraph(f"• {log_text}", info_style)
                 elements.append(log_para)
         else:
-            no_logs_para = Paragraph("✓ No network errors detected", body_style)
+            no_logs_para = Paragraph("<i>✓ No network errors detected</i>", body_style)
             elements.append(no_logs_para)
-        elements.append(Spacer(1, 0.15*inch))
+        elements.append(Spacer(1, 0.2*inch))
         
         # Console Logs (ENHANCED - Show errors prominently)
         console_logs = evidence.get('console_logs', [])
@@ -312,12 +338,20 @@ def generate_team_alert_pdf(final_packet, output_dir="reports/pdf_alerts"):
             elements.append(console_heading)
             for log in console_logs[:8]:  # Show up to 8 logs
                 log_text = str(log)[:150]  # Truncate long logs
-                log_para = Paragraph(f"• {log_text}", body_style)
+                log_para = Paragraph(f"• <font color='red'>{log_text}</font>", info_style)
                 elements.append(log_para)
-            elements.append(Spacer(1, 0.15*inch))
+            elements.append(Spacer(1, 0.2*inch))
+        else:
+            # Show that we checked for console errors even if none found
+            pass
+        
+        # Visual separator before recommendations
+        separator = Paragraph("_" * 120, body_style)
+        elements.append(separator)
+        elements.append(Spacer(1, 0.3*inch))
         
         # Recommendations (COMPREHENSIVE - From ALL steps)
-        recommendations_heading = Paragraph("💡 How to Fix It - All Recommendations", heading_style)
+        recommendations_heading = Paragraph("💡 How to Fix - Actionable Recommendations", heading_style)
         elements.append(recommendations_heading)
         
         # Collect ALL recommendations from all steps
@@ -340,10 +374,10 @@ def generate_team_alert_pdf(final_packet, output_dir="reports/pdf_alerts"):
                 seen.add(rec.lower())
                 unique_recommendations.append(rec)
         
-        # Add all unique recommendations
+        # Add all unique recommendations with better formatting
         if unique_recommendations:
             for i, rec in enumerate(unique_recommendations, 1):
-                rec_text = Paragraph(f"{i}. {rec}", body_style)
+                rec_text = Paragraph(f"<b>{i}.</b> {rec}", info_style)
                 elements.append(rec_text)
         else:
             # If no AI recommendations, add generic ones
@@ -353,13 +387,13 @@ def generate_team_alert_pdf(final_packet, output_dir="reports/pdf_alerts"):
                 "Verify the expected user flow completes successfully"
             ]
             for i, rec in enumerate(generic_recs, 1):
-                rec_text = Paragraph(f"{i}. {rec}", body_style)
+                rec_text = Paragraph(f"<b>{i}.</b> {rec}", info_style)
                 elements.append(rec_text)
         
         # Add UX-specific recommendations based on ALL UX issues
         if unique_ux_issues:
-            elements.append(Spacer(1, 0.1*inch))
-            ux_rec_para = Paragraph("<b>UX Improvements Based on Observations:</b>", subheading_style)
+            elements.append(Spacer(1, 0.15*inch))
+            ux_rec_para = Paragraph("<b>🎨 UX Improvements Based on Observations:</b>", subheading_style)
             elements.append(ux_rec_para)
             
             # Generate UX-specific recommendations based on ALL issues detected
@@ -391,13 +425,18 @@ def generate_team_alert_pdf(final_packet, output_dir="reports/pdf_alerts"):
                 
                 if rec and rec not in added_recs:
                     added_recs.add(rec)
-                    rec_para = Paragraph(f"• {rec}", body_style)
+                    rec_para = Paragraph(f"• {rec}", info_style)
                     elements.append(rec_para)
         
-        elements.append(Spacer(1, 0.15*inch))
+        elements.append(Spacer(1, 0.2*inch))
+        
+        # Visual separator
+        separator = Paragraph("_" * 120, body_style)
+        elements.append(separator)
+        elements.append(Spacer(1, 0.3*inch))
         
         # Reproduction Steps (NEW SECTION)
-        repro_heading = Paragraph("Reproduction Steps", heading_style)
+        repro_heading = Paragraph("🔄 Reproduction Steps", heading_style)
         elements.append(repro_heading)
         
         repro_steps = [
@@ -408,10 +447,22 @@ def generate_team_alert_pdf(final_packet, output_dir="reports/pdf_alerts"):
         ]
         
         for step in repro_steps:
-            step_para = Paragraph(step, body_style)
+            step_para = Paragraph(step, info_style)
             elements.append(step_para)
         
-        elements.append(Spacer(1, 0.2*inch))
+        elements.append(Spacer(1, 0.3*inch))
+        
+        # Add footer with metadata
+        footer_style = ParagraphStyle(
+            'Footer',
+            parent=body_style,
+            fontSize=8,
+            textColor=colors.HexColor('#888888'),
+            alignment=TA_CENTER
+        )
+        footer_text = f"Report generated by Specter AI • {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} • Team: {responsible_team}"
+        footer_para = Paragraph(footer_text, footer_style)
+        elements.append(footer_para)
         
         # Build PDF
         doc.build(elements)

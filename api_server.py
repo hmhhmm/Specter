@@ -10,6 +10,7 @@ import os
 from typing import Optional, List
 import sys
 from pathlib import Path
+from webqa_agent.browser.session import BrowserSessionPool
 
 # Add parent directory to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -83,11 +84,7 @@ async def health_check():
 async def run_test_background(test_id: str, config: TestConfig):
     """Run autonomous test in background and broadcast updates."""
     try:
-        # Import needed modules
-        import sys
-        import os
-        import asyncio
-        from pathlib import Path
+        
         
         # Add parent directory to path if not already there
         parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -239,7 +236,7 @@ async def start_test(config: TestConfig, background_tasks: BackgroundTasks):
     try:
         # Check if webqa_agent is available
         try:
-            from webqa_agent.browser.session import BrowserSessionPool
+            
             autonomous_available = True
         except ImportError:
             autonomous_available = False
