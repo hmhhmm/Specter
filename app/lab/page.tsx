@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { MissionHeader } from "@/components/lab/mission-header";
 import { ControlDeck } from "@/components/lab/control-deck";
 import { DeviceEmulator } from "@/components/lab/device-emulator";
@@ -22,47 +22,143 @@ export default function LabPage() {
   const [testResults, setTestResults] = useState<any>(null);
   const [logs, setLogs] = useState<string[]>([]);
   const [currentStepData, setCurrentStepData] = useState<any>(null);
+  const [currentTestId, setCurrentTestId] = useState<string | null>(null);
+  
+  // Live browser streaming state — live mode ON by default
+  const [isLiveMode, setIsLiveMode] = useState(true);
+  const [liveFrame, setLiveFrame] = useState<string | null>(null);
+  
   const wsRef = useRef<WebSocket | null>(null);
+  const liveStreamRef = useRef<WebSocket | null>(null);
 
-  // WebSocket connection
+  // ── Refs that always point at the latest value (stale-closure safe) ──
+  const isLiveModeRef = useRef(isLiveMode);
+  const currentTestIdRef = useRef(currentTestId);
+  useEffect(() => { isLiveModeRef.current = isLiveMode; }, [isLiveMode]);
+  useEffect(() => { currentTestIdRef.current = currentTestId; }, [currentTestId]);
+
+  const addLog = useCallback((message: string) => {
+    setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${message}`]);
+  }, []);
+
+  // ── Live browser streaming functions (stable across renders) ──
+  const startLiveStream = useCallback((testId: string) => {
+    // Close any previous stream
+    if (liveStreamRef.current) {
+      try { liveStreamRef.current.close(); } catch {}
+    }
+    liveStreamRef.current = null;
+
+    addLog("🎥 Connecting to live browser stream...");
+    const ws = new WebSocket(`ws://localhost:8000/ws/live-stream/${testId}`);
+
+    ws.onopen = () => {
+      console.log("Live stream connected");
+      addLog("✓ Live stream active");
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.frame) {
+          setLiveFrame(data.frame);
+        } else if (data.error) {
+          console.error("Live stream error:", data.error);
+          addLog(`Live stream: ${data.error}`);
+        }
+      } catch {}
+    };
+
+    ws.onerror = (error) => {
+      console.error("Live stream WS error", error);
+      // Do NOT flip isLiveMode off — user controls the toggle
+    };
+
+    ws.onclose = () => {
+      console.log("Live stream WS closed");
+      // Leave liveFrame as-is so the last frame stays visible
+    };
+
+    liveStreamRef.current = ws;
+  }, [addLog]);
+
+  const stopLiveStream = useCallback(() => {
+    if (liveStreamRef.current) {
+      try { liveStreamRef.current.send("stop"); } catch {}
+      try { liveStreamRef.current.close(); } catch {}
+      liveStreamRef.current = null;
+    }
+    setLiveFrame(null);
+  }, []);
+
+  const handleToggleLiveMode = useCallback(() => {
+    setIsLiveMode(prev => {
+      if (prev) {
+        // Switching to screenshot mode
+        stopLiveStream();
+        setLiveFrame(null);
+        addLog("Switched to screenshot mode");
+        return false;
+      } else {
+        // Switching to live mode — reconnect if test is running
+        const tid = currentTestIdRef.current;
+        if (tid) {
+          stopLiveStream();          // tear down stale connection first
+          setLiveFrame(null);        // clear old frame
+          startLiveStream(tid);      // fresh connection
+          addLog("Switched to live mode — connecting…");
+        } else {
+          addLog("Live mode enabled — will stream when test starts");
+        }
+        return true;
+      }
+    });
+  }, [startLiveStream, stopLiveStream, addLog]);
+
+  // ── Ref for message handler so the WS effect never goes stale ──
+  const handleWSMessageRef = useRef<(data: any) => void>(() => {});
+
+  // WebSocket connection (runs once; uses ref to avoid stale closure)
   useEffect(() => {
     const ws = new WebSocket("ws://localhost:8000/ws");
-    
+
     ws.onopen = () => {
       console.log("WebSocket connected");
       addLog("Connected to Specter backend");
     };
-    
+
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data);
-      handleWebSocketMessage(data);
+      handleWSMessageRef.current(data);  // always calls latest handler
     };
-    
-    ws.onerror = (error) => {
-      console.error("WebSocket error:", error);
-    };
-    
-    ws.onclose = () => {
-      console.log("WebSocket disconnected");
-    };
-    
+
+    ws.onerror = (error) => console.error("WebSocket error:", error);
+    ws.onclose = () => console.log("WebSocket disconnected");
+
     wsRef.current = ws;
-    
+
     return () => {
       ws.close();
+      if (liveStreamRef.current) liveStreamRef.current.close();
     };
-  }, []);
+  }, [addLog]);
 
-  const addLog = (message: string) => {
-    setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${message}`]);
-  };
+  // ── WebSocket message handler (always fresh via ref) ──
+  useEffect(() => {
+    handleWSMessageRef.current = (data: any) => {
+      console.log("WebSocket message received:", data.type, data);
 
-  const handleWebSocketMessage = (data: any) => {
-    console.log("WebSocket message received:", data.type, data);
-    
-    if (data.type === "test_started") {
-      setSimulationState("scanning");
-      addLog(`Test started: ${data.test_id}`);
+      if (data.type === "test_started") {
+        setSimulationState("scanning");
+        setCurrentTestId(data.test_id);
+        addLog(`Test started: ${data.test_id}`);
+
+        // Start the live stream only when the user wants live mode
+        if (isLiveModeRef.current) {
+          startLiveStream(data.test_id);
+        } else {
+          addLog("Screenshot mode — live stream not started");
+        }
     } else if (data.type === "step_update") {
       setSimulationState("analyzing");
       setSimulationStep(prev => prev + 1);
@@ -138,11 +234,16 @@ export default function LabPage() {
       setTestResults(data.results);
       addLog("Test completed");
       addLog(`Final Results: ${data.results?.passed || 0} passed, ${data.results?.failed || 0} failed`);
+
+      // Keep the last live frame visible for 3 s, then tear down
+      setTimeout(() => stopLiveStream(), 3000);
     } else if (data.type === "test_error") {
       setSimulationState("idle");
       addLog(`Error: ${data.error}`);
+      stopLiveStream();
     }
-  };
+    };
+  }, [addLog, startLiveStream, stopLiveStream]);
 
   const handleStartSimulation = async () => {
     setSimulationState("scanning");
@@ -197,6 +298,11 @@ export default function LabPage() {
     setTestResults(null);
     setCurrentScreenshot(null);
     setCurrentStepData(null);
+    setCurrentTestId(null);
+    
+    // Clean up live stream (keep isLiveMode true so next test streams too)
+    stopLiveStream();
+    setLiveFrame(null);
   };
 
   return (
@@ -210,6 +316,9 @@ export default function LabPage() {
             step={simulationStep} 
             device={device}
             screenshot={currentScreenshot}
+            liveFrame={liveFrame}
+            isLiveMode={isLiveMode}
+            onToggleLiveMode={handleToggleLiveMode}
           />
           <NeuralMonologue 
             state={simulationState} 

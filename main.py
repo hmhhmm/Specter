@@ -409,6 +409,7 @@ async def autonomous_signup_test(
     max_steps: int = 5,
     screenshot_callback = None,
     diagnostic_callback = None,
+    page_callback = None,
     headless: bool = False,
 ) -> Dict[str, Any]:
     """
@@ -463,6 +464,10 @@ async def autonomous_signup_test(
 
     try:
         page = session.page
+
+        # Expose the live page object to callers (e.g. live-stream endpoint)
+        if page_callback:
+            await page_callback(page)
 
         # Network throttling via CDP
         try:

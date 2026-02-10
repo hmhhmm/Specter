@@ -10,6 +10,7 @@ import os
 from typing import Optional, List
 import sys
 from pathlib import Path
+import base64
 from webqa_agent.browser.session import BrowserSessionPool
 
 # Add parent directory to path
@@ -33,6 +34,10 @@ app.add_middleware(
 
 # Store active test sessions
 active_tests = {}
+
+# Maps test_id -> the real Playwright Page object used by the running test.
+# This is what the live-stream WebSocket reads from via CDP.
+active_sessions: dict = {}
 
 class TestConfig(BaseModel):
     url: str
@@ -190,6 +195,12 @@ async def run_test_background(test_id: str, config: TestConfig):
             except Exception as e:
                 print(f"Error broadcasting diagnostic data: {e}")
         
+        # Page callback: store the real Playwright page for live streaming
+        async def page_callback(page):
+            """Called by autonomous_signup_test once the browser page is ready."""
+            active_sessions[test_id] = page
+            print(f"[LiveStream] Page stored for test {test_id}")
+
         # Run autonomous test with streaming
         result = await autonomous_signup_test(
             url=config.url,
@@ -199,6 +210,7 @@ async def run_test_background(test_id: str, config: TestConfig):
             max_steps=config.max_steps,
             screenshot_callback=screenshot_callback,
             diagnostic_callback=diagnostic_callback,
+            page_callback=page_callback,
             headless=True
         )
         
@@ -228,6 +240,9 @@ async def run_test_background(test_id: str, config: TestConfig):
             "test_id": test_id,
             "error": str(e)
         })
+    finally:
+        # Clean up stored page reference
+        active_sessions.pop(test_id, None)
 
 
 @app.post("/api/test/start")
@@ -303,6 +318,168 @@ async def websocket_endpoint(websocket: WebSocket):
             await websocket.send_text(f"Received: {data}")
     except WebSocketDisconnect:
         manager.disconnect(websocket)
+
+
+@app.websocket("/ws/live-stream/{test_id}")
+async def live_stream(websocket: WebSocket, test_id: str):
+    """Stream the REAL test browser viewport to the frontend.
+
+    Tries CDP Page.startScreencast first. If no CDP frames arrive
+    within 3 seconds, falls back to polling page.screenshot() so
+    the live view always works (headless or headed, any Playwright
+    version).
+
+    Protocol:
+      1. Client connects.
+      2. Server waits (up to 30 s) for the page to appear in active_sessions.
+      3. Attempts CDP screencast; falls back to screenshot polling.
+      4. Every frame is forwarded as {"frame": "data:image/jpeg;base64,..."}.
+      5. Client sends "stop" or disconnects to end.
+    """
+    await websocket.accept()
+    cdp = None
+    use_polling = False
+
+    try:
+        # ---- Wait for the page to become available ----
+        page = None
+        for _ in range(60):                          # 30 s max wait (60 × 0.5)
+            page = active_sessions.get(test_id)
+            if page is not None:
+                break
+            await asyncio.sleep(0.5)
+
+        if page is None:
+            await websocket.send_json({"error": "Timeout waiting for browser session"})
+            return
+
+        # ---- Try CDP screencast first ----
+        frame_count = 0
+        cdp_frame_received = asyncio.Event()
+
+        try:
+            cdp = await page.context.new_cdp_session(page)
+            print(f"[LiveStream] CDP session opened for {test_id}")
+
+            async def _send_cdp_frame(params):
+                nonlocal frame_count
+                try:
+                    await websocket.send_json({
+                        "frame": f"data:image/jpeg;base64,{params['data']}"
+                    })
+                    await cdp.send("Page.screencastFrameAck",
+                                   {"sessionId": params["sessionId"]})
+                    frame_count += 1
+                    cdp_frame_received.set()
+                    if frame_count % 30 == 1:
+                        print(f"[LiveStream] CDP frame #{frame_count} for {test_id}")
+                except Exception as exc:
+                    print(f"[LiveStream] CDP frame send error: {exc}")
+
+            def on_frame(params):
+                asyncio.ensure_future(_send_cdp_frame(params))
+
+            cdp.on("Page.screencastFrame", on_frame)
+
+            await cdp.send("Page.startScreencast", {
+                "format": "jpeg",
+                "quality": 60,
+                "everyNthFrame": 1,
+            })
+            print(f"[LiveStream] Screencast started for {test_id}")
+
+            # Wait up to 3 s for the first CDP frame
+            try:
+                await asyncio.wait_for(cdp_frame_received.wait(), timeout=3.0)
+                print(f"[LiveStream] CDP screencast is working for {test_id}")
+            except asyncio.TimeoutError:
+                print(f"[LiveStream] No CDP frames after 3 s, switching to polling for {test_id}")
+                use_polling = True
+                try:
+                    await cdp.send("Page.stopScreencast")
+                    await cdp.detach()
+                except Exception:
+                    pass
+                cdp = None
+
+        except Exception as cdp_err:
+            print(f"[LiveStream] CDP failed ({cdp_err}), using polling for {test_id}")
+            use_polling = True
+            cdp = None
+
+        # ---- Polling fallback: capture page.screenshot() at ~5 fps ----
+        if use_polling:
+            print(f"[LiveStream] Starting polling mode for {test_id}")
+            stop_event = asyncio.Event()
+
+            async def _receive_stop():
+                try:
+                    while not stop_event.is_set():
+                        try:
+                            msg = await asyncio.wait_for(
+                                websocket.receive_text(), timeout=0.5
+                            )
+                            if msg == "stop":
+                                stop_event.set()
+                                return
+                        except asyncio.TimeoutError:
+                            continue
+                except (WebSocketDisconnect, Exception):
+                    stop_event.set()
+
+            recv_task = asyncio.ensure_future(_receive_stop())
+
+            try:
+                while not stop_event.is_set():
+                    if test_id not in active_sessions:
+                        break
+                    try:
+                        raw = await page.screenshot(type="jpeg", quality=60)
+                        b64 = base64.b64encode(raw).decode("utf-8")
+                        await websocket.send_json({
+                            "frame": f"data:image/jpeg;base64,{b64}"
+                        })
+                        frame_count += 1
+                        if frame_count % 30 == 1:
+                            print(f"[LiveStream] Poll frame #{frame_count} for {test_id}")
+                    except Exception as shot_err:
+                        print(f"[LiveStream] Screenshot error: {shot_err}")
+                    await asyncio.sleep(0.2)  # ~5 fps
+            finally:
+                stop_event.set()
+                recv_task.cancel()
+            return  # polling path exits here
+
+        # ---- CDP path: keep alive until client disconnects ----
+        try:
+            while True:
+                try:
+                    msg = await asyncio.wait_for(
+                        websocket.receive_text(), timeout=1.0
+                    )
+                    if msg == "stop":
+                        break
+                except asyncio.TimeoutError:
+                    if test_id not in active_sessions:
+                        break
+        except WebSocketDisconnect:
+            pass
+
+    except WebSocketDisconnect:
+        print(f"[LiveStream] Client disconnected ({test_id})")
+    except Exception as e:
+        print(f"[LiveStream] Error: {e}")
+        try:
+            await websocket.send_json({"error": str(e)})
+        except Exception:
+            pass
+    finally:
+        if cdp:
+            try:
+                await cdp.send("Page.stopScreencast")
+                await cdp.detach()
+            except Exception:
+                pass
 
 
 # ======================================================================
