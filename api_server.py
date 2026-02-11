@@ -36,7 +36,7 @@ app.add_middleware(
 active_tests = {}
 
 # Maps test_id -> the real Playwright Page object used by the running test.
-# This is what the live-stream WebSocket reads from via CDP.
+# This is what the live WebSocket reads from via CDP.
 active_sessions: dict = {}
 
 class TestConfig(BaseModel):
@@ -320,7 +320,7 @@ async def websocket_endpoint(websocket: WebSocket):
         manager.disconnect(websocket)
 
 
-@app.websocket("/ws/live-stream/{test_id}")
+@app.websocket("/ws/live/{test_id}")
 async def live_stream(websocket: WebSocket, test_id: str):
     """Stream the REAL test browser viewport to the frontend.
 
@@ -337,6 +337,14 @@ async def live_stream(websocket: WebSocket, test_id: str):
       5. Client sends "stop" or disconnects to end.
     """
     await websocket.accept()
+    
+    # Check if test is already completed
+    test_info = active_tests.get(test_id)
+    if test_info and test_info["status"] in ["completed", "failed"]:
+        await websocket.send_json({"error": "Test already completed"})
+        await websocket.close(code=1000, reason="Test already completed")
+        return
+    
     cdp = None
     use_polling = False
 

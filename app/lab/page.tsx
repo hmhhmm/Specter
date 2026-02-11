@@ -10,11 +10,50 @@ import { motion, AnimatePresence } from "framer-motion";
 
 export type SimulationState = "idle" | "scanning" | "analyzing" | "complete";
 
+// Define the new Personas Data
+const PERSONAS = [
+  {
+    id: 'zoomer',
+    name: 'Zoomer (Speedster)',
+    icon: '⚡',
+    description: 'Tech-savvy Gen Z. Impatient. Skips instructions. Checks for lag.',
+    color: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20 hover:bg-yellow-500/20'
+  },
+  {
+    id: 'boomer',
+    name: 'Boomer (The Critic)',
+    icon: '👵',
+    description: 'Anxious first-timer. Reads everything. Flags small text & confusion.',
+    color: 'bg-blue-500/10 text-blue-400 border-blue-500/20 hover:bg-blue-500/20'
+  },
+  {
+    id: 'skeptic',
+    name: 'The Skeptic',
+    icon: '🕵️',
+    description: 'Privacy advocate. Checks Terms of Service. Avoids social logins.',
+    color: 'bg-purple-500/10 text-purple-400 border-purple-500/20 hover:bg-purple-500/20'
+  },
+  {
+    id: 'chaos',
+    name: 'Chaos Monkey',
+    icon: '💥',
+    description: 'Clumsy user. Enters invalid data. Tries to break validation.',
+    color: 'bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20'
+  },
+  {
+    id: 'mobile',
+    name: 'Mobile Native',
+    icon: '📱',
+    description: 'Small screen user. Tests touch targets & accessibility constraints.',
+    color: 'bg-green-500/10 text-green-400 border-green-500/20 hover:bg-green-500/20'
+  }
+];
+
 export default function LabPage() {
   const [simulationState, setSimulationState] = useState<SimulationState>("idle");
   const [simulationStep, setSimulationStep] = useState(0);
   const [url, setUrl] = useState("https://deriv.com/signup");
-  const [persona, setPersona] = useState("normal");
+  const [persona, setPersona] = useState("zoomer");
   const [device, setDevice] = useState("iphone-15");
   const [network, setNetwork] = useState("wifi");
   const [isVoiceEnabled, setIsVoiceEnabled] = useState(true);
@@ -50,7 +89,7 @@ export default function LabPage() {
     liveStreamRef.current = null;
 
     addLog("🎥 Connecting to live browser stream...");
-    const ws = new WebSocket(`ws://localhost:8000/ws/live-stream/${testId}`);
+    const ws = new WebSocket(`ws://localhost:8000/ws/live/${testId}`);
 
     ws.onopen = () => {
       console.log("Live stream connected");
@@ -71,6 +110,7 @@ export default function LabPage() {
 
     ws.onerror = (error) => {
       console.error("Live stream WS error", error);
+      addLog("⚠️ Live stream connection failed");
       // Do NOT flip isLiveMode off — user controls the toggle
     };
 
@@ -235,10 +275,14 @@ export default function LabPage() {
       addLog("Test completed");
       addLog(`Final Results: ${data.results?.passed || 0} passed, ${data.results?.failed || 0} failed`);
 
+      // Clear test ID to prevent reconnection attempts
+      setCurrentTestId(null);
+
       // Keep the last live frame visible for 3 s, then tear down
       setTimeout(() => stopLiveStream(), 3000);
     } else if (data.type === "test_error") {
       setSimulationState("idle");
+      setCurrentTestId(null);
       addLog(`Error: ${data.error}`);
       stopLiveStream();
     }

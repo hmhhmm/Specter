@@ -2,9 +2,10 @@
 
 import { motion } from "framer-motion";
 import { 
-  User, 
-  Briefcase, 
-  ShoppingCart, 
+  Zap, 
+  Glasses, 
+  ShieldAlert, 
+  Bug, 
   Smartphone, 
   Monitor, 
   Signal, 
@@ -98,34 +99,34 @@ export function ControlDeck({
                   <SelectValue placeholder="Select Persona" />
                 </SelectTrigger>
                 <SelectContent className="bg-zinc-900 border-white/10 rounded-xl">
-                  <SelectItem value="normal" className="focus:bg-emerald-500/20 focus:text-white text-[10px]">
+                  <SelectItem value="zoomer" className="focus:bg-emerald-500/20 focus:text-white text-[10px]">
                     <div className="flex items-center gap-2">
-                      <User className="w-3 h-3" />
-                      <span>Normal User</span>
+                      <Zap className="w-3 h-3" />
+                      <span>Zoomer (Speedster)</span>
                     </div>
                   </SelectItem>
-                  <SelectItem value="cautious" className="focus:bg-emerald-500/20 focus:text-white text-[10px]">
+                  <SelectItem value="boomer" className="focus:bg-emerald-500/20 focus:text-white text-[10px]">
                     <div className="flex items-center gap-2">
-                      <Briefcase className="w-3 h-3" />
-                      <span>Cautious User</span>
+                      <Glasses className="w-3 h-3" />
+                      <span>Boomer (The Critic)</span>
                     </div>
                   </SelectItem>
-                  <SelectItem value="elderly" className="focus:bg-emerald-500/20 focus:text-white text-[10px]">
+                  <SelectItem value="skeptic" className="focus:bg-emerald-500/20 focus:text-white text-[10px]">
                     <div className="flex items-center gap-2">
-                      <User className="w-3 h-3" />
-                      <span>Elderly User (65+)</span>
+                      <ShieldAlert className="w-3 h-3" />
+                      <span>The Skeptic</span>
                     </div>
                   </SelectItem>
-                  <SelectItem value="confused" className="focus:bg-emerald-500/20 focus:text-white text-[10px]">
+                  <SelectItem value="chaos" className="focus:bg-emerald-500/20 focus:text-white text-[10px]">
                     <div className="flex items-center gap-2">
-                      <ShoppingCart className="w-3 h-3" />
-                      <span>Confused User</span>
+                      <Bug className="w-3 h-3" />
+                      <span>Chaos Monkey</span>
                     </div>
                   </SelectItem>
-                  <SelectItem value="mobile_novice" className="focus:bg-emerald-500/20 focus:text-white text-[10px]">
+                  <SelectItem value="mobile" className="focus:bg-emerald-500/20 focus:text-white text-[10px]">
                     <div className="flex items-center gap-2">
-                      <User className="w-3 h-3" />
-                      <span>Mobile Novice</span>
+                      <Smartphone className="w-3 h-3" />
+                      <span>Mobile Native</span>
                     </div>
                   </SelectItem>
                 </SelectContent>
