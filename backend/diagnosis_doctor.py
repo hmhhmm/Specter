@@ -103,26 +103,26 @@ def determine_responsible_team(handoff_packet):
     
     # IMPROVED Decision tree
     if has_5xx_error or has_backend_indicators:
-        print(f"  🔍 Routing: Backend (5xx errors or backend indicators)")
+        print(f"  Routing: Backend (5xx errors or backend indicators)")
         return "Backend"
     elif has_4xx_error or has_frontend_indicators:
-        print(f"  🔍 Routing: Frontend (4xx errors or frontend indicators)")
+        print(f"  Routing: Frontend (4xx errors or frontend indicators)")
         return "Frontend"
     elif functional_failure or has_functional_ux_issues:
         # Button/interaction broken but no errors → Frontend JavaScript issue
-        print(f"  🔍 Routing: Frontend (functional failure detected: click={is_click_action}, no_change={nothing_happened}, functional_keywords={has_functional_ux_issues})")
+        print(f"  Routing: Frontend (functional failure detected: click={is_click_action}, no_change={nothing_happened}, functional_keywords={has_functional_ux_issues})")
         return "Frontend"
     elif has_viewport_issues:
         # Viewport/scrolling/placement issues → UX/Design team
-        print(f"  🔍 Routing: Design (viewport/scrolling/placement issue detected)")
+        print(f"  Routing: Design (viewport/scrolling/placement issue detected)")
         return "Design"
     elif (has_ux_issues or has_design_indicators) and not has_network_errors:
         # Pure visual/UX issues without functional problems
-        print(f"  🔍 Routing: Design (UX issues without functional failures)")
+        print(f"  Routing: Design (UX issues without functional failures)")
         return "Design"
     else:
         # Unclear root cause - needs QA investigation
-        print(f"  🔍 Routing: QA (unclear root cause)")
+        print(f"  Routing: QA (unclear root cause)")
         return "QA"
 
 def diagnose_failure(handoff_packet, use_vision=True):
@@ -143,7 +143,7 @@ def diagnose_failure(handoff_packet, use_vision=True):
     
     # INTELLIGENT TEAM ASSIGNMENT - Determine team BEFORE asking Claude
     suggested_team = determine_responsible_team(handoff_packet)
-    print(f"📊 Smart Routing: Evidence suggests → {suggested_team} team")
+    print(f"Smart Routing: Evidence suggests → {suggested_team} team")
 
     # Build comprehensive analysis prompt
     ux_issues = handoff_packet['evidence'].get('ui_analysis', {}).get('issues', [])
@@ -168,7 +168,7 @@ WHAT THE USER DID:
 • Action: {action_taken}
 • Expected: {handoff_packet['agent_expectation']}
 • Actual Result: {handoff_packet['outcome'].get('visual_observation', 'See screenshots')}
-• Visual Change Score: {f_score}/100 (lower score = less changed)
+• F-Score (Friction): {f_score}/100 (higher = worse UX, more frustration/issues)
 • User Confusion: {handoff_packet['evidence'].get('ui_analysis', {}).get('confusion_score', 0)}/10
 
 ⚠️ KEY DIAGNOSTIC QUESTIONS:
@@ -292,7 +292,7 @@ Focus on: What failed? Why? What team should fix it?
         # VALIDATE: Ensure responsible_team is one of the 4 valid teams
         valid_teams = ["Backend", "Frontend", "Design", "QA"]
         if ai_analysis.get('responsible_team') not in valid_teams:
-            print(f"⚠️  Invalid team '{ai_analysis.get('responsible_team')}' - using pre-analyzed team: {suggested_team}")
+            print(f"Invalid team '{ai_analysis.get('responsible_team')}' - using pre-analyzed team: {suggested_team}")
             ai_analysis['responsible_team'] = suggested_team
         
         handoff_packet['outcome'].update(ai_analysis)
@@ -300,7 +300,7 @@ Focus on: What failed? Why? What team should fix it?
         if use_vision and 'visual_issues' in ai_analysis:
             print(f"Visual Analysis: {len(ai_analysis.get('visual_issues', []))} issues found")
         
-        print(f"✅ Final routing: {ai_analysis.get('responsible_team')} team")
+        print(f"Final routing: {ai_analysis.get('responsible_team')} team")
         
     except json.JSONDecodeError as e:
         print(f"Error: Claude JSON parse failed: {e}")
