@@ -34,7 +34,7 @@ TEAM ASSIGNMENT (Root Cause-Based):
 - Design:   UX/accessibility, touch targets, visual issues
 - QA:       Unclear root cause, needs investigation
 
-📖 See SEVERITY_LOGIC.md for comprehensive examples and decision matrix
+See SEVERITY_LOGIC.md for comprehensive examples and decision matrix
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ALL severity levels trigger Slack alerts for complete visibility.
