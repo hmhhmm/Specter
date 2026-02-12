@@ -139,16 +139,19 @@ def generate_team_alert_pdf(final_packet, output_dir="reports/pdf_alerts"):
         ui_analysis = final_packet.get('evidence', {}).get('ui_analysis', {})
         confusion = ui_analysis.get('confusion_score', 0)
         
-        # Format visual change score with context
+        # Format F-Score (Friction Score) with context
+        # IMPORTANT: Higher F-Score = Worse UX (more friction/frustration)
         f_score = outcome.get('f_score', 0)
-        if f_score < 20:
-            f_score_text = f"{f_score}% ⚠️ No response detected"
-        elif f_score < 40:
-            f_score_text = f"{f_score}% ⚠️ Minimal change"
-        elif f_score < 60:
-            f_score_text = f"{f_score}% Moderate change"
+        if f_score > 80:
+            f_score_text = f"{f_score}/100 🚨 Critical friction"
+        elif f_score > 60:
+            f_score_text = f"{f_score}/100 ⚠️ High friction"
+        elif f_score > 40:
+            f_score_text = f"{f_score}/100 ⚡ Moderate friction"
+        elif f_score > 20:
+            f_score_text = f"{f_score}/100 ✓ Low friction"
         else:
-            f_score_text = f"{f_score}% Expected change"
+            f_score_text = f"{f_score}/100 ✅ Minimal friction"
         
         overview_data = [
             ["Persona:", final_packet.get('persona', 'N/A')],
@@ -157,7 +160,7 @@ def generate_team_alert_pdf(final_packet, output_dir="reports/pdf_alerts"):
             ["Confusion Score:", f"{confusion}/10"],
             ["Status:", outcome.get('status', 'FAILED')],
             ["Severity:", severity_text],
-            ["Visual Change Score:", f_score_text],
+            ["F-Score (Friction):", f_score_text],
             ["Responsible Team:", responsible_team],
         ]
         
@@ -180,7 +183,7 @@ def generate_team_alert_pdf(final_packet, output_dir="reports/pdf_alerts"):
         ]))
         elements.append(overview_table)
         
-        # Add explanatory note for Visual Change Score
+        # Add explanatory note for F-Score
         note_style = ParagraphStyle(
             'Note',
             parent=body_style,
@@ -189,9 +192,9 @@ def generate_team_alert_pdf(final_packet, output_dir="reports/pdf_alerts"):
             leftIndent=10,
             rightIndent=10
         )
-        note_text = "<i>Note: Visual Change Score measures how much the page changed after the action. " \
-                   "Low scores (0-40%) indicate the page barely responded, suggesting broken functionality or stuck flows. " \
-                   "High scores (60-100%) indicate expected navigation/changes.</i>"
+        note_text = "<i>Note: F-Score (Friction Score) measures user frustration from 0-100. " \
+                   "Higher scores indicate more friction/issues (80+ = Critical, 60+ = High, 40+ = Moderate). " \
+                   "Lower scores indicate smooth user experience (&lt;20 = Minimal friction).</i>"
         note_para = Paragraph(note_text, note_style)
         elements.append(note_para)
         
