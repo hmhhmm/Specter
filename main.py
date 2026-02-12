@@ -462,11 +462,12 @@ async def autonomous_signup_test(
     network: str = 'wifi',
     persona: str = 'zoomer',
     locale: str = 'en-US',
-    max_steps: int = 5,
+    max_steps: int = 10,
     screenshot_callback = None,
     diagnostic_callback = None,
     page_callback = None,
     headless: bool = False,
+    test_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Autonomous signup testing -- AI decides every step.
@@ -559,11 +560,24 @@ async def autonomous_signup_test(
         print("Page loaded\n")
 
         # -- 3. Initialize webqa_agent tools --
+        # Ensure any prior in-process screenshot session is cleared so each
+        # test run creates a fresh, unique report directory.
+        ActionHandler.clear_screenshot_session()
+
+        # Prefer initializing the screenshot session directory BEFORE creating
+        # the ActionHandler instance to avoid any timing/race conditions.
+        # Configure screenshot saving behavior (class-level) BEFORE initializing
+        # the session so init will create the desired directory.
         ActionHandler.set_screenshot_config(save_screenshots=True)
+
+        if test_id:
+            custom_reports_dir = os.path.join('reports', test_id)
+            os.makedirs(custom_reports_dir, exist_ok=True)
+            screenshot_dir = ActionHandler.init_screenshot_session(custom_report_dir=custom_reports_dir)
+        else:
+            screenshot_dir = ActionHandler.init_screenshot_session()
         action_handler = ActionHandler()
         await action_handler.initialize(page)
-
-        screenshot_dir = action_handler.init_screenshot_session()
         reports_dir = str(screenshot_dir.parent)
         os.makedirs(reports_dir, exist_ok=True)
         print(f"Report directory: {reports_dir}")
@@ -635,12 +649,32 @@ async def autonomous_signup_test(
                 await crawler.remove_marker()
                 
                 # Stream screenshot to frontend if callback provided
+                # Line 815-827 in main.py
                 if screenshot_callback:
-                    # Convert relative path to absolute using screenshot_dir
                     from pathlib import Path
-                    abs_screenshot_path = str(Path(screenshot_dir) / Path(screenshot_path).name)
+                    abs_screenshot_path = None
+                    try:
+                        if screenshot_path:
+                            p = Path(screenshot_path)
+                            # FIX: Check if path is already absolute OR construct from screenshot_dir
+                            if p.is_absolute():
+                                abs_screenshot_path = str(p)
+                            else:
+                                 # Use the full relative path, not just the filename
+                                 abs_screenshot_path = str(Path(screenshot_dir) / p)  # Changed from p.name to p
+                    except Exception:
+                        abs_screenshot_path = str(Path(screenshot_dir) / Path(screenshot_path or '').name)
+    
                     await screenshot_callback(abs_screenshot_path, step_num, "Observing page")
-
+                
+    
+ 
+                print(f"  📸 Screenshot saved:")
+                print(f"     Expected dir: {screenshot_dir}")
+                print(f"     Returned path: {screenshot_path}")
+                if screenshot_path:
+                    print(f"     Path exists: {os.path.exists(screenshot_path)}")
+                    print(f"     Is absolute: {Path(screenshot_path).is_absolute()}")
                 page_url, page_title = await session.get_url()
 
                 # -- DECIDE: Ask Claude what to do --
@@ -988,8 +1022,14 @@ async def autonomous_signup_test(
                     print(f"     Issues: {len(team_issues)} step(s), Severity: {severity}")
                     print(f"     Diagnosis: {diagnosis[:80]}...")
                     
-                    send_alert(handoff_for_alert)
-                    print(f"  ✅ {team} PDF sent to their Slack channel")
+                    try:
+                        success = send_alert(handoff_for_alert)
+                        if success:
+                            print(f"  ✅ {team} PDF sent to their Slack channel")
+                        else:
+                            print(f"  ⚠️ {team} alert failed or no evidence; PDF generation attempted")
+                    except Exception as e:
+                        print(f"  ⚠️ send_alert raised exception: {e}")
                 
                 # Send final diagnostic update to indicate alert has been sent
                 if diagnostic_callback:
@@ -1100,7 +1140,7 @@ def run_specter_pipeline(handoff_packet: Dict[str, Any]) -> str:
     # Mark issue but don't send alert yet (will send summary at test end)
     severity = final_packet.get('outcome', {}).get('severity', '')
     responsible_team = final_packet.get('outcome', {}).get('responsible_team', 'Unknown')
-    print(f"  🔍 Issue detected: {severity} - {responsible_team} team (Alert queued for end)")
+    print(f"   Issue detected: {severity} - {responsible_team} team (Alert queued for end)")
     
     return "FAIL"
 
@@ -1134,7 +1174,7 @@ async def main_async():
     os.makedirs("backend/assets", exist_ok=True)
     return await autonomous_signup_test(
         url=args.url, device=args.device, network=args.network,
-        persona=args.persona, locale=args.locale, max_steps=args.max_steps,
+        persona=args.persona, locale=args.locale, max_steps=args.sps,
     )
 
 

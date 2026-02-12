@@ -52,7 +52,7 @@ const PERSONAS = [
 export default function LabPage() {
   const [simulationState, setSimulationState] = useState<SimulationState>("idle");
   const [simulationStep, setSimulationStep] = useState(0);
-  const [url, setUrl] = useState("https://deriv.com/signup");
+  const [url, setUrl] = useState("https://mocked-website-wv7p.vercel.app/");
   const [persona, setPersona] = useState("zoomer");
   const [device, setDevice] = useState("iphone-15");
   const [network, setNetwork] = useState("wifi");
@@ -88,12 +88,12 @@ export default function LabPage() {
     }
     liveStreamRef.current = null;
 
-    addLog("🎥 Connecting to live browser stream...");
+    addLog("Connecting to live browser stream...");
     const ws = new WebSocket(`ws://localhost:8000/ws/live/${testId}`);
 
     ws.onopen = () => {
       console.log("Live stream connected");
-      addLog("✓ Live stream active");
+      addLog("Live stream active");
     };
 
     ws.onmessage = (event) => {
@@ -244,29 +244,29 @@ export default function LabPage() {
         // Add detailed diagnostic summary to terminal
         if (data.diagnosticData.diagnosis) {
           const severityBadge = data.diagnosticData.severity?.split(' - ')[0] || 'Issue';
-          addLog(`🔍 ${severityBadge} - ${data.diagnosticData.responsible_team}`);
-          addLog(`   📋 ${data.diagnosticData.diagnosis}`);
+          addLog(` ${severityBadge} - ${data.diagnosticData.responsible_team}`);
+          addLog(`    ${data.diagnosticData.diagnosis}`);
           if (data.diagnosticData.alert_sent) {
-            addLog(`   🚨 Alert sent to ${data.diagnosticData.responsible_team} team`);
+            addLog(`   Alert sent to ${data.diagnosticData.responsible_team} team`);
           }
         } else if (data.diagnosticData.ux_issues && data.diagnosticData.ux_issues.length > 0) {
           // UX issues detected - show what they are!
-          addLog(`⚠️  UX Issues detected (${data.diagnosticData.ux_issues.length}):`);
+          addLog(`  UX Issues detected (${data.diagnosticData.ux_issues.length}):`);
           data.diagnosticData.ux_issues.forEach((issue: string, i: number) => {
             addLog(`   ${i + 1}. ${issue}`);
           });
           
           // Check if alert was sent for these UX issues
           if (data.diagnosticData.alert_sent) {
-            addLog(`   🚨 Alert sent to ${data.diagnosticData.responsible_team || 'Design'} team`);
+            addLog(`   Alert sent to ${data.diagnosticData.responsible_team || 'Design'} team`);
           } else {
-            addLog(`   📋 Review recommended - Alert will be sent`);
+            addLog(`   Review recommended - Alert will be sent`);
           }
         } else if (data.diagnosticData.confusion_score > 3) {
           // High confusion but no specific diagnosis
-          addLog(`⚠️  Elevated confusion detected (${data.diagnosticData.confusion_score}/10)`);
+          addLog(` Elevated confusion detected (${data.diagnosticData.confusion_score}/10)`);
         } else {
-          addLog(`✓ Analysis complete - No critical issues`);
+          addLog(`Analysis complete - No critical issues`);
         }
       }
     } else if (data.type === "test_complete") {

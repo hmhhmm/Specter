@@ -33,11 +33,38 @@ def _resolve_screenshot_path(screenshot_path: str) -> str:
     
     # If already absolute and exists, return as-is
     if os.path.isabs(screenshot_path):
+        if os.path.exists(screenshot_path):
+            return screenshot_path
+        # If absolute but missing, try to find the file by basename under reports/*/screenshots
+        try:
+            base = os.path.basename(screenshot_path)
+            reports_dir = "reports"
+            if os.path.exists(reports_dir):
+                for root, dirs, files in os.walk(reports_dir):
+                    if 'screenshots' in root.replace('\\', '/'):
+                        candidate = os.path.join(root, base)
+                        if os.path.exists(candidate):
+                            return os.path.abspath(candidate)
+        except Exception:
+            pass
         return screenshot_path
     
     # If path exists relative to current directory, return absolute path
     if os.path.exists(screenshot_path):
         return os.path.abspath(screenshot_path)
+
+    # If given a bare filename (no directories) or a path that doesn't exist,
+    # try to locate the file by basename under reports/*/screenshots.
+    try:
+        base = os.path.basename(screenshot_path)
+        if base and base == screenshot_path or ('/' not in screenshot_path and '\\' not in screenshot_path):
+            reports_dir = "reports"
+            if os.path.exists(reports_dir):
+                for root, dirs, files in os.walk(reports_dir):
+                    if 'screenshots' in root.replace('\\', '/') and base in files:
+                        return os.path.abspath(os.path.join(root, base))
+    except Exception:
+        pass
     
     # Handle webqa_agent relative paths (screenshots/filename.png)
     # These are relative to the reports directory
@@ -173,6 +200,57 @@ def convert_click_result_to_handoff(
     # Convert relative paths to absolute paths
     screenshot_before_path = _resolve_screenshot_path(screenshot_before_path)
     screenshot_after_path = _resolve_screenshot_path(screenshot_after_path)
+
+    # If absolute screenshot files exist but are not under a report's screenshots dir,
+    # copy them into the most recent report screenshots folder so the frontend can find them.
+    def _ensure_in_report(path):
+        try:
+            if not path:
+                return path
+            # If source doesn't exist, try locating by basename in reports screenshots
+            if not os.path.exists(path):
+                try:
+                    base = os.path.basename(path)
+                    reports_dir = 'reports'
+                    if os.path.exists(reports_dir):
+                        for root, dirs, files in os.walk(reports_dir):
+                            if 'screenshots' in root.replace('\\', '/') and base in files:
+                                return os.path.join(root, base)
+                except Exception:
+                    pass
+                return path
+            # If already inside a reports/*/screenshots folder, keep as-is
+            norm = os.path.normpath(path)
+            parts = norm.replace('\\', '/').split('/')
+            if 'reports' in parts and 'screenshots' in parts:
+                return path
+
+            # Find most recent report folder
+            reports_dir = 'reports'
+            if not os.path.exists(reports_dir):
+                return path
+            test_dirs = glob.glob(os.path.join(reports_dir, 'test_*'))
+            if not test_dirs:
+                return path
+            most_recent = max(test_dirs, key=os.path.getmtime)
+            screenshots_dir = os.path.join(most_recent, 'screenshots')
+            os.makedirs(screenshots_dir, exist_ok=True)
+            dest = os.path.join(screenshots_dir, os.path.basename(path))
+            # Avoid copying if source == dest
+            if os.path.abspath(path) == os.path.abspath(dest):
+                return dest
+            try:
+                import shutil
+                shutil.copy2(path, dest)
+                return dest
+            except Exception:
+                # Non-fatal: return original path
+                return path
+        except Exception:
+            return path
+
+    screenshot_before_path = _ensure_in_report(screenshot_before_path)
+    screenshot_after_path = _ensure_in_report(screenshot_after_path)
     
     # Fallback to mock images if screenshots are still missing
     if not screenshot_before_path or not os.path.exists(screenshot_before_path):
@@ -208,6 +286,9 @@ def convert_click_result_to_handoff(
                 "selector": element.get('selector'),
                 "xpath": element.get('xpath'),
             }
+            ,
+            # Force heatmap generation for diagnostic runs
+            "force_heatmap": True
         },
         
         "evidence": {
@@ -216,6 +297,10 @@ def convert_click_result_to_handoff(
             "network_logs": network_logs,
             "console_logs": console_logs,
             
+            # UI analysis placeholder - enriched below
+            # Consumers expect keys: 'issues', 'elements', 'regions', 'confusion_score', 'action_probabilities'
+            "ui_analysis": {},
+
             # For cursor detection
             "click_coords": (int(click_coords['x']), int(click_coords['y'])) if click_coords else None,
             
@@ -224,7 +309,98 @@ def convert_click_result_to_handoff(
             "actual_outcome": "NEW_PAGE" if click_result.get('has_new_page') else "SAME_PAGE",
         }
     }
-    
+    # Enrich ui_analysis with any available data from click_result
+    ui_analysis = {}
+    # Issues reported by webqa_agent's UX checks (if present)
+    if click_result.get('ui_issues'):
+        ui_analysis['issues'] = click_result.get('ui_issues')
+    else:
+        ui_analysis['issues'] = []
+
+    # Elements/context: include element metadata and any bounding box info
+    elements = []
+    element = click_result.get('element') or {}
+    if element:
+        el_entry = {
+            'tag': element.get('tag_name'),
+            'text': element.get('text'),
+            'selector': element.get('selector'),
+            'xpath': element.get('xpath')
+        }
+        # Try to capture bounding box info if provided (absolute pixels or relative)
+        if element.get('bounding_box'):
+            el_entry['bbox'] = element.get('bounding_box')
+        if element.get('box'):
+            el_entry['bbox'] = element.get('box')
+        # Confidence score if present
+        if element.get('confidence') is not None:
+            el_entry['confidence'] = element.get('confidence')
+        elements.append(el_entry)
+    ui_analysis['elements'] = elements
+
+    # Regions: prefer explicit regions from webqa_agent, otherwise derive from click coords / element bbox
+    regions = []
+    # If webqa_agent provided region hints
+    if click_result.get('regions'):
+        for r in click_result.get('regions'):
+            regions.append({
+                'x': r.get('x', 0.5),
+                'y': r.get('y', 0.5),
+                'uncertainty': r.get('uncertainty', 0.6),
+                'reason': r.get('reason', '')
+            })
+    else:
+        # Derive from element bbox if available
+        if elements and elements[0].get('bbox'):
+            bbox = elements[0]['bbox']
+            # bbox may be dict with x,y,width,height in pixels or ratios
+            bx = bbox.get('x')
+            by = bbox.get('y')
+            bw = bbox.get('width') or bbox.get('w') or bbox.get('width_px')
+            bh = bbox.get('height') or bbox.get('h') or bbox.get('height_px')
+            # If viewport dims available, normalize
+            viewport_w = click_result.get('viewport_width', 1920)
+            viewport_h = click_result.get('viewport_height', 1080)
+            try:
+                cx = (bx + (bw / 2.0)) / viewport_w if bw and bx is not None else None
+                cy = (by + (bh / 2.0)) / viewport_h if bh and by is not None else None
+            except Exception:
+                cx, cy = None, None
+            if cx is not None and cy is not None:
+                regions.append({'x': cx, 'y': cy, 'uncertainty': element.get('confidence', 0.6), 'reason': 'element_bbox'})
+        # Fallback to click coordinates
+        if not regions and click_coords:
+            viewport_w = click_result.get('viewport_width', 1920)
+            viewport_h = click_result.get('viewport_height', 1080)
+            try:
+                cx = click_coords['x'] / viewport_w if viewport_w > 0 else 0.5
+                cy = click_coords['y'] / viewport_h if viewport_h > 0 else 0.5
+            except Exception:
+                cx, cy = 0.5, 0.5
+            regions.append({'x': cx, 'y': cy, 'uncertainty': 0.6, 'reason': 'click'})
+
+    ui_analysis['regions'] = regions
+
+    # Confusion score: prefer explicit field, otherwise heuristic from timing/retries
+    confusion = click_result.get('confusion_score')
+    if confusion is None:
+        # Heuristic: more retries or long timing increases confusion
+        retries = click_result.get('retries', 0)
+        timing_ms = click_result.get('timing', {}).get('total_ms', 0)
+        confusion = min(10, int(retries * 3 + (timing_ms / 2000)))
+    ui_analysis['confusion_score'] = confusion
+
+    # Action probabilities / model signals
+    if click_result.get('action_probabilities'):
+        ui_analysis['action_probabilities'] = click_result.get('action_probabilities')
+
+    # Include viewport info for normalizing boxes
+    ui_analysis['viewport_width'] = click_result.get('viewport_width', 1920)
+    ui_analysis['viewport_height'] = click_result.get('viewport_height', 1080)
+
+    # Attach ui_analysis into evidence
+    handoff_packet['evidence']['ui_analysis'] = ui_analysis
+
     return handoff_packet
 
 
@@ -281,6 +457,8 @@ def convert_ux_test_to_handoffs(
                     "ux_category": category,
                     "test_type": "UX_AUDIT",
                     "sub_test_id": ux_test_result.sub_test_id,
+                    # Force heatmap generation for UX audits
+                    "force_heatmap": True,
                 },
                 
                 "evidence": {
@@ -323,16 +501,32 @@ def _save_base64_screenshot(base64_data: str, filename: str) -> str:
     if ',' in base64_data:
         base64_data = base64_data.split(',')[1]
     
-    # Ensure assets directory exists
+    # Prefer saving into the most recent reports/*/screenshots folder so the UI
+    # can find screenshots under the report directory. Fall back to assets.
+    try:
+        reports_dir = "reports"
+        if os.path.exists(reports_dir):
+            test_dirs = glob.glob(os.path.join(reports_dir, "test_*"))
+            if test_dirs:
+                most_recent = max(test_dirs, key=os.path.getmtime)
+                screenshots_dir = os.path.join(most_recent, "screenshots")
+                os.makedirs(screenshots_dir, exist_ok=True)
+                output_path = os.path.join(screenshots_dir, filename)
+                with open(output_path, 'wb') as f:
+                    f.write(base64.b64decode(base64_data))
+                return output_path
+    except Exception:
+        pass
+
+    # Fallback: ensure assets directory exists
     assets_dir = "backend/assets"
     if not os.path.exists(assets_dir):
-        os.makedirs(assets_dir)
-    
-    # Save to file
+        os.makedirs(assets_dir, exist_ok=True)
+
     output_path = os.path.join(assets_dir, filename)
     with open(output_path, 'wb') as f:
         f.write(base64.b64decode(base64_data))
-    
+
     return output_path
 
 

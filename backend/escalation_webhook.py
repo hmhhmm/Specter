@@ -86,8 +86,35 @@ def send_alert(final_packet):
         "P1": "⚠️",
         "P2": "⚡",
         "P3": "ℹ️"
-    }.get(severity, "🔍")
+    }.get(severity, "")
     
+    # Helper: wait briefly for a file to appear (useful for race conditions)
+    def _wait_for_file(p, timeout=5.0, poll=0.5):
+        import time
+        if not p:
+            return False
+        try:
+            if os.path.exists(p):
+                return True
+        except Exception:
+            pass
+        waited = 0.0
+        while waited < timeout:
+            try:
+                if os.path.exists(p):
+                    return True
+            except Exception:
+                pass
+            time.sleep(poll)
+            waited += poll
+        return False
+
+    # Debug: log evidence candidate paths
+    try:
+        print(f"Alert evidence keys: screenshot_before='{evidence.get('screenshot_before_path')}', screenshot_after='{evidence.get('screenshot_after_path')}', gif='{outcome.get('gif_path')}'")
+    except Exception:
+        pass
+
     gif_path = outcome.get('gif_path')
     if gif_path and os.path.exists(gif_path):
         evidence_path = gif_path
@@ -95,11 +122,20 @@ def send_alert(final_packet):
     else:
         evidence_path = evidence.get('screenshot_after_path')
         evidence_type = "Screenshot"
+        # If the after screenshot doesn't exist yet, wait briefly (race condition)
+        if evidence_path and not _wait_for_file(evidence_path, timeout=4.0):
+            # Try before screenshot
+            before = evidence.get('screenshot_before_path')
+            if before and _wait_for_file(before, timeout=1.0):
+                evidence_path = before
+            else:
+                # Last attempt: try before path directly
+                evidence_path = before
+
+        # Final existence check
         if not evidence_path or not os.path.exists(evidence_path):
-            evidence_path = evidence.get('screenshot_before_path')
-            if not evidence_path or not os.path.exists(evidence_path):
-                print("Error: No valid evidence files found")
-                return
+            print("Warning: No valid evidence files found after wait - proceeding without inline evidence")
+            evidence_path = None
     
     print(f"📤 Smart Routing: {responsible_team} team → #{target_channel}")
     print(f"   Uploading {evidence_type}...")
@@ -161,38 +197,47 @@ def send_alert(final_packet):
 {similar_issues_text}
 """
         
-        # Upload evidence file to the TEAM'S CHANNEL
-        file_response = client.files_upload_v2(
-            channel=target_channel,
-            file=evidence_path,
-            title=f"{severity}: {diagnosis[:100]}",
-            initial_comment=alert_header
-        )
-        
-        # Get thread timestamp
+        # Upload evidence file to the TEAM'S CHANNEL if available, otherwise post message only
         thread_ts = None
-        try:
-            file_shares = file_response.get('file', {}).get('shares', {})
-            if 'public' in file_shares and target_channel in file_shares['public']:
-                thread_ts = file_shares['public'][target_channel][0]['ts']
-        except:
-            pass
+        if evidence_path and os.path.exists(evidence_path):
+            file_response = client.files_upload_v2(
+                channel=target_channel,
+                file=evidence_path,
+                title=f"{severity}: {diagnosis[:100]}",
+                initial_comment=alert_header
+            )
+            # Try to extract thread timestamp from file shares
+            try:
+                file_shares = file_response.get('file', {}).get('shares', {})
+                if 'public' in file_shares and target_channel in file_shares['public']:
+                    thread_ts = file_shares['public'][target_channel][0]['ts']
+            except Exception:
+                thread_ts = None
+        else:
+            # Post header-only message when no evidence file is available
+            client.chat_postMessage(channel=target_channel, text=alert_header + "\n_No inline evidence available; a PDF will be generated._")
 
-        # Post detailed info in thread
+        # Post detailed info in thread (if thread_ts available use it, otherwise post in channel)
         client.chat_postMessage(
             channel=target_channel,
             thread_ts=thread_ts,
             text=detailed_message
         )
-        
-        print(f"Alert sent successfully to {responsible_team} team in #{target_channel}")
-        
-        # Generate and send PDF report to the team
+
+        print(f"Alert posted to {responsible_team} team in #{target_channel} (evidence={bool(evidence_path)})")
+
+        # Generate and send PDF report to the team (non-fatal)
         try:
             print(f"\nGenerating PDF report for {responsible_team} team...")
             generate_and_send_alert_pdf(final_packet)
         except Exception as pdf_error:
             print(f"PDF generation failed (non-critical): {pdf_error}")
         
+        return True
+        
     except SlackApiError as e:
         print(f"Slack API Error: {e.response['error']}")
+        return False
+    except Exception as e:
+        print(f"Unexpected error sending alert: {e}")
+        return False

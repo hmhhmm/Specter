@@ -1,4 +1,3 @@
-# expectation_engine.py (The "Pro" Logic)
 """
 Specter Expectation Engine - F-Score Calculation & Severity Classification
 
@@ -41,470 +40,589 @@ ALL severity levels trigger Slack alerts for complete visibility.
 """
 import cv2
 import numpy as np
-import imageio
-from skimage.metrics import structural_similarity as ssim
+try:
+    from skimage.metrics import structural_similarity as ssim
+except Exception:
+    # Fallback approximate SSIM when scikit-image is not installed.
+    def ssim(a, b, multichannel=True):
+        try:
+            if a is None or b is None:
+                return 0.0
+            # convert to grayscale
+            if getattr(a, 'ndim', 0) == 3:
+                a_gray = cv2.cvtColor(a, cv2.COLOR_BGR2GRAY)
+            else:
+                a_gray = a
+            if getattr(b, 'ndim', 0) == 3:
+                b_gray = cv2.cvtColor(b, cv2.COLOR_BGR2GRAY)
+            else:
+                b_gray = b
+            # simple normalized similarity based on MSE
+            a_f = a_gray.astype('float32')
+            b_f = b_gray.astype('float32')
+            if a_f.shape != b_f.shape:
+                return 0.0
+            mse = np.mean((a_f - b_f) ** 2)
+            if mse == 0:
+                return 1.0
+            max_val = 255.0
+            sim = 1.0 - (mse / (max_val ** 2))
+            return max(0.0, min(1.0, sim))
+        except Exception:
+            return 0.0
 import os
+import json
+from datetime import datetime
+from typing import Any, Dict, Optional, List
 
-def generate_heatmap(img_path, output_path, x_ratio, y_ratio, intensity=0.5):
+from backend.friction import FrictionMathematician
+from backend.recorder import (
+    GhostRecorder,
+    generate_ghost_replay,
+    add_diagnostic_overlay,
+    add_click_indicator,
+    create_difference_overlay,
+)
+
+
+# Instantiate core services
+_FM = FrictionMathematician()
+_RECORDER = GhostRecorder()
+
+def record_frame(frame: np.ndarray) -> None:
+    """Call from capture loop with OpenCV BGR frames to keep a rolling buffer."""
+    try:
+        _RECORDER.update(frame)
+    except Exception:
+        return
+
+
+def extract_uncertainty_from_elements(
+    interactive_elements: List[Dict[str, Any]],
+    agent_decision: Dict[str, Any],
+    screenshot_path: str,
+    attention_map: Optional[Any] = None
+) -> Dict[str, Any]:
     """
-    Professional Heatmap: Multiple friction zones with gradient falloff.
-    Creates a more realistic "heat signature" effect.
+    Extract uncertainty regions from Felicia's interactive element detection.
+    
+    Args:
+        interactive_elements: List from DeepCrawler containing:
+            [{'id': 1, 'type': 'button', 'text': 'Sign Up', 'bbox': [x, y, w, h], 'confidence': 0.95}, ...]
+        agent_decision: Felicia's decision containing:
+            {'action': 'click', 'target_id': 3, 'reasoning': '...', 'confidence': 0.8}
+        screenshot_path: Path to screenshot for dimensions
+    
+    Returns:
+        Uncertainty data with regions mapped from element bboxes
+    """
+    img = cv2.imread(screenshot_path)
+    if img is None:
+        return {'global_uncertainty': 0.5, 'regions': []}
+    
+    rows, cols, _ = img.shape
+    uncertainty_regions = []
+    
+    # Calculate per-element uncertainty and global uncertainty
+    per_element_uncs = []
+    if interactive_elements:
+        # Compute combined confidence using detector and optional VLM scores
+        for e in interactive_elements:
+            det_conf = float(e.get('confidence', 0.5))
+            vlm_conf = e.get('vlm_confidence')
+            if vlm_conf is not None:
+                try:
+                    vlm_conf = float(vlm_conf)
+                except Exception:
+                    vlm_conf = None
+
+            combined_conf = det_conf if vlm_conf is None else (det_conf * 0.6 + vlm_conf * 0.4)
+            per_element_uncs.append(1.0 - combined_conf)
+        avg_confidence = 1.0 - (sum(per_element_uncs) / len(per_element_uncs))
+        global_uncertainty = 1.0 - avg_confidence
+    else:
+        global_uncertainty = 0.8  # High uncertainty if no elements detected
+    
+    # Map each interactive element to an uncertainty region
+    for element in interactive_elements:
+        elem_id = element.get('id')
+        elem_type = element.get('type', 'unknown')
+        elem_text = element.get('text', '')
+        bbox = element.get('bbox', [0, 0, 0, 0])  # [x, y, width, height]
+        confidence = element.get('confidence', 0.5)
+        
+        # Calculate center point from bbox
+        if len(bbox) == 4:
+            x, y, w, h = bbox
+            center_x = x + (w / 2)
+            center_y = y + (h / 2)
+            
+            # Convert to ratio (0.0-1.0)
+            x_ratio = center_x / cols
+            y_ratio = center_y / rows
+        else:
+            x_ratio, y_ratio = 0.5, 0.5
+        
+        # Base uncertainty is inverse of combined confidence (detector + vlm)
+        vlm_conf = element.get('vlm_confidence')
+        try:
+            vlm_conf = float(vlm_conf) if vlm_conf is not None else None
+        except Exception:
+            vlm_conf = None
+
+        if vlm_conf is not None:
+            combined_conf = (float(confidence) * 0.6) + (vlm_conf * 0.4)
+        else:
+            combined_conf = float(confidence)
+
+        uncertainty = 1.0 - combined_conf
+        
+        # Check if this element was the agent's target
+        is_target = False
+        target_boost = 0.0
+        if agent_decision and elem_id == agent_decision.get('target_id'):
+            is_target = True
+            # If agent had low confidence in decision, boost uncertainty
+            decision_confidence = agent_decision.get('confidence', 0.5)
+            target_boost = (1.0 - decision_confidence) * 0.3
+
+        # If LLM reasoning mentions ambiguity for this element, boost uncertainty
+        reasoning_text = ''
+        if agent_decision:
+            reasoning_text = agent_decision.get('reasoning_llm') or agent_decision.get('llm_reasoning', '')
+        if reasoning_text and is_target:
+            rt = reasoning_text.lower()
+            if any(k in rt for k in ('uncertain', 'ambig', 'maybe', 'could be', 'not sure', 'confusing', 'alternat')):
+                target_boost = min(1.0, target_boost + 0.25)
+
+        # If attention_map provided, sample approximate attention at element center and adjust
+        if attention_map is not None and len(bbox) == 4:
+            try:
+                # Ensure attention_map is a numpy array
+                att = np.array(attention_map, dtype=float)
+                # Resize to image dims if small
+                att_h, att_w = att.shape[:2]
+                cx = int(center_x)
+                cy = int(center_y)
+                if (att_w, att_h) != (cols, rows):
+                    att_resized = cv2.resize(att, (cols, rows), interpolation=cv2.INTER_CUBIC)
+                else:
+                    att_resized = att
+                att_val = float(att_resized[cy, cx]) if att_resized.max() > 0 else 0.0
+                # Normalize if necessary
+                if att_val > 1.5:  # likely 0-255
+                    att_val = att_val / 255.0
+                # Low attention -> increase uncertainty; high attention slightly decrease
+                if att_val < 0.3:
+                    target_boost = min(1.0, target_boost + 0.15)
+                elif att_val > 0.7:
+                    target_boost = max(0.0, target_boost - 0.07)
+            except Exception:
+                pass
+        
+        # Determine reason for uncertainty
+        reasons = []
+        if confidence < 0.6:
+            reasons.append(f"Low detection confidence ({confidence:.1%})")
+        if elem_type == 'unknown':
+            reasons.append("Element type unclear")
+        if not elem_text or elem_text.strip() == '':
+            reasons.append("No text label")
+        if bbox[2] < 10 or bbox[3] < 10:  # Very small element
+            reasons.append("Very small click target")
+        if is_target and decision_confidence < 0.7:
+            reasons.append(f"Agent uncertain about action ({decision_confidence:.1%})")
+        
+        reason = "; ".join(reasons) if reasons else f"{elem_type}: {elem_text}"
+        
+        uncertainty_regions.append({
+            'x': x_ratio,
+            'y': y_ratio,
+            'uncertainty': min(1.0, uncertainty + target_boost),
+            'reason': reason,
+            'element_id': elem_id,
+            'element_type': elem_type,
+            'is_target': is_target,
+            'bbox': bbox  # Keep for drawing bounding boxes
+        })
+    
+    # Sort by uncertainty (highest first)
+    uncertainty_regions.sort(key=lambda r: r['uncertainty'], reverse=True)
+    
+    # Recompute global uncertainty as a combination of confusion, avg element uncertainty, and agent uncertainty
+    try:
+        avg_elem_unc = (sum(r['uncertainty'] for r in uncertainty_regions) / len(uncertainty_regions)) if uncertainty_regions else global_uncertainty
+    except Exception:
+        avg_elem_unc = global_uncertainty
+
+    agent_conf = agent_decision.get('confidence', 0.5) if agent_decision else 0.5
+    combined_global = min(1.0, (global_uncertainty + avg_elem_unc + (1.0 - agent_conf)) / 3.0)
+
+    return {
+        'global_uncertainty': combined_global,
+        'regions': uncertainty_regions,
+        'num_elements_detected': len(interactive_elements),
+        'agent_confidence': agent_conf
+    }
+    
+
+
+def generate_uncertainty_heatmap(
+    img_path: str,
+    output_path: str,
+    uncertainty_data: Dict[str, Any],
+    color_scheme: str = 'uncertainty',
+    show_legend: bool = True,
+    show_bboxes: bool = True,  # NEW: Draw element bounding boxes
+    blur_strength: int = 15
+) -> Optional[str]:
+    """
+    Generate heatmap based on AI uncertainty metrics from Felicia's element detection.
+    
+    Args:
+        img_path: Input screenshot path
+        output_path: Output heatmap path
+        uncertainty_data: Dictionary from extract_uncertainty_from_elements()
+        color_scheme: Visualization style
+        show_legend: Add legend explaining colors
+        show_bboxes: Draw bounding boxes around detected elements
+        blur_strength: Gaussian blur for smooth gradients
     """
     img = cv2.imread(img_path)
-    if img is None: return None
+    if img is None:
+        return None
     
-    overlay = img.copy()
     rows, cols, _ = img.shape
     
-    # Convert ratio to pixels
-    center_x = int(cols * x_ratio)
-    center_y = int(rows * y_ratio)
+    # Create empty heatmap overlay
+    heatmap = np.zeros((rows, cols), dtype=np.float32)
     
-    # Create gradient heatmap (not just solid circle)
-    # Multiple concentric circles with decreasing intensity
-    max_radius = int(50 + (intensity * 150))
+    # Generate heatmap from detected element regions
+    if 'regions' in uncertainty_data and uncertainty_data['regions']:
+        for region in uncertainty_data['regions']:
+            x_ratio = region.get('x', 0.5)
+            y_ratio = region.get('y', 0.5)
+            uncertainty = region.get('uncertainty', 0.5)
+            bbox = region.get('bbox', None)
+            
+            # Convert to pixels
+            center_x = int(cols * x_ratio)
+            center_y = int(rows * y_ratio)
+            
+            # Use bbox size to determine radius if available
+            if bbox and len(bbox) == 4:
+                _, _, w, h = bbox
+                radius = int(max(w, h) * 0.8)  # Slightly larger than element
+            else:
+                radius = int(50 + (uncertainty * 100))
+            
+            # Draw Gaussian-like blob
+            Y, X = np.ogrid[:rows, :cols]
+            dist_from_center = np.sqrt((X - center_x)**2 + (Y - center_y)**2)
+            
+            # Gaussian falloff
+            gaussian_mask = np.exp(-(dist_from_center**2) / (2 * (radius/2)**2))
+            heatmap += gaussian_mask * uncertainty
     
-    for i in range(5):
-        radius = int(max_radius * (1 - i * 0.15))
-        alpha_layer = 0.15 + (intensity * 0.15 * (5 - i))
-        
-        # Color gradient: Red (intense) → Orange → Yellow (less intense)
-        if i == 0:
-            color = (0, 0, 255)  # Pure red (BGR)
-        elif i == 1:
-            color = (0, 100, 255)  # Red-Orange
-        elif i == 2:
-            color = (0, 165, 255)  # Orange
-        else:
-            color = (0, 200, 255)  # Yellow-Orange
-        
-        layer = overlay.copy()
-        cv2.circle(layer, (center_x, center_y), radius, color, -1)
-        cv2.addWeighted(layer, alpha_layer, overlay, 1 - alpha_layer, 0, overlay)
+    # Normalize heatmap to 0-1
+    if heatmap.max() > 0:
+        heatmap = heatmap / heatmap.max()
     
-    # Add outer glow effect
-    glow_radius = max_radius + 30
-    glow_layer = overlay.copy()
-    cv2.circle(glow_layer, (center_x, center_y), glow_radius, (0, 50, 200), -1)
-    cv2.addWeighted(glow_layer, 0.08, overlay, 0.92, 0, overlay)
+    # Apply Gaussian blur for smooth gradients - ensure kernel is odd and valid
+    if blur_strength and isinstance(blur_strength, int) and blur_strength > 0:
+        k = blur_strength
+        if k % 2 == 0:
+            k += 1
+        # Clamp kernel to image size
+        k = max(1, min(k, max(1, min(rows | cols, k))))
+        try:
+            heatmap = cv2.GaussianBlur(heatmap, (k, k), 0)
+        except Exception:
+            # Fallback: skip blur if OpenCV fails for some kernel sizes
+            pass
     
-    # Final blend with original
-    alpha = 0.5 + (intensity * 0.2)
-    heatmap_img = cv2.addWeighted(overlay, alpha, img, 1 - alpha, 0)
-    
-    # Add crosshair at exact click point
-    line_color = (255, 255, 255)  # White
-    line_length = 20
-    cv2.line(heatmap_img, (center_x - line_length, center_y), (center_x + line_length, center_y), line_color, 2)
-    cv2.line(heatmap_img, (center_x, center_y - line_length), (center_x, center_y + line_length), line_color, 2)
-    cv2.circle(heatmap_img, (center_x, center_y), 3, (255, 255, 255), -1)
-    
-    cv2.imwrite(output_path, heatmap_img)
-    return output_path
+    # Apply color scheme
+    # Robust colormap selection: provide fallbacks for OpenCV variants
+    color_schemes = {
+        'uncertainty': getattr(cv2, 'COLORMAP_JET', 2),
+        'confidence': getattr(cv2, 'COLORMAP_WINTER', getattr(cv2, 'COLORMAP_RAINBOW', 2)),
+        'attention': getattr(cv2, 'COLORMAP_HOT', getattr(cv2, 'COLORMAP_JET', 2)),
+        'fire': getattr(cv2, 'COLORMAP_INFERNO', getattr(cv2, 'COLORMAP_HOT', 2)),
+        'viridis': getattr(cv2, 'COLORMAP_VIRIDIS', getattr(cv2, 'COLORMAP_JET', 2))
+    }
 
-def add_click_indicator(img, x, y, frame_num=0, total_frames=12):
-    """
-    Professional click animation with ripple effect and shadow.
-    """
-    img_copy = img.copy()
-    rows, cols = img.shape[:2]
+    colormap = color_schemes.get(color_scheme, getattr(cv2, 'COLORMAP_JET', 2))
     
-    # Convert ratio to pixels
-    center_x = int(cols * x) if x <= 1.0 else int(x)
-    center_y = int(rows * y) if y <= 1.0 else int(y)
+    # Convert to 0-255 and apply colormap
+    heatmap_uint8 = (heatmap * 255).astype(np.uint8)
+    heatmap_colored = cv2.applyColorMap(heatmap_uint8, colormap)
     
-    # Animated ripple effect (2 expanding rings)
-    progress = frame_num / max(total_frames - 1, 1)
+    # Blend with original image
+    alpha = 0.5
+    result = cv2.addWeighted(img, 1 - alpha, heatmap_colored, alpha, 0)
     
-    # Ring 1 (primary)
-    radius1 = int(10 + (progress * 50))
-    thickness1 = max(2, int(6 - (progress * 4)))
-    alpha1 = max(0.0, 1.0 - (progress * 1.2))
-    
-    # Ring 2 (delayed secondary)
-    ring2_start = 0.3
-    if progress > ring2_start:
-        progress2 = (progress - ring2_start) / (1.0 - ring2_start)
-        radius2 = int(10 + (progress2 * 40))
-        thickness2 = max(2, int(5 - (progress2 * 3)))
-        alpha2 = max(0.0, 0.8 - (progress2 * 1.0))
-    else:
-        radius2, thickness2, alpha2 = 0, 0, 0
-    
-    overlay = img_copy.copy()
-    
-    # Draw shadow (black, slightly offset)
-    if alpha1 > 0:
-        cv2.circle(overlay, (center_x + 2, center_y + 2), radius1, (0, 0, 0), thickness1)
-        cv2.addWeighted(overlay, alpha1 * 0.3, img_copy, 1 - (alpha1 * 0.3), 0, img_copy)
-        
-        overlay = img_copy.copy()
-    
-    # Draw primary ring (yellow)
-    if alpha1 > 0:
-        cv2.circle(overlay, (center_x, center_y), radius1, (0, 255, 255), thickness1)
-        cv2.addWeighted(overlay, alpha1, img_copy, 1 - alpha1, 0, img_copy)
-        
-        overlay = img_copy.copy()
-    
-    # Draw secondary ring (cyan)
-    if alpha2 > 0:
-        cv2.circle(overlay, (center_x, center_y), radius2, (255, 255, 0), thickness2)
-        cv2.addWeighted(overlay, alpha2, img_copy, 1 - alpha2, 0, img_copy)
-        
-        overlay = img_copy.copy()
-    
-    # Draw center target (always visible)
-    cv2.circle(img_copy, (center_x, center_y), 5, (0, 0, 255), -1)  # Red center
-    cv2.circle(img_copy, (center_x, center_y), 5, (255, 255, 255), 2)  # White outline
-    
-    return img_copy
-
-def create_difference_overlay(img_before, img_after):
-    """
-    Professional difference visualization with contours and color-coded intensity.
-    """
-    # Convert to grayscale
-    gray_before = cv2.cvtColor(img_before, cv2.COLOR_BGR2GRAY)
-    gray_after = cv2.cvtColor(img_after, cv2.COLOR_BGR2GRAY)
-    
-    # Compute absolute difference
-    diff = cv2.absdiff(gray_before, gray_after)
-    
-    # Apply blur to reduce noise
-    diff = cv2.GaussianBlur(diff, (5, 5), 0)
-    
-    # Threshold to get significant changes
-    _, thresh = cv2.threshold(diff, 20, 255, cv2.THRESH_BINARY)
-    
-    # Find contours of changed regions
-    contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    
-    # Create colored overlay with intensity mapping
-    img_overlay = img_after.copy()
-    
-    # Create heatmap from difference intensity
-    diff_colored = cv2.applyColorMap(diff, cv2.COLORMAP_JET)
-    
-    # Blend only where changes occurred
-    mask = thresh > 0
-    img_overlay[mask] = cv2.addWeighted(img_after, 0.4, diff_colored, 0.6, 0)[mask]
-    
-    # Draw contours around changed regions
-    cv2.drawContours(img_overlay, contours, -1, (0, 255, 0), 2)
-    
-    # Add change indicator text
-    if len(contours) > 0:
-        total_change_area = sum(cv2.contourArea(c) for c in contours)
-        img_height, img_width = img_after.shape[:2]
-        change_percent = (total_change_area / (img_width * img_height)) * 100
-        
-        # Add semi-transparent background for text
-        text = f"Changed: {change_percent:.1f}%"
+    # Draw bounding boxes around detected elements
+    if show_bboxes and 'regions' in uncertainty_data:
         font = cv2.FONT_HERSHEY_SIMPLEX
-        text_size = cv2.getTextSize(text, font, 0.7, 2)[0]
-        
-        # Background rectangle
-        bg_x1, bg_y1 = 10, 10
-        bg_x2, bg_y2 = bg_x1 + text_size[0] + 10, bg_y1 + text_size[1] + 10
-        cv2.rectangle(img_overlay, (bg_x1, bg_y1), (bg_x2, bg_y2), (0, 0, 0), -1)
-        cv2.rectangle(img_overlay, (bg_x1, bg_y1), (bg_x2, bg_y2), (0, 255, 0), 2)
-        
-        # Text
-        cv2.putText(img_overlay, text, (15, 30), font, 0.7, (0, 255, 0), 2)
+        for region in uncertainty_data['regions']:
+            bbox = region.get('bbox')
+            if not bbox or len(bbox) != 4:
+                continue
+            
+            x, y, w, h = bbox
+            uncertainty = region.get('uncertainty', 0.5)
+            is_target = region.get('is_target', False)
+            elem_id = region.get('element_id', '?')
+            
+            # Color code: Green = target, Red = high uncertainty, Yellow = medium
+            if is_target:
+                box_color = (0, 255, 0)  # Green
+                thickness = 3
+            elif uncertainty > 0.7:
+                box_color = (0, 0, 255)  # Red
+                thickness = 2
+            elif uncertainty > 0.4:
+                box_color = (0, 165, 255)  # Orange
+                thickness = 2
+            else:
+                box_color = (0, 255, 255)  # Yellow
+                thickness = 1
+            
+            # Draw rectangle
+            cv2.rectangle(result, (int(x), int(y)), (int(x + w), int(y + h)), 
+                         box_color, thickness)
+            
+            # Draw element ID label
+            label = f"#{elem_id}"
+            if is_target:
+                label += " ★"  # Star for target
+            
+            label_size = cv2.getTextSize(label, font, 0.4, 1)[0]
+            cv2.rectangle(result, (int(x), int(y) - 18), 
+                         (int(x) + label_size[0] + 4, int(y)), 
+                         box_color, -1)
+            cv2.putText(result, label, (int(x) + 2, int(y) - 5), 
+                       font, 0.4, (255, 255, 255), 1)
+            
+            # Draw uncertainty percentage
+            unc_label = f"{uncertainty*100:.0f}%"
+            cv2.putText(result, unc_label, (int(x + w) - 35, int(y + h) + 15), 
+                       font, 0.4, box_color, 1)
     
-    return img_overlay, thresh
+    # Add legend (robust to small images)
+    if show_legend:
+        legend_height = 80
+        legend = np.zeros((legend_height, cols, 3), dtype=np.uint8)
+        legend[:] = (20, 20, 20)
 
-def add_diagnostic_overlay(img, frame_info, f_score=None, severity=None, error_msg=None):
-    """
-    Adds professional diagnostic information overlay to frame.
-    """
-    img_copy = img.copy()
-    height, width = img.shape[:2]
-    
-    font = cv2.FONT_HERSHEY_SIMPLEX
-    
-    # Top banner with frame info
-    banner_height = 40
-    banner = np.zeros((banner_height, width, 3), dtype=np.uint8)
-    banner[:] = (30, 30, 30)  # Dark gray
-    
-    # Frame timestamp
-    cv2.putText(banner, frame_info, (10, 27), font, 0.6, (255, 255, 255), 1)
-    
-    # Add severity indicator
-    if severity:
-        severity_color = {
-            'P0': (0, 0, 255),      # Red
-            'P1': (0, 140, 255),    # Orange
-            'P2': (0, 255, 255),    # Yellow
-            'P3': (128, 128, 128)   # Gray
-        }.get(severity, (255, 255, 255))
-        
-        cv2.putText(banner, f"[{severity}]", (width - 100, 27), font, 0.7, severity_color, 2)
-    
-    # F-Score indicator
-    if f_score is not None:
-        score_x = width - 250
-        score_text = f"F-Score: {f_score:.1f}"
-        
-        # Color code based on score
-        if f_score >= 80:
-            score_color = (0, 0, 255)  # Red
-        elif f_score >= 60:
-            score_color = (0, 140, 255)  # Orange
-        elif f_score >= 40:
-            score_color = (0, 255, 255)  # Yellow
-        else:
-            score_color = (0, 255, 0)  # Green
-        
-        cv2.putText(banner, score_text, (score_x, 27), font, 0.6, score_color, 2)
-    
-    # Combine banner with image
-    result = np.vstack([banner, img_copy])
-    
-    # Bottom error message banner (ALWAYS added for consistent frame size)
-    error_banner_height = 50
-    error_banner = np.zeros((error_banner_height, width, 3), dtype=np.uint8)
-    
-    if error_msg:
-        error_banner[:] = (0, 0, 128)  # Dark red
-        
-        # Truncate long error messages
-        max_chars = int(width / 8)
-        if len(error_msg) > max_chars:
-            error_msg = error_msg[:max_chars-3] + "..."
-        
-        cv2.putText(error_banner, f"Warning: {error_msg}", (10, 32), font, 0.5, (255, 255, 255), 1)
-    else:
-        error_banner[:] = (30, 30, 30)  # Dark gray (same as top, no error)
-    
-    result = np.vstack([result, error_banner])
-    
-    return result
+        # Positioning with clamping
+        bar_x = int(max(10, cols * 0.12))
+        bar_width = int(max(30, cols - bar_x - 150))
+        bar_width = min(bar_width, max(10, cols - bar_x - 10))
+        bar_height = max(8, int(legend_height * 0.25))
+        bar_y = int((legend_height - bar_height) / 2)
 
-def generate_ghost_replay(img_a_path, img_b_path, output_path, click_x=0.5, click_y=0.5, f_score=None, severity=None, error_msg=None, show_diff=True):
-    """
-    PROFESSIONAL Ghost Replay GIF with:
-    - Smooth 16-frame animation (not 8)
-    - Dual ripple effect on click
-    - Diagnostic overlays (F-Score, severity, errors)
-    - Enhanced difference visualization with contours
-    - Professional color grading
-    """
-    img_a = cv2.imread(img_a_path)
-    img_b = cv2.imread(img_b_path)
-    if img_a is None or img_b is None:
-        return None
+        if bar_width > 1:
+            for i in range(bar_width):
+                val = int((i / max(1, (bar_width - 1))) * 255)
+                try:
+                    color = cv2.applyColorMap(np.array([[val]], dtype=np.uint8), colormap)[0, 0]
+                    cv2.line(legend, (bar_x + i, bar_y), (bar_x + i, bar_y + bar_height), color.tolist(), 1)
+                except Exception:
+                    # Fallback: draw grayscale
+                    gray = int(val)
+                    cv2.line(legend, (bar_x + i, bar_y), (bar_x + i, bar_y + bar_height), (gray, gray, gray), 1)
 
-    # Ensure same dimensions
-    if img_a.shape != img_b.shape:
-        height, width = img_a.shape[:2]
-        img_b = cv2.resize(img_b, (width, height))
+        cv2.putText(legend, "Low Uncertainty", (max(0, bar_x - 110), bar_y + bar_height + 5),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
+        cv2.putText(legend, "High Uncertainty", (min(cols - 10, bar_x + bar_width + 10), bar_y + bar_height + 5),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
 
-    # Convert to RGB
-    img_a_rgb = cv2.cvtColor(img_a, cv2.COLOR_BGR2RGB)
-    img_b_rgb = cv2.cvtColor(img_b, cv2.COLOR_BGR2RGB)
+        # Metrics
+        num_elements = uncertainty_data.get('num_elements_detected', 0)
+        agent_conf = uncertainty_data.get('agent_confidence', 0.0)
+        entropy = uncertainty_data.get('entropy', 0.0)
+        semantic = uncertainty_data.get('semantic_distance', 0.0)
+
+        metrics_y = bar_y + bar_height + 25
+        cv2.putText(legend, f"Elements: {num_elements}", (10, metrics_y),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.35, (200, 200, 200), 1)
+        cv2.putText(legend, f"Agent Conf: {agent_conf:.1%}", (150, metrics_y),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.35, (200, 200, 200), 1)
+
+        metrics_y += 16
+        cv2.putText(legend, f"Entropy: {entropy:.2f}", (10, metrics_y),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.35, (200, 200, 200), 1)
+        cv2.putText(legend, f"Semantic: {semantic:.2f}", (150, metrics_y),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.35, (200, 200, 200), 1)
+
+        # Legend for bbox colors
+        legend_x = max(10, cols - 220)
+        cv2.rectangle(legend, (legend_x, 10), (legend_x + 12, 22), (0, 255, 0), -1)
+        cv2.putText(legend, "= Target", (legend_x + 18, 20),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.35, (200, 200, 200), 1)
+
+        cv2.rectangle(legend, (legend_x, 28), (legend_x + 12, 40), (0, 0, 255), -1)
+        cv2.putText(legend, "= High Unc", (legend_x + 18, 38),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.35, (200, 200, 200), 1)
+
+        result = np.vstack([result, legend])
     
-    frames = []
-    total_frames = 16
-    
-    # Frames 1-2: Before state (hold)
-    for i in range(2):
-        frame = add_diagnostic_overlay(img_a_rgb, f"Frame {i+1}/{total_frames} | BEFORE", f_score, severity)
-        frames.append(frame)
-    
-    # Frames 3-8: Click animation on before state (6 frames)
-    for i in range(6):
-        frame_with_click = add_click_indicator(img_a_rgb, click_x, click_y, i, 12)
-        frame = add_diagnostic_overlay(frame_with_click, f"Frame {i+3}/{total_frames} | CLICK", f_score, severity)
-        frames.append(frame)
-    
-    # Frame 9: Transition moment (blend)
-    blend = cv2.addWeighted(img_a_rgb, 0.5, img_b_rgb, 0.5, 0)
-    frame = add_diagnostic_overlay(blend, f"Frame 9/{total_frames} | TRANSITION", f_score, severity)
-    frames.append(frame)
-    
-    # Frames 10-11: After state with click indicator fading
-    for i in range(2):
-        frame_with_click = add_click_indicator(img_b_rgb, click_x, click_y, 6 + i, 12)
-        frame = add_diagnostic_overlay(frame_with_click, f"Frame {i+10}/{total_frames} | AFTER", f_score, severity, error_msg)
-        frames.append(frame)
-    
-    # Frame 12-13: Difference highlighting
-    if show_diff:
-        diff_img, _ = create_difference_overlay(img_a, img_b)
-        diff_rgb = cv2.cvtColor(diff_img, cv2.COLOR_BGR2RGB)
-        for i in range(2):
-            frame = add_diagnostic_overlay(diff_rgb, f"Frame {i+12}/{total_frames} | DIFF ANALYSIS", f_score, severity, error_msg)
-            frames.append(frame)
-    else:
-        for i in range(2):
-            frame = add_diagnostic_overlay(img_b_rgb, f"Frame {i+12}/{total_frames} | AFTER", f_score, severity, error_msg)
-            frames.append(frame)
-    
-    # Frame 14-15: After state (hold for analysis)
-    for i in range(2):
-        frame = add_diagnostic_overlay(img_b_rgb, f"Frame {i+14}/{total_frames} | RESULT", f_score, severity, error_msg)
-        frames.append(frame)
-    
-    # Frame 16: Back to before for seamless loop
-    frame = add_diagnostic_overlay(img_a_rgb, f"Frame 16/{total_frames} | LOOP", f_score, severity)
-    frames.append(frame)
-    
+    # Save output
     try:
-        # Ensure output directory exists
-        output_dir = os.path.dirname(output_path)
-        if output_dir:
-            os.makedirs(output_dir, exist_ok=True)
-        
-        # 300ms per frame = 4.8 second total loop
-        imageio.mimsave(output_path, frames, duration=300, loop=0)
-    except TypeError:
-        imageio.mimsave(output_path, frames, fps=3.33)
+        out_dir = os.path.dirname(output_path)
+        if out_dir:
+            os.makedirs(out_dir, exist_ok=True)
+        cv2.imwrite(output_path, result)
+
+        # Persist metadata JSON alongside the heatmap for downstream analysis
+        try:
+            meta_out = {
+                'generated_at': datetime.utcnow().isoformat() + 'Z',
+                'source_screenshot': img_path,
+                'num_elements_detected': int(uncertainty_data.get('num_elements_detected', len(uncertainty_data.get('regions', [])))),
+                'global_uncertainty': float(uncertainty_data.get('global_uncertainty', 0.0)),
+                'entropy': float(uncertainty_data.get('entropy', 0.0)),
+                'semantic_distance': float(uncertainty_data.get('semantic_distance', 0.0)),
+                'confusion_score': float(uncertainty_data.get('confusion_score', 0.0)),
+                'agent_decision': uncertainty_data.get('agent_decision') or uncertainty_data.get('agent', None),
+            }
+
+            regions = uncertainty_data.get('regions', []) or []
+            # Build top-N uncertain elements list
+            try:
+                sorted_regions = sorted(regions, key=lambda r: float(r.get('uncertainty', 0.0)), reverse=True)
+            except Exception:
+                sorted_regions = regions
+
+            top_n = []
+            for r in sorted_regions[:10]:
+                top_n.append({
+                    'element_id': r.get('element_id') or r.get('id'),
+                    'bbox': r.get('bbox'),
+                    'uncertainty': float(r.get('uncertainty', 0.0)),
+                    'reason': r.get('reason', None),
+                    'vlm_confidence': r.get('vlm_confidence', None),
+                    'llm_reasoning': r.get('llm_reasoning', None)
+                })
+
+            meta_out['top_uncertain_elements'] = top_n
+
+            json_path = os.path.splitext(output_path)[0] + '.json'
+            with open(json_path, 'w', encoding='utf-8') as jf:
+                json.dump(meta_out, jf, indent=2)
+        except Exception:
+            # Non-fatal: metadata persistence should not block heatmap creation
+            pass
+
+        return output_path
     except Exception as e:
-        print(f"Warning: Failed to save GIF: {e}")
+        print(f"Failed to save uncertainty heatmap: {e}")
         return None
-    
-    return output_path
 
-def calculate_console_entropy(console_logs):
-    """
-    Measures chaos/uncertainty in console logs.
-    More errors/warnings = higher entropy.
-    """
-    if not console_logs:
-        return 0.0
-    
-    error_count = sum(1 for log in console_logs if 'error' in str(log).lower())
-    warning_count = sum(1 for log in console_logs if 'warning' in str(log).lower())
-    
-    # Errors are 5x more severe than warnings
-    entropy_score = (error_count * 10) + (warning_count * 2)
-    return min(25.0, entropy_score)
 
-def calculate_semantic_distance(expected, actual, ssim_score):
+def calculate_ui_uncertainty(ui_analysis: Dict[str, Any], expected_outcome: str) -> Dict[str, Any]:
     """
-    Measures how far the outcome diverged from expectation.
-    Combines visual stagnation (SSIM) with state change analysis.
-    """
-    # Visual component: High SSIM = screen didn't change = max distance
-    if ssim_score > 0.99:
-        return 25.0  # Complete semantic failure
-    elif ssim_score > 0.95:
-        return 15.0
-    elif ssim_score > 0.90:
-        return 5.0
+    Calculate AI uncertainty from UI analysis and expectations.
     
-    # If screen changed, expectation was somewhat met
-    return 0.0
+    Args:
+        ui_analysis: Vision model's UI analysis containing:
+            - issues: List of detected issues
+            - elements: Detected UI elements
+            - confusion_score: How confusing the UI is (0-10)
+        expected_outcome: What the agent expected to happen
+    
+    Returns:
+        Dictionary with uncertainty metrics:
+            - global_uncertainty: Overall uncertainty (0.0-1.0)
+            - regions: List of uncertain regions
+            - entropy: Action entropy
+            - semantic_distance: Expectation vs reality
+    """
+    uncertainty_regions = []
 
-def calculate_real_f_score(telemetry, ssim_score, network_logs, console_logs, expected_outcome, ui_analysis=None):
-    """
-    TRUE FORMULA: F-Score = Entropy + Dwell Time + Semantic Distance + Network Latency + Accessibility
-    
-    Components:
-    - Console Entropy: 0-25pts (chaos from errors)
-    - Dwell Time: 0-40pts (user waiting)
-    - Semantic Distance: 0-25pts (expectation mismatch)
-    - Network Latency: 0-20pts (slow responses, timeouts)
-    - Accessibility Issues: 0-15pts (elderly/mobile usability)
-    
-    Total: 0-125pts (capped at 100)
-    """
-    score = 0.0
-    
-    # Component 1: ENTROPY (Console chaos - 0-25pts)
-    entropy = calculate_console_entropy(console_logs)
-    score += entropy
-    if entropy > 0:
-        print(f"      + Console Entropy: {entropy:.1f}pts")
-    
-    # Component 2: DWELL TIME (User waiting - 0-40pts)
-    # 🔧 ADJUSTED: Only penalize excessive waiting (>5s), not normal thinking time
-    dwell_ms = telemetry.get('dwell_time_ms', 0)
-    if dwell_ms > 5000:  # Changed from 2000ms to 5000ms
-        dwell_penalty = min(40.0, (dwell_ms - 5000) / 150)  # Reduced penalty rate
-        score += dwell_penalty
-        print(f"      + Dwell Time: {dwell_penalty:.1f}pts ({dwell_ms}ms wait)")
-    
-    # Component 3: SEMANTIC DISTANCE (Expectation mismatch - 0-25pts)
-    # 🔧 REDUCED WEIGHT: Only penalize heavy stagnation (SSIM > 0.95 = almost no change)
-    if ssim_score > 0.95:
-        semantic = min(15.0, (ssim_score - 0.95) * 300)  # Reduced from 25pts max
-        score += semantic
-        if semantic > 0:
-            print(f"      + Semantic Distance: {semantic:.1f}pts (Visual stagnation)")
-    # Don't penalize normal UI transitions (dropdowns opening, modals, etc)
-    
-    # Component 4: NETWORK LATENCY (Slow/unresponsive - 0-20pts)
-    network_penalty = 0.0
-    
-    # Detect slow requests (>3s = bad UX)
-    slow_requests = [log for log in network_logs if log.get('duration', 0) > 3000]
-    if slow_requests:
-        network_penalty += min(10.0, len(slow_requests) * 3.0)
-        print(f"      + Network Latency: {network_penalty:.1f}pts ({len(slow_requests)} slow requests)")
-    
-    # Detect timeouts (console errors mentioning timeout/network)
-    timeout_errors = [log for log in console_logs if any(keyword in str(log).lower() for keyword in ['timeout', 'network', 'failed to fetch'])]
-    if timeout_errors:
-        timeout_penalty = min(10.0, len(timeout_errors) * 5.0)
-        network_penalty += timeout_penalty
-        print(f"      + Timeout Errors: {timeout_penalty:.1f}pts")
-    
-    score += network_penalty
-    
-    # Component 5: ACCESSIBILITY ISSUES (UI/UX problems - 0-15pts)
-    accessibility_penalty = 0.0
-    
-    if ui_analysis:
-        issues = ui_analysis.get('issues', [])
-        
-        # Critical issues for elderly/mobile users
-        critical_issues = [
-            issue for issue in issues 
-            if any(keyword in issue.lower() for keyword in [
-                'too small', 'elderly', 'contrast', 'font size', 
-                'touch target', 'confusing', 'no loading'
-            ])
-        ]
-        
-        if critical_issues:
-            accessibility_penalty = min(15.0, len(critical_issues) * 3.0)
-            print(f"      + Accessibility Issues: {accessibility_penalty:.1f}pts ({len(critical_issues)} critical)")
-            for issue in critical_issues[:2]:  # Show first 2
-                print(f"         - {issue[:60]}...")
-        
-        # Elderly-specific penalty
-        if not ui_analysis.get('elderly_friendly', True):
-            accessibility_penalty += 5.0
-            print(f"      + Elderly Unfriendly UI: +5.0pts")
-    
-    score += accessibility_penalty
+    # Priority 1: if explicit regions provided, use them (expected normalized 0..1)
+    if 'regions' in ui_analysis and ui_analysis.get('regions'):
+        for r in ui_analysis.get('regions'):
+            try:
+                x = float(r.get('x', 0.5))
+                y = float(r.get('y', 0.5))
+                unc = float(r.get('uncertainty', 0.6))
+                reason = r.get('reason', '')
+                uncertainty_regions.append({'x': x, 'y': y, 'uncertainty': unc, 'reason': reason})
+            except Exception:
+                continue
+    else:
+        # Priority 2: derive from elements with bounding boxes
+        elements = ui_analysis.get('elements', [])
+        viewport_w = ui_analysis.get('viewport_width', None)
+        viewport_h = ui_analysis.get('viewport_height', None)
+        for el in elements:
+            bbox = el.get('bbox')
+            if not bbox:
+                continue
+            # bbox may be relative (0..1) or absolute pixels
+            bx = bbox.get('x')
+            by = bbox.get('y')
+            bw = bbox.get('width') or bbox.get('w')
+            bh = bbox.get('height') or bbox.get('h')
+            try:
+                if viewport_w and viewport_h and bw and bh and bx is not None and by is not None:
+                    # If bbox values look like pixels (large), normalize by viewport
+                    cx = (float(bx) + float(bw) / 2.0) / float(viewport_w)
+                    cy = (float(by) + float(bh) / 2.0) / float(viewport_h)
+                else:
+                    # Assume relative bbox values
+                    cx = (float(bx) + float(bw) / 2.0) if (bx is not None and bw is not None) else None
+                    cy = (float(by) + float(bh) / 2.0) if (by is not None and bh is not None) else None
+                if cx is not None and cy is not None:
+                    confidence = float(el.get('confidence', 0.6))
+                    uncertainty_regions.append({'x': max(0.0, min(1.0, cx)), 'y': max(0.0, min(1.0, cy)), 'uncertainty': 1.0 - confidence, 'reason': 'element'})
+            except Exception:
+                continue
 
-    # Severity Multiplier: Backend errors amplify frustration
-    has_500 = any(log['status'] >= 500 for log in network_logs)
-    if has_500:
-        score += 15.0  # Critical error bonus
-        print("      + Backend Error: +15.0pts")
+        # Priority 3: fallback to click coordinates if provided
+        if not uncertainty_regions and ui_analysis.get('click_coords'):
+            try:
+                cc = ui_analysis.get('click_coords')
+                # If click_coords are absolute pixels, normalize if viewport present
+                if isinstance(cc, (list, tuple)) and len(cc) >= 2:
+                    cx_px, cy_px = cc[0], cc[1]
+                    vw = ui_analysis.get('viewport_width', None)
+                    vh = ui_analysis.get('viewport_height', None)
+                    if vw and vh:
+                        cx = float(cx_px) / float(vw)
+                        cy = float(cy_px) / float(vh)
+                    else:
+                        cx = float(cx_px)
+                        cy = float(cy_px)
+                    uncertainty_regions.append({'x': max(0.0, min(1.0, cx)), 'y': max(0.0, min(1.0, cy)), 'uncertainty': 0.6, 'reason': 'click'})
+            except Exception:
+                pass
+    
+    # Calculate global uncertainty from confusion score
+    confusion = ui_analysis.get('confusion_score', 0) / 10.0  # Normalize to 0-1
+    
+    # Get semantic distance from FrictionMathematician
+    ui_summary = ' '.join(ui_analysis.get('issues', []))
+    semantic_dist = _FM.calculate_semantic_distance(expected_outcome, ui_summary)
+    
+    # Calculate entropy from action probabilities if available
+    entropy = 0.0
+    if 'action_probabilities' in ui_analysis:
+        entropy = _FM.calculate_entropy(ui_analysis['action_probabilities'])
+    
+    # Global uncertainty combines confusion and semantic mismatch
+    global_uncertainty = min(1.0, (confusion + semantic_dist) / 2.0)
+    
+    return {
+        'global_uncertainty': global_uncertainty,
+        'regions': uncertainty_regions,
+        'entropy': entropy,
+        'semantic_distance': semantic_dist,
+        'confusion_score': confusion
+    }
 
-    # Final Score (0-100)
-    final_score = min(100.0, round(score, 1))
-    
-    # 🔧 TEMPORARY HARDCODED CAP: Prevent inflated scores on normal websites
-    # If no errors detected (no network issues, no console errors), cap at 35
-    has_errors = False
-    if network_logs:
-        has_errors = any(log.get('status', 0) >= 400 for log in network_logs)
-    if console_logs and not has_errors:
-        has_errors = any('error' in str(log).lower() for log in console_logs)
-    
-    if not has_errors and final_score > 35:
-        print(f"      ⚙️  Capping F-Score from {final_score} to 35 (no actual errors detected)")
-        final_score = 35.0
-    
-    return final_score
 
 def determine_severity_rule(f_score, network_logs, console_logs=None, ui_analysis=None):
     """
@@ -527,17 +645,10 @@ def determine_severity_rule(f_score, network_logs, console_logs=None, ui_analysi
     confusion_score = ui_analysis.get('confusion_score', 0)
     
     # P0: SIGNUP BLOCKED - Complete blockers
-    # - 500 errors (backend crashed)
-    # - Extremely high friction (f_score > 85)
-    # - Critical console errors + high confusion
     if has_500_error or f_score > 85:
         return "P0 - Critical"
     
     # P1: HIGH FRICTION / DROP-OFF RISK
-    # - 400 errors (broken functionality)
-    # - High friction (f_score > 70)
-    # - Very high confusion (>7/10)
-    # - Console errors with significant friction
     if has_400_error and f_score > 60:
         return "P1 - Major"
     if f_score > 70 or confusion_score > 7:
@@ -546,19 +657,14 @@ def determine_severity_rule(f_score, network_logs, console_logs=None, ui_analysi
         return "P1 - Major"
     
     # P2: DEGRADED EXPERIENCE
-    # - Moderate friction (f_score 50-70)
-    # - Moderate confusion (4-7/10)
-    # - Minor errors with some friction
     if f_score > 50 or confusion_score > 4:
         return "P2 - Minor"
     if (has_400_error or has_console_error) and f_score > 40:
         return "P2 - Minor"
     
     # P3: COSMETIC ISSUES
-    # - Low friction (f_score < 50)
-    # - UI inconsistencies
-    # - Minor confusion (<4/10)
     return "P3 - Cosmetic"
+
 
 def check_expectation(handoff):
     print(f"Checking Step {handoff['step_id']}...")
@@ -566,106 +672,378 @@ def check_expectation(handoff):
     evidence = handoff['evidence']
     meta = handoff.get('meta_data', {})
     
-    # Determine output paths based on screenshot location
-    screenshot_path = evidence['screenshot_after_path']
+    # Extract Felicia's element detection data
+    interactive_elements = evidence.get('interactive_elements', [])
+    agent_decision = evidence.get('agent_decision', {})
     
-    # If screenshot is in reports/test_*/screenshots/, save artifacts there
-    if 'reports' in screenshot_path and 'screenshots' in screenshot_path:
-        # Extract report directory: reports/test_TIMESTAMP/
-        report_dir = os.path.dirname(os.path.dirname(screenshot_path))
-        heatmap_path = os.path.join(report_dir, "heatmap.png")
+    # Determine output paths. Prefer writing into the test report directory
+    # (reports/test_.../). If the screenshot is missing or not inside a report,
+    # fallback to backend/assets.
+    screenshot_path = evidence['screenshot_after_path']
+
+    def _find_report_dir(path: str) -> Optional[str]:
+        try:
+            if not path:
+                return None
+            abs_p = os.path.abspath(path)
+
+            # If the file exists, try to find a parent 'screenshots' folder
+            if os.path.exists(abs_p):
+                parts = abs_p.replace('\\', '/').split('/')
+                low_parts = [p.lower() for p in parts]
+                if 'screenshots' in low_parts and 'reports' in low_parts:
+                    # Find index of 'screenshots' and return its parent (the test dir)
+                    idx = low_parts.index('screenshots')
+                    if idx >= 1:
+                        test_dir = '/'.join(parts[:idx])
+                        return os.path.normpath(test_dir)
+
+                # Walk upwards looking for a test_* ancestor
+                cur = abs_p
+                while True:
+                    cur = os.path.dirname(cur)
+                    if not cur or cur == os.path.dirname(cur):
+                        break
+                    if os.path.basename(cur).lower().startswith('test_'):
+                        return cur
+
+            # If the path does not exist yet, try locating by basename under reports/*/screenshots
+            base = os.path.basename(path)
+            reports_dir = os.path.join(os.getcwd(), 'reports')
+            if os.path.exists(reports_dir):
+                for root, dirs, files in os.walk(reports_dir):
+                    if base in files and 'screenshots' in root.replace('\\', '/'):
+                        # root is .../test_xxx/screenshots
+                        return os.path.dirname(root)
+
+            return None
+        except Exception:
+            return None
+
+    report_dir = _find_report_dir(screenshot_path)
+    if report_dir:
+        heatmap_path = os.path.join(report_dir, "uncertainty_heatmap.png")
         gif_path = os.path.join(report_dir, "ghost_replay.gif")
     else:
-        # Fallback to backend/assets for mock data
-        heatmap_path = "backend/assets/evidence_heatmap.jpg"
-        gif_path = "backend/assets/ghost_replay.gif"
+        heatmap_path = os.path.join("backend", "assets", "uncertainty_heatmap.png")
+        gif_path = os.path.join("backend", "assets", "ghost_replay.gif")
 
-    # 1. Image Analysis
-    img_a = cv2.imread(evidence['screenshot_before_path'])
-    img_b = cv2.imread(evidence['screenshot_after_path'])
-    
-    current_ssim = 0.0
-    if img_a is not None and img_b is not None:
-         # Ensure images have same dimensions for SSIM comparison
-         if img_a.shape != img_b.shape:
-             height, width = img_a.shape[:2]
-             img_b = cv2.resize(img_b, (width, height))
-         
-         gray_a = cv2.cvtColor(img_a, cv2.COLOR_BGR2GRAY)
-         gray_b = cv2.cvtColor(img_b, cv2.COLOR_BGR2GRAY)
-         current_ssim, _ = ssim(gray_a, gray_b, full=True)
+    # Helper: collect up to N screenshots from the same report (step 1..10)
+    def _collect_report_screenshots(report_dir: Optional[str], max_steps: Optional[int] = None):
+        out = []
+        try:
+            if not report_dir:
+                return out
+            screenshots_dir = os.path.join(report_dir, 'screenshots')
+            if not os.path.exists(screenshots_dir):
+                return out
+            files = [f for f in os.listdir(screenshots_dir) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
+            if not files:
+                return out
+            # Sort by modification time (oldest -> newest) to preserve chronological order
+            files_with_mtime = []
+            for f in files:
+                p = os.path.join(screenshots_dir, f)
+                try:
+                    m = os.path.getmtime(p)
+                except Exception:
+                    m = 0
+                files_with_mtime.append((f, m))
+            files_with_mtime.sort(key=lambda x: x[1])
+            sorted_files = [f for f, _ in files_with_mtime]
+            if max_steps is None:
+                selected = sorted_files
+            else:
+                selected = sorted_files[:max_steps]
+            return [os.path.join(screenshots_dir, s) for s in selected]
+        except Exception:
+            return out
 
-    # 2. CALCULATE F-SCORE (The Real Formula)
+    # 1. Prepare data for FrictionMathematician
     ui_analysis = evidence.get('ui_analysis', {})
+    console_logs = evidence.get('console_logs', [])
+    network_logs = evidence['network_logs']
     
-    f_score = calculate_real_f_score(
-        meta, 
-        current_ssim, 
-        evidence['network_logs'],
-        evidence.get('console_logs', []),
+    ui_summary = ''
+    if isinstance(ui_analysis, dict):
+        issues = ui_analysis.get('issues', [])
+        ui_summary = ' '.join(issues) if issues else ui_analysis.get('summary', '')
+
+    # Extract entropy
+    entropy_val = 0.0
+    if isinstance(meta, dict) and meta.get('action_probabilities'):
+        try:
+            entropy_val = _FM.calculate_entropy(meta.get('action_probabilities'))
+        except Exception:
+            entropy_val = 0.0
+    else:
+        if console_logs:
+            error_count = sum(1 for log in console_logs if 'error' in str(log).lower())
+            warning_count = sum(1 for log in console_logs if 'warning' in str(log).lower())
+            entropy_val = min(2.5, ((error_count * 10) + (warning_count * 2)) / 10.0)
+
+    dwell_ms = meta.get('dwell_time_ms', 0) if isinstance(meta, dict) else 0
+    
+    semantic_dist = _FM.calculate_semantic_distance(
         handoff.get('agent_expectation', ''),
-        ui_analysis  # Pass vision-based UI analysis
-    )
-    
-    # 3. ASSIGN SEVERITY (Deterministic Rules)
-    severity_label = determine_severity_rule(
-        f_score, 
-        evidence['network_logs'],
-        evidence.get('console_logs', []),
-        ui_analysis
+        ui_summary
     )
 
-    # 4. DECISION
-    # If score > 50, we consider it a failure worth reporting
+    # 2. CALCULATE F-SCORE
+    try:
+        f_score = _FM.compute_f_score(entropy_val, dwell_ms, semantic_dist)
+    except Exception as e:
+        print(f"      FrictionMathematician compute_f_score failed: {e}")
+        f_score = 0
+
+    # 3. Apply business rules
+    has_500 = any(log.get('status', 0) >= 500 for log in network_logs)
+    if has_500:
+        f_score = min(100, int(f_score) + 15)
+
+    has_errors = any(log.get('status', 0) >= 400 for log in network_logs)
+    if console_logs and not has_errors:
+        has_errors = any('error' in str(log).lower() for log in console_logs)
+    if not has_errors and f_score > 35:
+        f_score = 35.0
+
+    print(f"      + F-Score: {f_score:.1f} (entropy={entropy_val:.2f}, semantic={semantic_dist:.2f}, dwell={dwell_ms}ms)")
+    
+    # 4. ASSIGN SEVERITY
+    severity_label = determine_severity_rule(f_score, network_logs, console_logs, ui_analysis)
+
+    # Force heatmap flag can be provided in meta_data or evidence for diagnostics
+    force_heatmap = False
+    try:
+        force_heatmap = bool(meta.get('force_heatmap', False)) if isinstance(meta, dict) else False
+    except Exception:
+        force_heatmap = False
+    try:
+        if not force_heatmap:
+            force_heatmap = bool(evidence.get('force_heatmap', False))
+    except Exception:
+        pass
+
+    # Global override via env var: ALWAYS_GENERATE_HEATMAP (default '1' -> enabled)
+    try:
+        always_heatmap = os.getenv('ALWAYS_GENERATE_HEATMAP', '1').lower() in ('1', 'true', 'yes')
+    except Exception:
+        always_heatmap = True
+
+    # 5. DECISION
+    # Decide whether to generate diagnostics heatmap: on failure, when forced, or when global override enabled
+    do_generate_heatmap = (f_score > 50) or force_heatmap or always_heatmap
+
+    # If high friction, follow the failure flow
     if f_score > 50:
         print(f"   Final F-Score: {f_score:.1f}/100 ({severity_label})")
-        
-        # Calculate intensity for heatmap (0.0-1.0)
-        intensity = min(1.0, f_score / 100.0)
-        
-        # Extract error message for overlay
+
+        # Extract uncertainty from Felicia's element detection
+        uncertainty_data = extract_uncertainty_from_elements(
+            interactive_elements,
+            agent_decision,
+            evidence['screenshot_after_path'],
+            attention_map=evidence.get('attention_map')
+        )
+        uncertainty_data['entropy'] = entropy_val
+        uncertainty_data['semantic_distance'] = semantic_dist
+
         error_msg = None
-        for log in evidence['network_logs']:
+        for log in network_logs:
             if log.get('status', 0) >= 400:
                 error_msg = log.get('error', f"HTTP {log['status']} Error")
                 break
-        
-        if not error_msg and evidence.get('console_logs'):
-            # Get first error from console
-            for log in evidence.get('console_logs', []):
+
+        if not error_msg and console_logs:
+            for log in console_logs:
                 if 'error' in str(log).lower():
-                    error_msg = str(log)[:80]  # Truncate long messages
+                    error_msg = str(log)[:80]
                     break
-        
-        # Generate Assets using DYNAMIC Coordinates + Intensity
-        generate_heatmap(
-            evidence['screenshot_after_path'], 
-            heatmap_path, 
-            meta.get('touch_x', 0.5), 
-            meta.get('touch_y', 0.5),
-            intensity
-        )
-        generate_ghost_replay(
-            evidence['screenshot_before_path'], 
-            evidence['screenshot_after_path'], 
-            gif_path,
-            meta.get('touch_x', 0.5),
-            meta.get('touch_y', 0.5),
-            f_score=f_score,
-            severity=severity_label,
-            error_msg=error_msg,
-            show_diff=True
-        )
-        
+
+        # Generate AI Uncertainty Heatmap with element bboxes
+        try:
+            generate_uncertainty_heatmap(
+                evidence['screenshot_after_path'],
+                heatmap_path,
+                uncertainty_data,
+                color_scheme='uncertainty',
+                show_legend=True,
+                show_bboxes=True  # Show Felicia's detected elements
+            )
+        except Exception as e:
+            print(f"Warning: heatmap generation failed: {e}")
+
+        # Generate ghost replay using up to 10 screenshots from the report
+        try:
+            seq = _collect_report_screenshots(report_dir)
+            if seq and len(seq) >= 2:
+                # Generate a heatmap for every screenshot in the sequence
+                try:
+                    for idx, sp in enumerate(seq):
+                        try:
+                            step_hm_path = os.path.join(report_dir, f"uncertainty_heatmap_step_{idx+1:02d}.png")
+                            ud = extract_uncertainty_from_elements(
+                                interactive_elements,
+                                agent_decision,
+                                sp,
+                                attention_map=evidence.get('attention_map')
+                            )
+                            ud['entropy'] = entropy_val
+                            ud['semantic_distance'] = semantic_dist
+                            generate_uncertainty_heatmap(
+                                sp,
+                                step_hm_path,
+                                ud,
+                                color_scheme='uncertainty',
+                                show_legend=True,
+                                show_bboxes=True
+                            )
+                        except Exception:
+                            # non-fatal per-step
+                            pass
+                except Exception:
+                    pass
+                try:
+                    generate_ghost_replay(
+                        img_sequence=seq,
+                        output_path=gif_path,
+                        click_x=meta.get('touch_x', 0.5),
+                        click_y=meta.get('touch_y', 0.5),
+                        f_score=f_score,
+                        severity=severity_label,
+                        error_msg=error_msg,
+                        show_diff=True,
+                    )
+                except Exception:
+                    pass
+            else:
+                try:
+                            # fallback to two-image mode if seq not available
+                            generate_ghost_replay(
+                                evidence['screenshot_before_path'],
+                                evidence['screenshot_after_path'],
+                                gif_path,
+                                meta.get('touch_x', 0.5),
+                                meta.get('touch_y', 0.5),
+                                f_score=f_score,
+                                severity=severity_label,
+                                error_msg=error_msg,
+                                show_diff=True,
+                            )
+                except Exception:
+                    pass
+        except Exception as e:
+            print(f"Warning: ghost replay generation failed: {e}")
+
+        try:
+            saved = _RECORDER.save_doom_scroll(os.path.join(os.path.dirname(gif_path), "ghost_replay_buffer.gif"))
+            if saved:
+                gif_path = saved
+        except Exception:
+            pass
+
         return {
-            "status": "FAILED", 
-            "reason": "HIGH_FRICTION", 
+            "status": "FAILED",
+            "reason": "HIGH_FRICTION",
             "details": f"F-Score {f_score:.1f} exceeds threshold.",
             "f_score": f_score,
-            "calculated_severity": severity_label, # Pass this to AI
+            "calculated_severity": severity_label,
             "heatmap_path": heatmap_path,
-            "gif_path": gif_path
+            "gif_path": gif_path,
+            "uncertainty_metrics": uncertainty_data
         }
 
-    # Always return f_score, even for SUCCESS (prevents defaulting to 100)
+    # If not failing but generation requested (force or global), create diagnostics
+    if do_generate_heatmap and f_score <= 50:
+        print(f"   Generating diagnostics (F-Score {f_score:.1f}) because heatmap generation is enabled")
+        uncertainty_data = extract_uncertainty_from_elements(
+            interactive_elements,
+            agent_decision,
+            evidence['screenshot_after_path'],
+            attention_map=evidence.get('attention_map')
+        )
+        uncertainty_data['entropy'] = entropy_val
+        uncertainty_data['semantic_distance'] = semantic_dist
+
+        try:
+            generate_uncertainty_heatmap(
+                evidence['screenshot_after_path'],
+                heatmap_path,
+                uncertainty_data,
+                color_scheme='uncertainty',
+                show_legend=True,
+                show_bboxes=True
+            )
+        except Exception as e:
+            print(f"Warning: heatmap generation failed: {e}")
+
+        try:
+            seq = _collect_report_screenshots(report_dir)
+            if seq and len(seq) >= 2:
+                # Generate per-step heatmaps first
+                try:
+                    for idx, sp in enumerate(seq):
+                        try:
+                            step_hm_path = os.path.join(report_dir, f"uncertainty_heatmap_step_{idx+1:02d}.png")
+                            ud = extract_uncertainty_from_elements(
+                                interactive_elements,
+                                agent_decision,
+                                sp,
+                                attention_map=evidence.get('attention_map')
+                            )
+                            ud['entropy'] = entropy_val
+                            ud['semantic_distance'] = semantic_dist
+                            generate_uncertainty_heatmap(
+                                sp,
+                                step_hm_path,
+                                ud,
+                                color_scheme='uncertainty',
+                                show_legend=True,
+                                show_bboxes=True
+                            )
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+
+                try:
+                    generate_ghost_replay(
+                        img_sequence=seq,
+                        output_path=gif_path,
+                        click_x=meta.get('touch_x', 0.5),
+                        click_y=meta.get('touch_y', 0.5),
+                        f_score=f_score,
+                        severity=severity_label,
+                        error_msg=None,
+                        show_diff=True,
+                    )
+                except Exception:
+                    pass
+            else:
+                try:
+                    generate_ghost_replay(
+                        evidence['screenshot_before_path'],
+                        evidence['screenshot_after_path'],
+                        gif_path,
+                        meta.get('touch_x', 0.5),
+                        meta.get('touch_y', 0.5),
+                        f_score=f_score,
+                        severity=severity_label,
+                        error_msg=None,
+                        show_diff=True,
+                    )
+                except Exception:
+                    pass
+        except Exception as e:
+            print(f"Warning: ghost replay generation failed: {e}")
+
+        return {
+            "status": "SUCCESS",
+            "reason": "Heatmap Generated",
+            "f_score": f_score,
+            "heatmap_path": heatmap_path,
+            "gif_path": gif_path,
+            "uncertainty_metrics": uncertainty_data
+        }
+
     return {"status": "SUCCESS", "reason": "Low Friction", "f_score": f_score}

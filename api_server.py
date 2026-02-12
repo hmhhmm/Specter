@@ -109,32 +109,60 @@ async def run_test_background(test_id: str, config: TestConfig):
         async def screenshot_callback(screenshot_path: str, step: int, action: str):
             """Called when a new screenshot is captured."""
             try:
-                # Read screenshot and convert to base64
+                # Attempt to read screenshot and convert to base64. Try multiple locations
                 import base64
-                with open(screenshot_path, 'rb') as f:
-                    screenshot_data = base64.b64encode(f.read()).decode('utf-8')
-                
-                # Try to read diagnostic data from report file if available
-                # The screenshot_path format is: reports/test_TIMESTAMP/screenshots/filename.png
-                # So we can extract the reports_dir from it
+                screenshot_data = None
                 step_data = None
+
+                # Try up to a few times to allow file writes to complete
+                attempts = 3
+                for attempt in range(attempts):
+                    try_path = screenshot_path
+                    if os.path.exists(try_path):
+                        with open(try_path, 'rb') as f:
+                            screenshot_data = base64.b64encode(f.read()).decode('utf-8')
+                        break
+
+                    # If not found, attempt to locate under a reports/*/screenshots folder
+                    try:
+                        path_parts = screenshot_path.replace('\\', '/').split('/')
+                        if 'reports' in path_parts:
+                            reports_idx = path_parts.index('reports')
+                            reports_dir = os.path.join(*path_parts[:reports_idx+2])
+                        else:
+                            # Fallback: try to find any recent reports folder
+                            reports_dir = None
+
+                        if reports_dir:
+                            candidate = os.path.join(reports_dir, 'screenshots', os.path.basename(screenshot_path))
+                            if os.path.exists(candidate):
+                                with open(candidate, 'rb') as f:
+                                    screenshot_data = base64.b64encode(f.read()).decode('utf-8')
+                                break
+                    except Exception:
+                        pass
+
+                    # Small delay before retrying
+                    await asyncio.sleep(0.25)
+
+                # Try to read a step report JSON for diagnostic metadata if present
                 try:
-                    # Extract reports directory from screenshot path
+                    # Derive reports dir if possible and read the corresponding step report
                     path_parts = screenshot_path.replace('\\', '/').split('/')
                     if 'reports' in path_parts:
                         reports_idx = path_parts.index('reports')
-                        reports_dir = '/'.join(path_parts[:reports_idx+2])  # E.g., reports/test_2026-02-07_...
-                        
+                        reports_dir = '/'.join(path_parts[:reports_idx+2])
+                    else:
+                        reports_dir = None
+
+                    if reports_dir:
                         step_report_path = os.path.join(reports_dir, f"step_{step:02d}_report.json")
                         if os.path.exists(step_report_path):
                             with open(step_report_path, 'r', encoding='utf-8') as f:
                                 step_report = json.load(f)
                                 outcome = step_report.get("outcome", {})
                                 severity = outcome.get("severity", "")
-                                
-                                # Check if this issue was escalated to Slack
                                 alert_sent = severity in ['P0 - Critical', 'P1 - Major'] and outcome.get("status") == "FAILED"
-                                
                                 step_data = {
                                     "confusion_score": step_report.get("confusion_score", 0),
                                     "network_logs": step_report.get("evidence", {}).get("network_logs", [])[:3],
@@ -143,21 +171,24 @@ async def run_test_background(test_id: str, config: TestConfig):
                                     "severity": severity,
                                     "responsible_team": outcome.get("responsible_team"),
                                     "ux_issues": step_report.get("ux_issues", [])[:3],
-                                    "alert_sent": alert_sent  # 🚨 NEW: Shows if Slack alert was triggered
+                                    "alert_sent": alert_sent
                                 }
-                except Exception as parse_err:
-                    print(f"Could not parse step report: {parse_err}")
-                
-                await manager.broadcast({
+                except Exception:
+                    step_data = step_data or None
+
+                payload = {
                     "type": "step_update",
                     "test_id": test_id,
                     "step": step,
                     "action": action,
-                    "screenshot": f"data:image/png;base64,{screenshot_data}",
+                    "screenshot": f"data:image/png;base64,{screenshot_data}" if screenshot_data else None,
                     "stepData": step_data
-                })
+                }
+
+                await manager.broadcast(payload)
             except Exception as e:
-                print(f"Error broadcasting screenshot: {e}")
+                # Don't raise on transient screenshot issues; log and continue
+                print(f"Error broadcasting screenshot (non-fatal): {e}")
         
         # Create callback for diagnostic data streaming after analysis
         async def diagnostic_callback(step: int, step_report: dict):
@@ -211,7 +242,8 @@ async def run_test_background(test_id: str, config: TestConfig):
             screenshot_callback=screenshot_callback,
             diagnostic_callback=diagnostic_callback,
             page_callback=page_callback,
-            headless=True
+            headless=True,
+            test_id=test_id,
         )
         
         # Update test status
