@@ -6,3 +6,10 @@ scikit-image
 numpy
 python-dotenv
 requests
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+websockets>=12.0
+reportlab>=4.0.0
+scipy
+sentence-transformers
+scikit-image

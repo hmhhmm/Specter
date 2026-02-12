@@ -2,7 +2,20 @@
 specs.md
 tasks.md
 .cursor/
+reports/
 
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+venv/
+venv_google/
+.env
 
 # dependencies
 /node_modules

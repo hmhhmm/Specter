@@ -1,10 +1,53 @@
 "use client";
 
 import { motion } from "framer-motion";
+import { useEffect, useState } from "react";
 import { Cpu, Github, Terminal, ChevronRight, Sparkles } from "lucide-react";
 import { GlowButton } from "@/components/ui/glow-button";
 
+interface HealingSuggestion {
+  id: string;
+  file: string;
+  type: string;
+  description: string;
+  code_before: string;
+  code_after: string;
+  impact: string;
+}
+
 export function HealingHub() {
+  const [suggestion, setSuggestion] = useState<HealingSuggestion | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [heuristicText, setHeuristicText] = useState("Observed 4 rage-click events per session on mobile viewports. Primary cause: low-contrast visibility. Applying perceptual lift.");
+
+  useEffect(() => {
+    async function fetchSuggestions() {
+      try {
+        const response = await fetch("http://localhost:8000/api/healing/suggestions");
+        if (response.ok) {
+          const data = await response.json();
+          if (data.suggestions && data.suggestions.length > 0) {
+            setSuggestion(data.suggestions[0]);
+            setHeuristicText(data.suggestions[0].impact + ". " + data.suggestions[0].description);
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching healing suggestions:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchSuggestions();
+  }, []);
+
+  const displayFile = suggestion?.file || "globals.css";
+  const codeBefore = suggestion?.code_before || ".checkout-button {\n  color: var(--gray-mute);\n}";
+  const codeAfter = suggestion?.code_after || ".checkout-button {\n  color: var(--emerald-glow);\n  box-shadow: 0 0 20px rgba(16,185,129,0.2);\n}";
+
+  // Parse code lines for display
+  const beforeLines = codeBefore.split("\n");
+  const afterLines = codeAfter.split("\n");
+
   return (
     <div className="flex flex-col gap-6 h-full">
       {/* Autonomous Remediation Card */}
@@ -26,7 +69,7 @@ export function HealingHub() {
               <h4 className="text-[11px] font-mono text-emerald-500 uppercase tracking-widest leading-none mb-1 font-bold">Autonomous Remediation</h4>
               <div className="flex items-center gap-1.5">
                 <div className="w-1 h-1 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="text-[8px] font-mono text-zinc-600 uppercase tracking-widest">Self-Healing Active</span>
+                <span className="text-[8px] font-mono text-zinc-600 uppercase tracking-widest">{loading ? "Analyzing..." : "Self-Healing Active"}</span>
               </div>
             </div>
           </div>
@@ -41,39 +84,33 @@ export function HealingHub() {
               <Terminal className="w-3 h-3 text-zinc-500" />
               <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest font-bold">Proposed Patch</span>
             </div>
-            <span className="text-[8px] font-mono text-zinc-700 uppercase tracking-widest">trade-panel.tsx</span>
+            <span className="text-[8px] font-mono text-zinc-700 uppercase tracking-widest">{displayFile}</span>
           </div>
           
           <div className="flex-1 bg-[#080808] rounded-2xl border border-white/5 p-5 font-mono text-[10px] leading-relaxed relative overflow-hidden flex flex-col group/code">
             <div className="absolute inset-0 opacity-[0.03] pointer-events-none bg-[url('https://grainy-gradients.vercel.app/noise.svg')]" />
             
             <div className="flex-1 overflow-y-auto custom-scrollbar">
-              <div className="flex gap-4 opacity-40">
-                <span className="w-4 shrink-0 text-right select-none">42</span>
-                <p className="text-zinc-400">{"<input"}</p>
-              </div>
-              <div className="flex gap-4 bg-red-500/5 -mx-5 px-5 py-1 border-l-2 border-red-500/50">
-                <span className="w-4 shrink-0 text-right text-red-500/40 select-none">43</span>
-                <p className="text-red-400/90">-  type="text"</p>
-              </div>
-              <div className="flex gap-4 bg-emerald-500/10 -mx-5 px-5 py-1 border-l-2 border-emerald-500/50 relative">
-                <span className="w-4 shrink-0 text-right text-emerald-500/40 select-none">44</span>
-                <p className="text-emerald-500/90">+  type="text"</p>
-              </div>
-              <div className="flex gap-4 bg-emerald-500/10 -mx-5 px-5 py-1 border-l-2 border-emerald-500/50">
-                <span className="w-4 shrink-0 text-right text-emerald-500/40 select-none">45</span>
-                <p className="text-emerald-500/90">+  inputMode="decimal"</p>
-                <motion.div 
-                  initial={{ x: "-100%" }}
-                  animate={{ x: "100%" }}
-                  transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
-                  className="absolute inset-0 bg-emerald-500/5 w-1/4 skew-x-12 pointer-events-none"
-                />
-              </div>
-              <div className="flex gap-4 opacity-40">
-                <span className="w-4 shrink-0 text-right select-none">46</span>
-                <p className="text-zinc-400">/&gt;</p>
-              </div>
+              {beforeLines.map((line, i) => (
+                <div key={`before-${i}`} className="flex gap-4 bg-red-500/5 -mx-5 px-5 py-1 border-l-2 border-red-500/50">
+                  <span className="w-4 shrink-0 text-right text-red-500/40 select-none">{i + 1}</span>
+                  <p className="text-red-400/90">- {line}</p>
+                </div>
+              ))}
+              {afterLines.map((line, i) => (
+                <div key={`after-${i}`} className="flex gap-4 bg-emerald-500/10 -mx-5 px-5 py-1 border-l-2 border-emerald-500/50 relative">
+                  <span className="w-4 shrink-0 text-right text-emerald-500/40 select-none">{beforeLines.length + i + 1}</span>
+                  <p className="text-emerald-500/90">+ {line}</p>
+                  {i === 0 && (
+                    <motion.div 
+                      initial={{ x: "-100%" }}
+                      animate={{ x: "100%" }}
+                      transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
+                      className="absolute inset-0 bg-emerald-500/5 w-1/4 skew-x-12 pointer-events-none"
+                    />
+                  )}
+                </div>
+              ))}
             </div>
             
             <motion.div 
@@ -84,10 +121,10 @@ export function HealingHub() {
             >
                <div className="flex items-center gap-2">
                  <Sparkles className="w-3 h-3 text-emerald-500" />
-                 <span className="text-[9px] font-mono text-emerald-400 uppercase tracking-widest font-bold">Vision Diagnosis</span>
+                 <span className="text-[9px] font-mono text-emerald-400 uppercase tracking-widest font-bold">Heuristic Analysis</span>
                </div>
                <p className="text-[10px] text-zinc-500 leading-relaxed italic">
-                 "Ghost Agent #0841 observed 8.2/10 friction score. Standard keyboard detected on currency input. Applying mobile input-mode patch."
+                 "{heuristicText}"
                </p>
             </motion.div>
           </div>
