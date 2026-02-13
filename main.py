@@ -42,6 +42,10 @@ from backend.diagnosis_doctor import diagnose_failure
 from backend.escalation_webhook import send_alert
 from backend.webqa_bridge import _resolve_screenshot_path
 
+# Specter Core - CAPTCHA and OTP Handling
+from backend.captcha_handler import CaptchaDetector, CaptchaSolver
+from backend.otp_reader import OTPReader
+
 # Raw Anthropic SDK
 import anthropic
 from dotenv import load_dotenv
@@ -174,7 +178,7 @@ Your job:
 
 RULES:
 - Perform ONE action per turn.
-- Action types: Tap, Input, Scroll, KeyboardPress, Sleep, GoToPage, GoBack, Hover, Select
+- Action types: Tap, Input, Scroll, KeyboardPress, Sleep, GoToPage, GoBack, Hover, Select, SolveCaptcha, WaitForOTP, WaitForMagicLink
 - For Tap/Input/Scroll/Hover/Select, reference an element by its numeric ID from the elements list.
 - For Input, provide the value to type. Use realistic test data:
   - Email: ai.test.user@example.com
@@ -189,6 +193,18 @@ RULES:
 - If you see a cookie consent banner, dismiss it first.
 - If you need to scroll to find more elements, use Scroll.
 - DO NOT click social login buttons (Google, Apple, Facebook) - use email signup.
+
+CAPTCHA HANDLING:
+- If you see a CAPTCHA (reCAPTCHA, hCaptcha, image puzzle, distorted text), respond with:
+  {"action": {"type": "SolveCaptcha"}, "observation": "CAPTCHA detected - [type]", ...}
+- Do NOT try to manually click CAPTCHA elements yourself. The SolveCaptcha action handles it.
+
+OTP HANDLING:
+- If the page says "Enter the code sent to your email" or "Verify your email":
+  {"action": {"type": "WaitForOTP"}, "observation": "OTP verification required", ...}
+- If the page says "Click the link in your email" or "Verify via email link":
+  {"action": {"type": "WaitForMagicLink"}, "observation": "Magic link verification required", ...}
+- Do NOT type random numbers into OTP fields. Use the WaitForOTP action.
 
 DROPDOWN/SELECT HANDLING (CRITICAL):
 - For country/region selectors, dropdowns, and comboboxes:
@@ -357,6 +373,15 @@ def _build_action_dict(action_type, element_id, value):
         action["param"]["value"] = value or "Enter"
     elif action_type == 'Sleep':
         action["param"]["timeMs"] = int(value) if value and str(value).isdigit() else 1000
+    elif action_type == 'SolveCaptcha':
+        action["type"] = "SolveCaptcha"
+        # No element_id needed - CaptchaSolver finds the CAPTCHA itself
+    elif action_type == 'WaitForOTP':
+        action["type"] = "WaitForOTP"
+        action["param"]["sender_filter"] = value or ""  # Optional sender hint
+    elif action_type == 'WaitForMagicLink':
+        action["type"] = "WaitForMagicLink"
+        action["param"]["sender_filter"] = value or ""
     elif action_type == 'GoToPage':
         action["param"]["url"] = value or ""
     return action
@@ -461,6 +486,9 @@ async def autonomous_signup_test(
     pool = BrowserSessionPool(pool_size=1, browser_config=browser_config)
     pool.disable_tab_interception = True   # Allow multi-tab / page navigation
     session = await pool.acquire(browser_config=browser_config)
+
+    # Track test start time for OTP/magic link filtering
+    test_start_time = datetime.now()
 
     try:
         page = session.page
@@ -661,10 +689,88 @@ async def autonomous_signup_test(
                     await _show_red_dot(page, element_buffer, element_id)
 
                 action_dict = _build_action_dict(action_type, element_id, value)
-                exec_result = await executor.execute(action_dict)
-
-                success = exec_result.get('success', False) if isinstance(exec_result, dict) else bool(exec_result)
-                exec_msg = exec_result.get('message', '') if isinstance(exec_result, dict) else str(exec_result)
+                
+                # Handle special CAPTCHA/OTP actions (not routed through ActionExecutor)
+                if action_type == 'SolveCaptcha':
+                    detector = CaptchaDetector()
+                    detection = await detector.detect(page, elements_json, screenshot_b64, client)
+                    
+                    if detection['has_captcha']:
+                        # Get AI provider from env (default: openai for cost savings)
+                        ai_provider = os.getenv('CAPTCHA_AI_PROVIDER', 'openai')
+                        solver = CaptchaSolver(page, claude_client=client, ai_provider=ai_provider)
+                        solve_result = await solver.solve(
+                            detection['captcha_type'], 
+                            detection['captcha_selector'],
+                            detection.get('instruction_text', '')
+                        )
+                        success = solve_result['solved']
+                        exec_msg = f"CAPTCHA {detection['captcha_type']}: {'solved' if success else 'failed'} via {solve_result['method']} ({solve_result['time_taken_ms']}ms)"
+                        
+                        # Add CAPTCHA friction to UX issues
+                        ux_issues.append(f"CAPTCHA present ({detection['captcha_type']}) - {solve_result['time_taken_ms']}ms to solve")
+                    else:
+                        success = True
+                        exec_msg = "No CAPTCHA detected"
+                
+                elif action_type == 'WaitForOTP':
+                    otp_email = os.getenv('TEST_EMAIL_ADDRESS')
+                    otp_password = os.getenv('TEST_EMAIL_APP_PASSWORD')
+                    
+                    if not otp_email or not otp_password:
+                        success = False
+                        exec_msg = "OTP reader not configured (missing TEST_EMAIL_ADDRESS/TEST_EMAIL_APP_PASSWORD in .env)"
+                    else:
+                        reader = OTPReader(otp_email, otp_password)
+                        sender_filter = value or action_dict.get('param', {}).get('sender_filter')
+                        otp_result = await reader.wait_for_otp(
+                            sender_filter=sender_filter,
+                            since_timestamp=test_start_time,  # Only read emails from after test started
+                            timeout_seconds=60
+                        )
+                        
+                        if otp_result['found']:
+                            # Type the OTP into the focused input field
+                            await page.keyboard.type(otp_result['code'])
+                            await page.keyboard.press('Enter')
+                            success = True
+                            exec_msg = f"OTP entered: {otp_result['code']} (waited {otp_result['wait_time_ms']}ms)"
+                            ux_issues.append(f"OTP required - {otp_result['wait_time_ms']}ms wait time")
+                        else:
+                            success = False
+                            exec_msg = f"OTP not received within timeout: {otp_result.get('error', 'timeout')}"
+                
+                elif action_type == 'WaitForMagicLink':
+                    otp_email = os.getenv('TEST_EMAIL_ADDRESS')
+                    otp_password = os.getenv('TEST_EMAIL_APP_PASSWORD')
+                    
+                    if not otp_email or not otp_password:
+                        success = False
+                        exec_msg = "Magic link reader not configured (missing TEST_EMAIL_ADDRESS/TEST_EMAIL_APP_PASSWORD in .env)"
+                    else:
+                        reader = OTPReader(otp_email, otp_password)
+                        sender_filter = value or action_dict.get('param', {}).get('sender_filter')
+                        link_result = await reader.wait_for_magic_link(
+                            sender_filter=sender_filter,
+                            since_timestamp=test_start_time,
+                            timeout_seconds=60
+                        )
+                        
+                        if link_result['found']:
+                            # Navigate to the magic link
+                            await page.goto(link_result['link'])
+                            success = True
+                            exec_msg = f"Magic link opened (waited {link_result['wait_time_ms']}ms)"
+                            ux_issues.append(f"Magic link required - {link_result['wait_time_ms']}ms wait time")
+                        else:
+                            success = False
+                            exec_msg = f"Magic link not received within timeout: {link_result.get('error', 'timeout')}"
+                
+                else:
+                    # Normal action execution through ActionExecutor
+                    exec_result = await executor.execute(action_dict)
+                    success = exec_result.get('success', False) if isinstance(exec_result, dict) else bool(exec_result)
+                    exec_msg = exec_result.get('message', '') if isinstance(exec_result, dict) else str(exec_result)
 
                 print(f"  Result: {'OK' if success else 'FAIL'} - {exec_msg[:80]}")
 

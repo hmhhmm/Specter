@@ -50,7 +50,7 @@ export default function LabPage() {
     liveStreamRef.current = null;
 
     addLog("🎥 Connecting to live browser stream...");
-    const ws = new WebSocket(`ws://localhost:8000/ws/live-stream/${testId}`);
+    const ws = new WebSocket(`ws://localhost:8002/ws/live-stream/${testId}`);
 
     ws.onopen = () => {
       console.log("Live stream connected");
@@ -120,7 +120,7 @@ export default function LabPage() {
 
   // WebSocket connection (runs once; uses ref to avoid stale closure)
   useEffect(() => {
-    const ws = new WebSocket("ws://localhost:8000/ws");
+    const ws = new WebSocket("ws://localhost:8002/ws");
 
     ws.onopen = () => {
       console.log("WebSocket connected");
@@ -273,7 +273,7 @@ export default function LabPage() {
 
       console.log("Starting test with config:", requestBody);
 
-      const response = await fetch("http://localhost:8000/api/test/start", {
+      const response = await fetch("http://localhost:8002/api/test/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(requestBody)

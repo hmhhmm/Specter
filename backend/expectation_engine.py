@@ -483,6 +483,38 @@ def calculate_real_f_score(telemetry, ssim_score, network_logs, console_logs, ex
     
     score += accessibility_penalty
 
+    # Component 6: CAPTCHA/OTP FRICTION (0-15pts)
+    captcha_otp_penalty = 0.0
+    if ui_analysis:
+        for issue in ui_analysis.get('issues', []):
+            issue_lower = issue.lower()
+            if 'captcha' in issue_lower:
+                # CAPTCHA adds friction regardless of whether it was solved
+                if 'grid' in issue_lower or 'image' in issue_lower:
+                    captcha_otp_penalty += 8.0  # Grid CAPTCHAs are very high friction
+                elif 'text' in issue_lower:
+                    captcha_otp_penalty += 5.0  # Text CAPTCHAs are moderate friction
+                elif 'checkbox' in issue_lower or 'turnstile' in issue_lower:
+                    captcha_otp_penalty += 2.0  # Invisible/checkbox CAPTCHAs are low friction
+                else:
+                    captcha_otp_penalty += 5.0  # Unknown CAPTCHA type
+            
+            if 'otp' in issue_lower or 'magic link' in issue_lower:
+                # OTP/magic link friction based on wait time
+                # Extract wait time from issue string if present
+                import re
+                wait_match = re.search(r'(\d+)ms wait', issue)
+                if wait_match:
+                    wait_ms = int(wait_match.group(1))
+                    captcha_otp_penalty += min(10.0, wait_ms / 6000)  # 60s wait = 10pts
+                else:
+                    captcha_otp_penalty += 5.0  # Default OTP penalty
+
+    captcha_otp_penalty = min(15.0, captcha_otp_penalty)
+    if captcha_otp_penalty > 0:
+        print(f"      + CAPTCHA/OTP Friction: {captcha_otp_penalty:.1f}pts")
+    score += captcha_otp_penalty
+
     # Severity Multiplier: Backend errors amplify frustration
     has_500 = any(log['status'] >= 500 for log in network_logs)
     if has_500:

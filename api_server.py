@@ -1,14 +1,18 @@
 """FastAPI server to expose Specter backend functionality."""
 
+# CRITICAL: Windows fix for Playwright - MUST be before any imports
+import sys
+import asyncio
+if sys.platform == 'win32':
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-import asyncio
 import json
 import os
 from typing import Optional, List
-import sys
 from pathlib import Path
 import base64
 from webqa_agent.browser.session import BrowserSessionPool
@@ -45,6 +49,9 @@ class TestConfig(BaseModel):
     network: str = "wifi"
     persona: str = "normal"  # Always fast normal user
     max_steps: int = 5
+    captcha_strategy: str = "auto"      # "auto" | "detect_only" | "skip"
+    captcha_provider: str = "openai"    # "claude" | "openai" | "gemini" - recommend openai for cost savings
+    otp_sender_filter: str = ""          # e.g., "Deriv" to filter emails
 
 class TestResult(BaseModel):
     step_id: str
