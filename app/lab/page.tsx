@@ -6,7 +6,6 @@ import { ControlDeck } from "@/components/lab/control-deck";
 import { DeviceEmulator } from "@/components/lab/device-emulator";
 import { NeuralMonologue } from "@/components/lab/neural-monologue";
 import { StatusBar } from "@/components/lab/status-bar";
-import { motion, AnimatePresence } from "framer-motion";
 
 export type SimulationState = "idle" | "scanning" | "analyzing" | "complete";
 
@@ -62,6 +61,7 @@ export default function LabPage() {
   const [logs, setLogs] = useState<string[]>([]);
   const [currentStepData, setCurrentStepData] = useState<any>(null);
   const [currentTestId, setCurrentTestId] = useState<string | null>(null);
+  const [currentAction, setCurrentAction] = useState<string>("");
   
   // Live browser streaming state — live mode ON by default
   const [isLiveMode, setIsLiveMode] = useState(true);
@@ -172,8 +172,14 @@ export default function LabPage() {
       handleWSMessageRef.current(data);  // always calls latest handler
     };
 
-    ws.onerror = (error) => console.error("WebSocket error:", error);
-    ws.onclose = () => console.log("WebSocket disconnected");
+    ws.onerror = (error) => {
+      console.error("WebSocket error:", error);
+      addLog("⚠️ Backend connection issue - Make sure api_server.py is running on port 8000");
+    };
+    ws.onclose = () => {
+      console.log("WebSocket disconnected");
+      addLog("⚠️ Disconnected from backend");
+    };
 
     wsRef.current = ws;
 
@@ -202,7 +208,9 @@ export default function LabPage() {
     } else if (data.type === "step_update") {
       setSimulationState("analyzing");
       setSimulationStep(prev => prev + 1);
-      addLog(`Step ${data.step || simulationStep + 1}: ${data.action || "Processing..."}`);
+      const actionText = data.action || "Processing...";
+      setCurrentAction(actionText);
+      addLog(`Step ${data.step || simulationStep + 1}: ${actionText}`);
       
       // Update current step diagnostic data (if available immediately)
       if (data.stepData) {
@@ -272,6 +280,7 @@ export default function LabPage() {
     } else if (data.type === "test_complete") {
       setSimulationState("complete");
       setTestResults(data.results);
+      setCurrentAction("");
       addLog("Test completed");
       addLog(`Final Results: ${data.results?.passed || 0} passed, ${data.results?.failed || 0} failed`);
 
@@ -343,6 +352,7 @@ export default function LabPage() {
     setCurrentScreenshot(null);
     setCurrentStepData(null);
     setCurrentTestId(null);
+    setCurrentAction("");
     
     // Clean up live stream (keep isLiveMode true so next test streams too)
     stopLiveStream();
@@ -354,7 +364,7 @@ export default function LabPage() {
       <div className="relative z-10 flex flex-col h-screen">
         <MissionHeader />
         
-        <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-8 px-8 py-6 overflow-hidden mb-32">
+        <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-6 px-6 py-6 overflow-hidden pb-40">
           <DeviceEmulator 
             state={simulationState} 
             step={simulationStep} 
@@ -371,6 +381,8 @@ export default function LabPage() {
             logs={logs}
             currentStepData={currentStepData}
             results={testResults}
+            currentAction={currentAction}
+            maxSteps={5}
           />
         </div>
 

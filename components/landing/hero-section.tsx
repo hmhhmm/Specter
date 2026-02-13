@@ -93,76 +93,18 @@ export function HeroSection() {
   };
 
   return (
-    <section className="relative flex min-h-[85vh] w-full items-center justify-center overflow-hidden bg-transparent pt-32 pb-16">
+    <section className="relative flex min-h-screen w-full items-center justify-center overflow-hidden bg-transparent">
       <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/[0.15] via-transparent to-zinc-900/[0.15] blur-3xl opacity-70" />
-      
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <ElegantShape
-          borderRadius={24}
-          className="top-[-10%] left-[-15%]"
-          delay={0.3}
-          gradient="from-emerald-500/[0.25]"
-          height={500}
-          rotate={-8}
-          width={300}
-        />
-
-        <ElegantShape
-          borderRadius={20}
-          className="right-[-20%] bottom-[-5%]"
-          delay={0.5}
-          gradient="from-emerald-500/[0.15]"
-          height={200}
-          rotate={15}
-          width={600}
-        />
-
-        <ElegantShape
-          borderRadius={32}
-          className="top-[40%] left-[-5%]"
-          delay={0.4}
-          gradient="from-emerald-600/[0.2]"
-          height={300}
-          rotate={24}
-          width={300}
-        />
-
-        <ElegantShape
-          borderRadius={12}
-          className="top-[5%] right-[10%]"
-          delay={0.6}
-          gradient="from-emerald-400/[0.15]"
-          height={100}
-          rotate={-20}
-          width={250}
-        />
-      </div>
 
       <div className="container relative z-10 mx-auto px-4 md:px-6">
-        <div className="mx-auto max-w-4xl text-center">
-          <motion.div
-            animate="visible"
-            custom={1}
-            initial="hidden"
-            variants={fadeUpVariants}
-            className="flex justify-center mb-6"
-          >
-             <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 font-mono text-xs tracking-wider uppercase">
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                </span>
-                Agentic QA Active
-             </div>
-          </motion.div>
-
+        <div className="mx-auto max-w-4xl text-center mt-16">
           <motion.div
             animate="visible"
             custom={2}
             initial="hidden"
             variants={fadeUpVariants}
           >
-            <h1 className="mb-6 font-bricolage font-bold text-5xl tracking-tighter sm:text-7xl md:mb-8 md:text-8xl text-white">
+            <h1 className="mb-6 font-bricolage font-bold text-5xl tracking-tighter sm:text-6xl md:mb-8 md:text-7xl text-white">
               The Agent That <span className="bg-gradient-to-r from-emerald-400 via-emerald-200 to-emerald-500 bg-clip-text text-transparent">Feels</span> Your Users&apos; Frustration
             </h1>
           </motion.div>
@@ -174,8 +116,7 @@ export function HeroSection() {
             variants={fadeUpVariants}
           >
             <p className="mx-auto mb-8 max-w-2xl px-4 font-mono text-sm text-zinc-500 leading-relaxed tracking-tight sm:text-base md:text-lg">
-              Specter.AI is the sentient mystery shopper that navigates your app purely by vision, identifying &quot;Silent Churn&quot;—the friction points standard logs never see.
-            </p>
+            An autonomous mystery shopper that experiences app like a real user and uncovers hidden friction beyond standard logs</p>
           </motion.div>
 
           <motion.div
@@ -188,7 +129,7 @@ export function HeroSection() {
             <Link href="/lab">
               <GlowButton className="px-10 py-8 text-xl">
                 <ScanSearch className="w-6 h-6" />
-                Launch Mystery Shopper
+                Start Testing Session
               </GlowButton>
             </Link>
           </motion.div>
