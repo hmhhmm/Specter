@@ -44,6 +44,8 @@ interface ControlDeckProps {
   setNetwork: (v: string) => void;
   isVoiceEnabled: boolean;
   setIsVoiceEnabled: (v: boolean) => void;
+  locale: string;
+  setLocale: (v: string) => void;
 }
 
 export function ControlDeck({
@@ -59,7 +61,9 @@ export function ControlDeck({
   network,
   setNetwork,
   isVoiceEnabled,
-  setIsVoiceEnabled
+  setIsVoiceEnabled,
+  locale,
+  setLocale
 }: ControlDeckProps) {
   const isRunning = state !== "idle" && state !== "complete";
 
@@ -116,6 +120,22 @@ export function ControlDeck({
                 <SelectItem value="iphone-15" className="text-[10px]">iPhone 15 P</SelectItem>
                 <SelectItem value="s23" className="text-[10px]">Samsung S23</SelectItem>
                 <SelectItem value="desktop" className="text-[10px]">Desktop</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Locale */}
+          <div className="flex-shrink-0">
+            <Label className="text-[8px] font-mono uppercase tracking-wider text-zinc-500 mb-1 block">Locale</Label>
+            <Select value={locale} onValueChange={setLocale} disabled={isRunning}>
+              <SelectTrigger className="w-[100px] bg-white/5 border-white/10 rounded-lg font-mono text-[10px] h-8">
+                <SelectValue placeholder="Select" />
+              </SelectTrigger>
+              <SelectContent className="bg-zinc-900 border-white/10 rounded-lg">
+                <SelectItem value="en-US" className="text-[10px]">🇺🇸 US</SelectItem>
+                <SelectItem value="de-DE" className="text-[10px]">🇩🇪 DE</SelectItem>
+                <SelectItem value="zh-CN" className="text-[10px]">🇨🇳 CN</SelectItem>
+                <SelectItem value="ar-SA" className="text-[10px]">🇸🇦 SA</SelectItem>
               </SelectContent>
             </Select>
           </div>

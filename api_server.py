@@ -561,11 +561,20 @@ def parse_report_folder(folder_path: str) -> dict:
                 else:
                     severity = "P3"
                 
+                # Only create incidents that have real diagnosis or critical issues
+                diagnosis = outcome.get('diagnosis')
+                has_console_errors = evidence.get('console_logs') and len(evidence.get('console_logs', [])) > 0
+                has_ux_issues = ux_insight.get('issues') and len(ux_insight.get('issues', [])) > 0
+                
+                # Skip if no real issue detected (no diagnosis, no errors, low f-score)
+                if not diagnosis and not has_console_errors and not has_ux_issues and f_score < 60:
+                    continue
+                
                 # Build incident from step data
                 incident = {
                     "id": f"{folder_name[-4:]}_{step_data.get('step_id', 0):02d}",
                     "severity": severity,
-                    "title": outcome.get('diagnosis', step_data.get('action_taken', 'Unknown Issue')),
+                    "title": diagnosis or step_data.get('action_taken', 'Issue Detected'),
                     "device": step_data.get('device', 'Unknown Device'),
                     "confidence": min(95, max(60, 100 - f_score + 50)),
                     "revenueLoss": int((100 - f_score) * 100 * (4 if severity == "P0" else 2 if severity == "P1" else 1)),
@@ -574,15 +583,15 @@ def parse_report_folder(folder_path: str) -> dict:
                     "step_id": step_data.get('step_id'),
                     "timestamp": step_data.get('timestamp'),
                     "f_score": f_score,
-                    "confusion_score": confusion_score,  # Add confusion score
+                    "confusion_score": confusion_score,
                     "screenshot_before": evidence.get('screenshot_before_path'),
                     "screenshot_after": evidence.get('screenshot_after_path'),
                     "ux_issues": ux_insight.get('issues', []),
                     "network_logs": evidence.get('network_logs', []),
-                    "console_logs": evidence.get('console_logs', []),  # Add console logs
+                    "console_logs": evidence.get('console_logs', []),
                     "action_taken": step_data.get('action_taken'),
                     "expectation": step_data.get('agent_expectation'),
-                    "responsible_team": outcome.get('responsible_team', 'QA'),  # Add responsible team
+                    "responsible_team": outcome.get('responsible_team', 'QA'),
                 }
                 incidents.append(incident)
             except Exception as e:

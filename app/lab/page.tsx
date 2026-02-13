@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { toast } from "sonner";
 import { MissionHeader } from "@/components/lab/mission-header";
 import { ControlDeck } from "@/components/lab/control-deck";
 import { DeviceEmulator } from "@/components/lab/device-emulator";
@@ -55,6 +56,7 @@ export default function LabPage() {
   const [persona, setPersona] = useState("zoomer");
   const [device, setDevice] = useState("iphone-15");
   const [network, setNetwork] = useState("wifi");
+  const [locale, setLocale] = useState("en-US");
   const [isVoiceEnabled, setIsVoiceEnabled] = useState(true);
   const [currentScreenshot, setCurrentScreenshot] = useState<string | null>(null);
   const [testResults, setTestResults] = useState<any>(null);
@@ -62,6 +64,7 @@ export default function LabPage() {
   const [currentStepData, setCurrentStepData] = useState<any>(null);
   const [currentTestId, setCurrentTestId] = useState<string | null>(null);
   const [currentAction, setCurrentAction] = useState<string>("");
+  const [nextTestCountdown, setNextTestCountdown] = useState<number>(0);
   
   // Live browser streaming state — live mode ON by default
   const [isLiveMode, setIsLiveMode] = useState(true);
@@ -198,6 +201,9 @@ export default function LabPage() {
         setSimulationState("scanning");
         setCurrentTestId(data.test_id);
         addLog(`Test started: ${data.test_id}`);
+        toast.info("🤖 Test started", {
+          description: "AI agent is now analyzing your application..."
+        });
 
         // Start the live stream only when the user wants live mode
         if (isLiveModeRef.current) {
@@ -254,6 +260,18 @@ export default function LabPage() {
           const severityBadge = data.diagnosticData.severity?.split(' - ')[0] || 'Issue';
           addLog(` ${severityBadge} - ${data.diagnosticData.responsible_team}`);
           addLog(`    ${data.diagnosticData.diagnosis}`);
+          
+          // Show toast for critical issues
+          if (severityBadge.includes('P0') || severityBadge.includes('Critical')) {
+            toast.error("🚨 Critical Issue Detected", {
+              description: data.diagnosticData.diagnosis?.substring(0, 100) + "..."
+            });
+          } else if (severityBadge.includes('P1')) {
+            toast.warning("⚠️ High Priority Issue", {
+              description: data.diagnosticData.diagnosis?.substring(0, 100) + "..."
+            });
+          }
+          
           if (data.diagnosticData.alert_sent) {
             addLog(`   Alert sent to ${data.diagnosticData.responsible_team} team`);
           }
@@ -283,6 +301,20 @@ export default function LabPage() {
       setCurrentAction("");
       addLog("Test completed");
       addLog(`Final Results: ${data.results?.passed || 0} passed, ${data.results?.failed || 0} failed`);
+      
+      // Start countdown for next test (5 minutes = 300 seconds)
+      setNextTestCountdown(300);
+      
+      const failedCount = data.results?.failed || 0;
+      if (failedCount > 0) {
+        toast.success("✅ Test Complete", {
+          description: `Found ${failedCount} issue${failedCount > 1 ? 's' : ''} that need attention`
+        });
+      } else {
+        toast.success("✅ Test Complete", {
+          description: "No critical issues detected"
+        });
+      }
 
       // Clear test ID to prevent reconnection attempts
       setCurrentTestId(null);
@@ -321,6 +353,7 @@ export default function LabPage() {
         device: deviceMap[device] || "desktop",
         network: network || "wifi",
         persona: persona || "normal",
+        locale: locale || "en-US",
         max_steps: 5
       };
 
@@ -362,7 +395,11 @@ export default function LabPage() {
   return (
     <main className="relative min-h-screen bg-[#050505] text-white overflow-hidden selection:bg-emerald-500/30">
       <div className="relative z-10 flex flex-col h-screen">
-        <MissionHeader />
+        <MissionHeader 
+          activePersona={persona}
+          networkCondition={network}
+          nextTestIn={nextTestCountdown}
+        />
         
         <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-6 px-6 py-6 overflow-hidden pb-40">
           <DeviceEmulator 
@@ -400,6 +437,8 @@ export default function LabPage() {
           setNetwork={setNetwork}
           isVoiceEnabled={isVoiceEnabled}
           setIsVoiceEnabled={setIsVoiceEnabled}
+          locale={locale}
+          setLocale={setLocale}
         />
 
         <StatusBar 

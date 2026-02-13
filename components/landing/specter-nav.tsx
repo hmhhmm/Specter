@@ -49,12 +49,6 @@ export function SpecterNav() {
             );
           })}
         </div>
-
-        <div className="flex items-center">
-          <button className="px-6 py-2 rounded-full text-zinc-400 font-mono text-sm hover:text-white hover:bg-white/5 transition-all duration-300">
-            Login
-          </button>
-        </div>
       </div>
     </motion.nav>
   );
