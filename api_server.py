@@ -32,10 +32,19 @@ from backend.tts_service import generate_speech
 
 app = FastAPI(title="Specter API", version="1.0.0")
 
-# CORS configuration
+# CORS configuration - allow all localhost ports (Next.js may use 3001, 3002, etc.)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://localhost:3002",
+        "http://localhost:3003",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:3001",
+        "http://127.0.0.1:3002",
+        "http://127.0.0.1:3003",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -54,7 +63,7 @@ class TestConfig(BaseModel):
     device: str = "desktop"
     network: str = "wifi"
     persona: str = "normal"  # Always fast normal user
-    max_steps: int = 10  # Optimal for token efficiency
+    max_steps: int = 20  # Run full signup flow; frontend can override
 
 
 class TestResult(BaseModel):
