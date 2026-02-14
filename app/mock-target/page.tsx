@@ -175,10 +175,10 @@ export default function MockTargetPage() {
               </div>
 
               <div className="flex justify-between items-center py-3 bg-zinc-900 rounded-lg px-3 border border-white/5">
-                {/* Issue 3: Invisible Fee - Label visible, but VALUE is black on black */}
+                {/* Issue 3: Invisible Fee - Fixed with high-contrast color */}
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] uppercase tracking-widest text-zinc-400">{t.fee}:</span>
-                  <span className="text-sm font-bold" style={{ color: '#0a0a0c' }}>$2.50</span>
+                  <span className="text-sm font-bold text-zinc-100">$2.50</span>
                 </div>
                 <Shield className="w-4 h-4 text-zinc-600" />
               </div>
