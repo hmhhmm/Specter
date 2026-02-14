@@ -13,3 +13,4 @@ reportlab>=4.0.0
 scipy
 sentence-transformers
 scikit-image
+Pillow>=10.0.0

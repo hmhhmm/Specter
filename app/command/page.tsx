@@ -30,13 +30,14 @@ export default function CommandPage() {
           <AIBriefing />
         </div>
 
-        <div className="flex-1 p-6 md:p-8 max-w-[1600px] mx-auto w-full mb-10">
-          <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr_350px] gap-6 h-full">
+        <div className="flex-1 p-6 md:p-8 max-w-[1600px] mx-auto w-full mb-10 min-h-0 flex flex-col">
+          <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr_350px] gap-6 h-[calc(100vh-13rem)] min-h-[520px] items-stretch">
             {/* Left Panel */}
             <motion.div
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.6, delay: 0.2 }}
+              className="min-h-0 overflow-hidden flex flex-col"
             >
               <IntelligencePanel />
             </motion.div>
@@ -46,6 +47,7 @@ export default function CommandPage() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.1 }}
+              className="min-h-0 overflow-hidden flex flex-col"
             >
               <RevenueEpicenter />
             </motion.div>
@@ -55,6 +57,7 @@ export default function CommandPage() {
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.6, delay: 0.3 }}
+              className="min-h-0 overflow-hidden flex flex-col"
             >
               <HealingHub />
             </motion.div>

@@ -24,7 +24,7 @@ export function RootCausePanel() {
 
   const fetchPatterns = async () => {
     try {
-      const response = await fetch('/api/root-cause/patterns');
+      const response = await fetch('http://localhost:8000/api/root-cause/patterns');
       const data = await response.json();
       setPatterns(data.patterns || []);
     } catch (error) {
