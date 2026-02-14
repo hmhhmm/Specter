@@ -4,8 +4,6 @@ from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 import os
 import json
-import ssl
-import certifi
 from dotenv import load_dotenv
 from .root_cause_intelligence import RootCauseIntelligence
 from .pdf_alert_generator import generate_and_send_alert_pdf
@@ -30,11 +28,7 @@ TEAM_MENTIONS = {
     "QA": os.getenv("SLACK_QA_TEAM", "@qa-team")
 }
 
-# Configure SSL context for macOS compatibility
-ssl_context = ssl.create_default_context(cafile=certifi.where())
-
-# Initialize Slack client with proper SSL configuration
-client = WebClient(token=SLACK_BOT_TOKEN, ssl=ssl_context)
+client = WebClient(token=SLACK_BOT_TOKEN)
 
 def send_alert(final_packet):
     """

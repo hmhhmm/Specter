@@ -1203,8 +1203,6 @@ class ActionHandler:
         Uses Playwright's bounding_box() to get fresh viewport coordinates,
         which correctly handles scroll containers, CSS transforms, and fixed
         positioning. Falls back to stored coordinates if bounding_box() fails.
-        If the element is outside the viewport, falls back to JavaScript
-        element.click() to force-click even when not visible.
         """
         # Get current active page
         page = self._get_current_page()
@@ -1214,9 +1212,6 @@ class ActionHandler:
         stored_x = element.get('center_x')
         stored_y = element.get('center_y')
         frame_url = element.get('frame_url')
-
-        # Get the correct frame context for the element
-        frame = self._get_frame_for_element(element)
 
         try:
             # Use unified coordinate retrieval method
@@ -1233,85 +1228,14 @@ class ActionHandler:
 
             if coords:
                 viewport_x, viewport_y = coords
-
-                # Check if coordinates are within the visible viewport
-                viewport_height = await page.evaluate('window.innerHeight')
-                viewport_width = await page.evaluate('window.innerWidth')
-                is_in_viewport = (0 <= viewport_x < viewport_width and 0 <= viewport_y < viewport_height)
-
-                if is_in_viewport:
-                    await page.mouse.click(viewport_x, viewport_y)
-                    return True
-                else:
-                    # Element is outside viewport — fall back to JS force-click
-                    logging.warning(
-                        f'Element {id} coordinates ({viewport_x:.1f}, {viewport_y:.1f}) outside viewport '
-                        f'({viewport_width}x{viewport_height}), attempting JS force-click'
-                    )
-                    return await self._js_force_click(frame, selector, xpath, id)
+                await page.mouse.click(viewport_x, viewport_y)
+                return True
             else:
-                # No coordinates available — try JS force-click as last resort
-                logging.warning(f'No coordinates for element {id}, attempting JS force-click')
-                return await self._js_force_click(frame, selector, xpath, id)
+                return False
 
         except Exception as e:
             logging.error(f'Error clicking element {id}: {e}')
-            # Final fallback: JS force-click
-            try:
-                return await self._js_force_click(frame, selector, xpath, id)
-            except Exception as js_err:
-                logging.error(f'JS force-click also failed for element {id}: {js_err}')
-                return False
-
-    async def _js_force_click(self, frame, selector: Optional[str], xpath: Optional[str], element_id: str) -> bool:
-        """Force-click an element via JavaScript when coordinate-based clicking fails.
-
-        Tries the element's CSS selector first, then XPath. Dispatches a full
-        click event sequence (pointerdown → mousedown → pointerup → mouseup → click)
-        so that framework event listeners (React, Vue, etc.) are triggered.
-        """
-        # Strategy 1: CSS selector
-        if selector and self._is_valid_css_selector(selector):
-            try:
-                await frame.locator(selector).evaluate(
-                    """el => {
-                        el.scrollIntoView({block: 'center', inline: 'center'});
-                        el.focus();
-                        const opts = {bubbles: true, cancelable: true, view: window};
-                        el.dispatchEvent(new PointerEvent('pointerdown', opts));
-                        el.dispatchEvent(new MouseEvent('mousedown', opts));
-                        el.dispatchEvent(new PointerEvent('pointerup', opts));
-                        el.dispatchEvent(new MouseEvent('mouseup', opts));
-                        el.click();
-                    }"""
-                )
-                logging.info(f'JS force-click succeeded for element {element_id} via CSS selector')
-                return True
-            except Exception as e:
-                logging.debug(f'JS force-click via CSS selector failed for element {element_id}: {e}')
-
-        # Strategy 2: XPath
-        if xpath:
-            try:
-                await frame.locator(f'xpath={xpath}').evaluate(
-                    """el => {
-                        el.scrollIntoView({block: 'center', inline: 'center'});
-                        el.focus();
-                        const opts = {bubbles: true, cancelable: true, view: window};
-                        el.dispatchEvent(new PointerEvent('pointerdown', opts));
-                        el.dispatchEvent(new MouseEvent('mousedown', opts));
-                        el.dispatchEvent(new PointerEvent('pointerup', opts));
-                        el.dispatchEvent(new MouseEvent('mouseup', opts));
-                        el.click();
-                    }"""
-                )
-                logging.info(f'JS force-click succeeded for element {element_id} via XPath')
-                return True
-            except Exception as e:
-                logging.debug(f'JS force-click via XPath failed for element {element_id}: {e}')
-
-        logging.error(f'JS force-click failed for element {element_id}: no valid selector or XPath')
-        return False
+            return False
 
     async def hover(self, id) -> bool:
         """Hover over element using fresh viewport coordinates.
@@ -2391,41 +2315,7 @@ class ActionHandler:
             }
 
         try:
-            # Try Playwright's native selectOption first for native <select> elements
-            selector = element.get('selector')
-            xpath = element.get('xpath')
-            
-            if selector and 'select' in selector.lower():
-                try:
-                    # Try to use Playwright's selectOption for native selects
-                    playwright_selector = selector if selector else xpath
-                    if playwright_selector:
-                        # Try selecting by label (text), then by value
-                        try:
-                            await self.page.select_option(playwright_selector, label=option_text, timeout=2000)
-                            logging.debug(f'Successfully selected option using Playwright native select: {option_text}')
-                            return {
-                                'success': True,
-                                'message': f"Successfully selected option: '{option_text}'",
-                                'selected_value': option_text,
-                                'selected_text': option_text,
-                                'selector_type': 'native_select_playwright',
-                            }
-                        except Exception:
-                            # Try by value if label fails
-                            await self.page.select_option(playwright_selector, value=option_text, timeout=2000)
-                            logging.debug(f'Successfully selected option by value using Playwright: {option_text}')
-                            return {
-                                'success': True,
-                                'message': f"Successfully selected option: '{option_text}'",
-                                'selected_value': option_text,
-                                'selected_text': option_text,
-                                'selector_type': 'native_select_playwright',
-                            }
-                except Exception as e:
-                    logging.debug(f'Playwright native select failed, falling back to JavaScript: {e}')
-            
-            # Fallback: use JavaScript to detect selector type and select option
+            # use JavaScript to detect selector type and select option
             js_code = """
             (params) => {
                 const elementData = params.elementData;
@@ -2463,20 +2353,13 @@ class ActionHandler:
                         };
                     }
 
-                    // Focus and click the select element first (some frameworks require interaction)
-                    selectElement.focus();
-                    selectElement.click();
-                    
-                    // Select the option (browsers handle this synchronously)
+                    // select option
                     selectElement.selectedIndex = targetOption.index;
                     targetOption.selected = true;
 
-                    // Trigger all relevant events for framework reactivity
-                    selectElement.dispatchEvent(new Event('focus', { bubbles: true }));
-                    selectElement.dispatchEvent(new Event('click', { bubbles: true }));
+                    // trigger event
                     selectElement.dispatchEvent(new Event('change', { bubbles: true }));
                     selectElement.dispatchEvent(new Event('input', { bubbles: true }));
-                    selectElement.dispatchEvent(new Event('blur', { bubbles: true }));
 
                     return {
                         success: true,
@@ -2535,28 +2418,22 @@ class ActionHandler:
                                         return;
                                     }
 
-                                    // scroll option into view within dropdown before clicking
-                                    targetOption.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
-                                    
-                                    // wait for scroll to complete
-                                    setTimeout(() => {
-                                        // click option
-                                        targetOption.click();
+                                    // click option
+                                    targetOption.click();
 
-                                        // trigger event
-                                        antSelect.dispatchEvent(new Event('change', { bubbles: true }));
+                                    // trigger event
+                                    antSelect.dispatchEvent(new Event('change', { bubbles: true }));
 
-                                        const selectedText = targetOption.querySelector('.ant-select-item-option-content')?.textContent.trim() || targetOption.textContent.trim();
-                                        const selectedValue = targetOption.getAttribute('data-value') || selectedText;
+                                    const selectedText = targetOption.querySelector('.ant-select-item-option-content')?.textContent.trim() || targetOption.textContent.trim();
+                                    const selectedValue = targetOption.getAttribute('data-value') || selectedText;
 
-                                        resolve({
-                                            success: true,
-                                            message: `Successfully selected ant-select option: "${selectedText}"`,
-                                            selectedValue: selectedValue,
-                                            selectedText: selectedText,
-                                            selector_type: 'ant_select'
-                                        });
-                                    }, 300);
+                                    resolve({
+                                        success: true,
+                                        message: `Successfully selected ant-select option: "${selectedText}"`,
+                                        selectedValue: selectedValue,
+                                        selectedText: selectedText,
+                                        selector_type: 'ant_select'
+                                    });
                                 } else {
                                     resolve({
                                         success: false,
@@ -2612,35 +2489,29 @@ class ActionHandler:
                                         return;
                                     }
 
-                                    // scroll option into view within dropdown before clicking
-                                    targetOption.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
-                                    
-                                    // wait for scroll to complete
-                                    setTimeout(() => {
-                                        // click option
-                                        targetOption.click();
+                                    // click option
+                                    targetOption.click();
 
-                                        // if it is leaf node (no sub options), trigger select event and close dropdown
-                                        if (!targetOption.classList.contains('ant-cascader-menu-item-expand')) {
-                                            antCascader.dispatchEvent(new Event('change', { bubbles: true }));
+                                    // if it is leaf node (no sub options), trigger select event and close dropdown
+                                    if (!targetOption.classList.contains('ant-cascader-menu-item-expand')) {
+                                        antCascader.dispatchEvent(new Event('change', { bubbles: true }));
 
-                                            // close dropdown
-                                            setTimeout(() => {
-                                                document.body.click();
-                                            }, 100);
-                                        }
+                                        // close dropdown
+                                        setTimeout(() => {
+                                            document.body.click();
+                                        }, 100);
+                                    }
 
-                                        const selectedText = targetOption.textContent.trim();
-                                        const selectedValue = targetOption.getAttribute('data-path-key') || selectedText;
+                                    const selectedText = targetOption.textContent.trim();
+                                    const selectedValue = targetOption.getAttribute('data-path-key') || selectedText;
 
-                                        resolve({
-                                            success: true,
-                                            message: `Successfully selected cascader option: "${selectedText}"`,
-                                            selectedValue: selectedValue,
-                                            selectedText: selectedText,
-                                            selector_type: 'ant_cascader'
-                                        });
-                                    }, 300);
+                                    resolve({
+                                        success: true,
+                                        message: `Successfully selected cascader option: "${selectedText}"`,
+                                        selectedValue: selectedValue,
+                                        selectedText: selectedText,
+                                        selector_type: 'ant_cascader'
+                                    });
                                 } else {
                                     resolve({
                                         success: false,
@@ -2653,58 +2524,39 @@ class ActionHandler:
                     }
                 }
 
-                // 4. handle other custom dropdown components (including Facebook-style dropdowns)
+                // 4. handle other custom dropdown components
                 let customDropdown = element.closest('[role="combobox"], [role="listbox"], .dropdown, .select');
                 if (customDropdown) {
                     // try to click to expand
                     customDropdown.click();
 
-                    return new Promise((resolve) => {
-                        setTimeout(() => {
-                            const options = Array.from(document.querySelectorAll('[role="option"], .option, .item'));
-                            let targetOption = null;
+                    setTimeout(() => {
+                        const options = Array.from(document.querySelectorAll('[role="option"], .option, .item'));
+                        let targetOption = null;
 
-                            for (let option of options) {
-                                const optionText = option.textContent.trim();
-                                if (optionText === targetText ||
-                                    optionText.includes(targetText) ||
-                                    targetText.includes(optionText)) {
-                                    targetOption = option;
-                                    break;
-                                }
+                        for (let option of options) {
+                            const optionText = option.textContent.trim();
+                            if (optionText === targetText ||
+                                optionText.includes(targetText) ||
+                                targetText.includes(optionText)) {
+                                targetOption = option;
+                                break;
                             }
+                        }
 
-                            if (targetOption) {
-                                // Ensure the dropdown container is scrollable
-                                const dropdownContainer = targetOption.closest('[role="listbox"], .dropdown, [class*="menu"]');
-                                
-                                // Scroll option into view within its container
-                                targetOption.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
-                                
-                                // Wait for scroll animation, then click
-                                setTimeout(() => {
-                                    targetOption.click();
-                                    customDropdown.dispatchEvent(new Event('change', { bubbles: true }));
+                        if (targetOption) {
+                            targetOption.click();
+                            customDropdown.dispatchEvent(new Event('change', { bubbles: true }));
 
-                                    resolve({
-                                        success: true,
-                                        message: `Successfully selected custom dropdown option: "${targetOption.textContent.trim()}"`,
-                                        selectedValue: targetOption.getAttribute('value') || targetOption.textContent.trim(),
-                                        selectedText: targetOption.textContent.trim(),
-                                        selector_type: 'custom_dropdown'
-                                    });
-                                }, 300);
-                            } else {
-                                const availableOptions = options.map(opt => opt.textContent.trim());
-                                resolve({
-                                    success: false,
-                                    message: `Option "${targetText}" not found in custom dropdown. Available: ${availableOptions.join(', ')}`,
-                                    selector_type: 'custom_dropdown',
-                                    availableOptions: availableOptions
-                                });
-                            }
-                        }, 300);
-                    });
+                            return {
+                                success: true,
+                                message: `Successfully selected custom dropdown option: "${targetOption.textContent.trim()}"`,
+                                selectedValue: targetOption.getAttribute('value') || targetOption.textContent.trim(),
+                                selectedText: targetOption.textContent.trim(),
+                                selector_type: 'custom_dropdown'
+                            };
+                        }
+                    }, 300);
                 }
 
                 // if no match, return failure

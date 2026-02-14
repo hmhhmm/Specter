@@ -32,7 +32,6 @@ import os
 import argparse
 import json
 import base64
-import logging
 import traceback
 from datetime import datetime
 from typing import Dict, Any, List, Optional
@@ -42,7 +41,7 @@ from backend.expectation_engine import check_expectation
 from backend.diagnosis_doctor import diagnose_failure
 from backend.escalation_webhook import send_alert
 from backend.webqa_bridge import _resolve_screenshot_path
-from backend.otp_reader import OTPReader
+from backend.ai_utils import call_llm_vision, parse_json_from_llm
 
 # Unified AI Vision SDK (Handled inside ai_utils)
 from dotenv import load_dotenv
@@ -229,49 +228,15 @@ Your job:
 2. DECIDE the single best next action to progress toward completing sign-up
 3. Return a structured JSON response
 
-### 🛑 CRITICAL MISSION RULES: SIGN UP ONLY 🛑
-
-**THE "NO LOGIN" RULE:**
-- You are STRICTLY FORBIDDEN from logging into an existing account.
-- DO NOT click buttons labeled "Log In", "Sign In", or "Login". EVER.
-- If you land on a Login page, your IMMEDIATE goal is to find the link that says "Create Account", "Sign Up", or "Register".
-- If you are unsure if a form is "Login" or "Signup", look for the "Confirm Password" field. If it's missing, you are on the WRONG page (Login). Find the "Sign Up" link immediately.
-
-**NAVIGATION PRIORITY (in order):**
-1. "Create Account" / "Register" / "Sign Up"
-2. "Get Started" / "Try for Free"
-3. INVALID: "Sign In" / "Log In" — IGNORE these unless they lead to a toggle for Sign Up
-
-**THE "NO NEW EMAIL PROVIDER" RULE:**
-- DO NOT attempt to create a new Gmail, Outlook, or Yahoo account.
-- DO NOT navigate to google.com or yahoo.com to "make an email".
-- You MUST use the existing test email provided below.
-
-### SOCIAL SIGN-IN/SIGN-UP BUTTONS — DO NOT TOUCH ###
-- NEVER click Google, Facebook, Apple, or any social sign-in/sign-up button. SKIP THEM ENTIRELY.
-- Instead, SCROLL DOWN past the social buttons to find the email input field.
-- The email signup field is usually BELOW the social buttons. Use Scroll action if you cannot see it.
-- Your FIRST action on the signup page (after residence selection) should be to SCROLL DOWN to find the email field.
-- Only interact with the email/password text input fields — never with social OAuth buttons.
-
-### CREDENTIALS TO USE ###
-  - Email: __TEST_EMAIL__
-  - Password: __TEST_PASSWORD__
-  - Name: __TEST_NAME__
-  - Phone: __TEST_PHONE__
-  - OTP (if asked): 111111 (Magic Code)
-- NEVER invent or make up a random email. ALWAYS use the exact email above.
-- If the form rejects the test email, report it as a UX issue and set done=true.
-
-### OTP / VERIFICATION HANDLING ###
-- If the site asks for a verification code sent to email, use: {"action": {"type": "WaitForOTP"}, ...}
-- If the site asks to click a magic link in email, use: {"action": {"type": "WaitForMagicLink"}, ...}
-- Do NOT type random numbers into OTP fields. Use WaitForOTP to auto-retrieve the code.
-
 RULES:
 - Perform ONE action per turn.
-- Action types: Tap, Input, Scroll, KeyboardPress, Sleep, GoToPage, GoBack, Hover, Select, WaitForOTP, WaitForMagicLink
+- Action types: Tap, Input, Scroll, KeyboardPress, Sleep, GoToPage, GoBack, Hover, Select
 - For Tap/Input/Scroll/Hover/Select, reference an element by its numeric ID from the elements list.
+- For Input, provide the value to type. Use realistic test data:
+  - Email: ai.test.user@example.com
+  - Password: SecurePass123!
+  - Name: Test User
+  - Phone: +1234567890
 - Set "done": true when you see:
   * Success/confirmation page ("Account Created", "Welcome", "Verify Email")
   * Final submission confirmation ("You're all set", "Check your email")
@@ -279,28 +244,25 @@ RULES:
   * Stuck in a loop (same action failing 3+ times)
 - If you see a cookie consent banner, dismiss it first.
 - If you need to scroll to find more elements, use Scroll.
+- DO NOT click social login buttons (Google, Apple, Facebook) - use email signup.
 
 DROPDOWN/SELECT HANDLING (CRITICAL):
-- For country/region selectors, dropdowns, and comboboxes, ALWAYS use the Select action:
-  Select: {"type":"Select","element_id":<dropdown_id>,"value":"<option text>"}
-  Example: {"type":"Select","element_id":42,"value":"Indonesia"}
-- The Select action handles opening the dropdown, finding the option, and selecting it automatically
-- Do NOT use Tap to select dropdown options — Tap does not trigger the selection mechanism
-- If you see a dropdown showing "Select" or a placeholder, use Select with the dropdown's element_id
-- For native <select> elements, also use Select with the option text as value
+- For country/region selectors, dropdowns, and comboboxes:
+  1. First TAP the dropdown element to open it (look for elements like "Select", "Choose", or arrow icons)
+  2. Wait for options to appear (they may be in a new list/menu)
+  3. Then TAP the specific option you want to select
+- If you see a dropdown showing "Select" or a placeholder, TAP it first to reveal options
+- After tapping a dropdown, the next step should be tapping the actual country/option
+- Look for elements with text like country names, or list items that appeared after opening
+- For native <select> elements, use Select action with the option value
 
 COUNTRY SELECTION STRATEGY:
-- Use the Select action on the country dropdown: {"type":"Select","element_id":<id>,"value":"Indonesia"}
-- IMPORTANT: Many financial/trading sites RESTRICT certain countries (US, UK, etc). If a country fails, try a DIFFERENT one!
-- Good options: Indonesia, Malaysia, Singapore, Japan, Germany, France, Australia, Brazil, India
+- When selecting a country, first tap the dropdown to open it
+- IMPORTANT: Many financial/trading sites RESTRICT certain countries (US, UK, etc). If you search for a country and get "No result found", try a DIFFERENT country immediately!
+- ALWAYS pick from VISIBLE countries in the dropdown list. Good options: Indonesia, Malaysia, Singapore, Japan, Germany, France, Australia, Brazil, India
 - DO NOT keep retrying the same country if it fails or shows "No result found"
-
-OTP HANDLING:
-- If the page says "Enter the code sent to your email" or "Verify your email":
-  {"action": {"type": "WaitForOTP"}, "observation": "OTP verification required", ...}
-- If the page says "Click the link in your email" or "Verify via email link":
-  {"action": {"type": "WaitForMagicLink"}, "observation": "Magic link verification required", ...}
-- Do NOT type random numbers into OTP fields. Use the WaitForOTP action.
+- If a search shows "No result found", clear it and TAP directly on a visible country from the list
+- If dropdown has many items, scroll within the dropdown to find options
 
 AVOIDING REPETITION:
 - Check PREVIOUS ACTIONS history - do NOT repeat an action that already failed
@@ -325,21 +287,6 @@ CONFUSION SCORE (rate the CURRENT PAGE, not your action):
 - 9-10: Completely stuck, no clear path forward, page broken
 
 If an action FAILS or nothing changes, increase confusion score on next step!"""
-
-
-def _get_system_prompt():
-    """Build system prompt with real test credentials from .env."""
-    test_email = os.getenv('TEST_EMAIL_ADDRESS', 'specter_test@deriv.com')
-    test_password = os.getenv('TEST_SIGNUP_PASSWORD', 'Testing123!')
-    test_name = os.getenv('TEST_SIGNUP_NAME', 'Test User')
-    test_phone = os.getenv('TEST_SIGNUP_PHONE', '+1234567890')
-    return (
-        PLANNER_SYSTEM_PROMPT
-        .replace('__TEST_EMAIL__', test_email)
-        .replace('__TEST_PASSWORD__', test_password)
-        .replace('__TEST_NAME__', test_name)
-        .replace('__TEST_PHONE__', test_phone)
-    )
 
 
 def build_planner_prompt(persona_cfg, device_cfg, elements_json, page_url, page_title, step_num, history):
@@ -399,32 +346,8 @@ def _parse_llm_json(text):
     return parse_json_from_llm(text)
 
 
-def _build_action_dict(action_type, element_id, value, element_buffer=None):
-    """Build action dict for ActionExecutor.execute().
-    
-    If element_buffer is provided and action is Tap on a dropdown-like element,
-    automatically converts to SelectDropdown for reliable selection.
-    """
-    # Auto-detect: if Tap targets a dropdown option, convert to SelectDropdown
-    if action_type == 'Tap' and element_buffer and element_id is not None:
-        elem = element_buffer.get(str(element_id), {})
-        tag = (elem.get('tagName') or '').lower()
-        role = (elem.get('role') or '').lower()
-        class_name = (elem.get('className') or '').lower()
-        parent_tag = (elem.get('parentTagName') or '').lower()
-        text = (elem.get('innerText') or '').strip()
-        # Detect dropdown option patterns: <option>, role=option, ant-select items, listbox items
-        is_dropdown_option = (
-            tag in ('option', 'li') and role in ('option', 'listbox', '') and
-            any(kw in class_name for kw in ('select', 'dropdown', 'option', 'menu-item', 'ant-select', 'listbox'))
-        ) or role == 'option' or (
-            tag == 'select'
-        )
-        if is_dropdown_option and text:
-            logging.info(f'Auto-converting Tap on dropdown option #{element_id} ("{text[:40]}") to SelectDropdown')
-            action_type = 'Select'
-            value = text
-
+def _build_action_dict(action_type, element_id, value):
+    """Build action dict for ActionExecutor.execute()."""
     action = {"type": action_type, "locate": {}, "param": {}}
     if action_type in ('Tap', 'Hover', 'Scroll'):
         action["locate"]["id"] = str(element_id) if element_id is not None else "0"
@@ -433,20 +356,15 @@ def _build_action_dict(action_type, element_id, value, element_buffer=None):
         action["param"]["value"] = value or ""
         action["param"]["clear_before_type"] = True
     elif action_type == 'Select':
-        # Use SelectDropdown for proper dropdown handling
-        action["type"] = "SelectDropdown"
-        action["locate"]["dropdown_id"] = str(element_id) if element_id is not None else "0"
-        action["param"]["selection_path"] = value if value else ""
+        # Select action for native <select> elements or custom dropdowns
+        action["type"] = "Tap"  # Fall back to Tap for custom dropdowns
+        action["locate"]["id"] = str(element_id) if element_id is not None else "0"
+        if value:
+            action["param"]["value"] = value  # Option value to select
     elif action_type == 'KeyboardPress':
         action["param"]["value"] = value or "Enter"
     elif action_type == 'Sleep':
         action["param"]["timeMs"] = int(value) if value and str(value).isdigit() else 1000
-    elif action_type == 'WaitForOTP':
-        action["type"] = "WaitForOTP"
-        action["param"]["sender_filter"] = value or ""
-    elif action_type == 'WaitForMagicLink':
-        action["type"] = "WaitForMagicLink"
-        action["param"]["sender_filter"] = value or ""
     elif action_type == 'GoToPage':
         action["param"]["url"] = value or ""
     return action
@@ -587,8 +505,6 @@ async def autonomous_signup_test(
         await asyncio.sleep(3)
         print("Page loaded\n")
 
-        test_start_time = datetime.now()
-
         # -- 3. Initialize webqa_agent tools --
         # Ensure any prior in-process screenshot session is cleared so each
         # test run creates a fresh, unique report directory.
@@ -713,9 +629,8 @@ async def autonomous_signup_test(
                     page_url, page_title, step_num, history,
                 )
 
-                raw_response = await _call_claude_vision(
-                    client,
-                    _get_system_prompt(),
+                raw_response = await _call_llm_vision(
+                    PLANNER_SYSTEM_PROMPT,
                     user_prompt,
                     images_b64=[screenshot_b64] if screenshot_b64 else None,
                     max_tokens=2048,
@@ -724,9 +639,8 @@ async def autonomous_signup_test(
                 plan = _parse_llm_json(raw_response)
                 if not plan:
                     print(f"  LLM response not parseable, retrying...")
-                    raw_response = await _call_claude_vision(
-                        client,
-                        _get_system_prompt(),
+                    raw_response = await _call_llm_vision(
+                        PLANNER_SYSTEM_PROMPT,
                         user_prompt + "\n\nCRITICAL: Respond with valid JSON only. No markdown. No extra text.",
                         images_b64=[screenshot_b64] if screenshot_b64 else None,
                         max_tokens=2048,
@@ -780,130 +694,11 @@ async def autonomous_signup_test(
                 if element_id is not None:
                     await _show_red_dot(page, element_buffer, element_id)
 
-                action_dict = _build_action_dict(action_type, element_id, value, element_buffer)
+                action_dict = _build_action_dict(action_type, element_id, value)
+                exec_result = await executor.execute(action_dict)
 
-                # Handle special action types that bypass ActionExecutor
-                if action_type == 'WaitForOTP':
-                    otp_email = os.getenv('TEST_EMAIL_ADDRESS')
-                    otp_password = os.getenv('TEST_EMAIL_APP_PASSWORD')
-                    imap_server = os.getenv('TEST_EMAIL_IMAP_SERVER', 'imap.gmail.com')
-
-                    if not otp_email or not otp_password:
-                        success = False
-                        exec_msg = "OTP reader not configured (missing TEST_EMAIL_ADDRESS/TEST_EMAIL_APP_PASSWORD in .env)"
-                        print(f"[OTP] ERROR: TEST_EMAIL_ADDRESS={'set' if otp_email else 'MISSING'}, TEST_EMAIL_APP_PASSWORD={'set' if otp_password else 'MISSING'}")
-                    else:
-                        print(f"[OTP] Reading OTP from {otp_email} via {imap_server}")
-                        print(f"[OTP] Polling inbox for new emails since test start...")
-                        reader = OTPReader(otp_email, otp_password, imap_server=imap_server)
-                        sender_filter = value or action_dict.get('param', {}).get('sender_filter')
-                        if sender_filter:
-                            print(f"[OTP] Filtering by sender: {sender_filter}")
-
-                        try:
-                            otp_result = await reader.wait_for_otp(
-                                sender_filter=sender_filter,
-                                since_timestamp=test_start_time,
-                                timeout_seconds=90
-                            )
-
-                            if otp_result['found']:
-                                otp_code = otp_result['code']
-                                print(f"[OTP] Found OTP code: {otp_code} (subject: {otp_result.get('email_subject', 'N/A')})")
-
-                                # Find the OTP input field on the page
-                                otp_input = None
-                                otp_selectors = [
-                                    'input[name*="otp" i]', 'input[name*="code" i]', 'input[name*="verification" i]',
-                                    'input[name*="token" i]', 'input[type="tel"]', 'input[type="number"]',
-                                    'input[autocomplete="one-time-code"]',
-                                    'input[inputmode="numeric"]',
-                                ]
-                                for sel in otp_selectors:
-                                    try:
-                                        otp_input = await page.query_selector(sel)
-                                        if otp_input and await otp_input.is_visible():
-                                            break
-                                        otp_input = None
-                                    except Exception:
-                                        continue
-
-                                if otp_input:
-                                    await otp_input.click()
-                                    await asyncio.sleep(0.3)
-                                    await otp_input.fill(otp_code)
-                                    print(f"[OTP] Typed OTP into detected input field")
-                                else:
-                                    print(f"[OTP] No specific OTP input found, typing into focused element")
-                                    await page.keyboard.type(otp_code)
-
-                                await asyncio.sleep(0.5)
-                                verify_btn = await page.query_selector(
-                                    'button[type="submit"], button:has-text("Verify"), button:has-text("Confirm"), '
-                                    'button:has-text("Submit"), button:has-text("Continue"), input[type="submit"]'
-                                )
-                                if verify_btn and await verify_btn.is_visible():
-                                    await verify_btn.click()
-                                    print(f"[OTP] Clicked verify/submit button")
-                                else:
-                                    await page.keyboard.press('Enter')
-                                    print(f"[OTP] Pressed Enter to submit OTP")
-
-                                success = True
-                                exec_msg = f"OTP entered: {otp_code} (waited {otp_result['wait_time_ms']}ms)"
-                                ux_issues.append(f"OTP required - {otp_result['wait_time_ms']}ms wait time")
-                            else:
-                                success = False
-                                exec_msg = f"OTP not received within timeout: {otp_result.get('error', 'timeout')}"
-                                print(f"[OTP] {exec_msg}")
-                        except Exception as e:
-                            success = False
-                            exec_msg = f"OTP reader error: {str(e)}"
-                            print(f"[OTP] Exception: {e}")
-                            traceback.print_exc()
-
-                elif action_type == 'WaitForMagicLink':
-                    otp_email = os.getenv('TEST_EMAIL_ADDRESS')
-                    otp_password = os.getenv('TEST_EMAIL_APP_PASSWORD')
-                    imap_server = os.getenv('TEST_EMAIL_IMAP_SERVER', 'imap.gmail.com')
-
-                    if not otp_email or not otp_password:
-                        success = False
-                        exec_msg = "Magic link reader not configured (missing TEST_EMAIL_ADDRESS/TEST_EMAIL_APP_PASSWORD in .env)"
-                        print(f"[MagicLink] ERROR: TEST_EMAIL_ADDRESS={'set' if otp_email else 'MISSING'}, TEST_EMAIL_APP_PASSWORD={'set' if otp_password else 'MISSING'}")
-                    else:
-                        print(f"[MagicLink] Reading magic link from {otp_email} via {imap_server}")
-                        reader = OTPReader(otp_email, otp_password, imap_server=imap_server)
-                        sender_filter = value or action_dict.get('param', {}).get('sender_filter')
-
-                        try:
-                            link_result = await reader.wait_for_magic_link(
-                                sender_filter=sender_filter,
-                                since_timestamp=test_start_time,
-                                timeout_seconds=90
-                            )
-
-                            if link_result['found']:
-                                print(f"[MagicLink] Found link: {link_result['link'][:80]}...")
-                                await page.goto(link_result['link'])
-                                success = True
-                                exec_msg = f"Magic link opened (waited {link_result['wait_time_ms']}ms)"
-                                ux_issues.append(f"Magic link required - {link_result['wait_time_ms']}ms wait time")
-                            else:
-                                success = False
-                                exec_msg = f"Magic link not received within timeout: {link_result.get('error', 'timeout')}"
-                                print(f"[MagicLink] {exec_msg}")
-                        except Exception as e:
-                            success = False
-                            exec_msg = f"Magic link reader error: {str(e)}"
-                            print(f"[MagicLink] Exception: {e}")
-                            traceback.print_exc()
-
-                else:
-                    # Normal action execution through ActionExecutor
-                    exec_result = await executor.execute(action_dict)
-                    success = exec_result.get('success', False) if isinstance(exec_result, dict) else bool(exec_result)
-                    exec_msg = exec_result.get('message', '') if isinstance(exec_result, dict) else str(exec_result)
+                success = exec_result.get('success', False) if isinstance(exec_result, dict) else bool(exec_result)
+                exec_msg = exec_result.get('message', '') if isinstance(exec_result, dict) else str(exec_result)
 
                 print(f"  Result: {'OK' if success else 'FAIL'} - {exec_msg[:80]}")
 
@@ -913,7 +708,7 @@ async def autonomous_signup_test(
                 end_time = datetime.now()
                 dwell_time_ms = int((end_time - start_time).total_seconds() * 1000)
 
-                await asyncio.sleep(0.3)
+                await asyncio.sleep(1.0)
 
                 # -- AFTER screenshot --
                 screenshot_after_b64, screenshot_after_path = await action_handler.b64_page_screenshot(
@@ -1323,7 +1118,7 @@ async def main_async():
     os.makedirs("backend/assets", exist_ok=True)
     return await autonomous_signup_test(
         url=args.url, device=args.device, network=args.network,
-        persona=args.persona, locale=args.locale, max_steps=args.max_steps,
+        persona=args.persona, locale=args.locale, max_steps=args.sps,
     )
 
 

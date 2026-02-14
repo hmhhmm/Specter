@@ -97,17 +97,13 @@ export default function LabPage() {
 
     addLog("Connecting to live browser stream...");
     const ws = new WebSocket(`ws://localhost:8000/ws/live/${testId}`);
-    let isConnectionActive = true;
 
     ws.onopen = () => {
-      if (isConnectionActive) {
-        console.log("Live stream connected");
-        addLog("Live stream active");
-      }
+      console.log("Live stream connected");
+      addLog("Live stream active");
     };
 
     ws.onmessage = (event) => {
-      if (!isConnectionActive) return;
       try {
         const data = JSON.parse(event.data);
         if (data.frame) {
@@ -119,22 +115,13 @@ export default function LabPage() {
       } catch {}
     };
 
-    ws.onerror = () => {
-      // Suppress errors - connection failures are expected during cleanup
+    ws.onerror = (error) => {
+      console.error("Live stream WS error", error);
+      addLog("⚠️ Live stream connection failed");
     };
 
     ws.onclose = () => {
-      if (isConnectionActive) {
-        console.log("Live stream WS closed");
-      }
-      // Leave liveFrame as-is so the last frame stays visible
-    };
-
-    // Store both the WebSocket and a cleanup function
-    const originalClose = ws.close.bind(ws);
-    ws.close = function(...args) {
-      isConnectionActive = false;
-      return originalClose(...args);
+      console.log("Live stream WS closed");
     };
 
     liveStreamRef.current = ws;
@@ -266,38 +253,30 @@ export default function LabPage() {
 
   // ── WebSocket Connection Effect ──
   useEffect(() => {
-    let isActive = true;
     const ws = new WebSocket("ws://localhost:8000/ws");
 
     ws.onopen = () => {
-      if (isActive) {
-        console.log("WebSocket connected");
-        addLog("Connected to Specter backend");
-      }
+      console.log("WebSocket connected");
+      addLog("Connected to Specter backend");
     };
 
     ws.onmessage = (event) => {
-      if (!isActive) return;
       const data = JSON.parse(event.data);
       handleWSMessageRef.current(data);  // always calls latest handler
     };
 
-    ws.onerror = () => {
-      // Suppress errors during cleanup or React strict mode
+    ws.onerror = (error) => {
+      console.error("WebSocket error:", error);
+      addLog("⚠️ Backend connection issue - Make sure api_server.py is running on port 8000");
     };
-    
-    ws.onclose = (event) => {
-      // Only log if this was an unexpected disconnect while active
-      if (isActive && event.code !== 1000 && event.code !== 1001) {
-        console.log("WebSocket disconnected unexpectedly", event.code);
-        addLog("⚠️ Backend connection interrupted");
-      }
+    ws.onclose = () => {
+      console.log("WebSocket disconnected");
+      addLog("⚠️ Disconnected from backend");
     };
 
     wsRef.current = ws;
 
     return () => {
-      isActive = false;
       ws.close();
       if (liveStreamRef.current) liveStreamRef.current.close();
     };
