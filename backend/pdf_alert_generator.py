@@ -11,10 +11,8 @@ from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-from reportlab.lib.enums import TA_CENTER
-import ssl
-import certifi
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage
+from reportlab.lib.enums import TA_CENTER, TA_LEFT
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 from dotenv import load_dotenv
@@ -29,17 +27,17 @@ TEAM_CHANNELS = {
     "QA": os.getenv("SLACK_QA_CHANNEL", os.getenv("SLACK_CHANNEL_ID"))
 }
 
-ssl_context = ssl.create_default_context(cafile=certifi.where())
-client = WebClient(token=SLACK_BOT_TOKEN, ssl=ssl_context)
+client = WebClient(token=SLACK_BOT_TOKEN)
 
 
-def generate_team_alert_pdf(final_packet, output_dir="reports/pdf_alerts"):
+def generate_team_alert_pdf(final_packet, output_dir="reports/pdf_alerts", test_report_dir=None):
     """
     Generate a PDF report for a single alert
     
     Args:
         final_packet: Alert data packet
         output_dir: Directory to save PDFs
+        test_report_dir: Directory containing test artifacts (heatmaps, GIFs)
         
     Returns:
         Path to generated PDF or None if failed
@@ -134,8 +132,129 @@ def generate_team_alert_pdf(final_packet, output_dir="reports/pdf_alerts"):
         elements.append(date_para)
         elements.append(Spacer(1, 0.3*inch))
         
+        # ============ EXECUTIVE SUMMARY (NEW) ============
+        exec_summary_style = ParagraphStyle(
+            'ExecSummary',
+            parent=body_style,
+            fontSize=11,
+            textColor=colors.HexColor('#1a1a1a'),
+            spaceAfter=10,
+            spaceBefore=10,
+            leading=16,
+            fontName='Helvetica'
+        )
+        
+        exec_heading = Paragraph("Executive Summary", heading_style)
+        elements.append(exec_heading)
+        
+        # Build executive summary
+        diagnosis = outcome.get('diagnosis', 'Issue detected')
+        f_score = outcome.get('f_score', 0)
+        confusion = final_packet.get('evidence', {}).get('ui_analysis', {}).get('confusion_score', 0)
+        
+        # Determine business impact
+        if f_score > 80 or severity_text in ['P0', 'P1']:
+            impact = "🚨 <b>CRITICAL BLOCKER</b> - Blocks user flow completion"
+        elif f_score > 60 or severity_text == 'P2':
+            impact = "⚠️ <b>HIGH IMPACT</b> - Significantly degrades user experience"
+        else:
+            impact = "⚡ <b>MODERATE IMPACT</b> - Minor friction detected"
+        
+        # Calculate time to failure if available
+        dwell_time = final_packet.get('dwell_time_ms', 0) / 1000
+        time_info = f"{dwell_time:.1f}s" if dwell_time > 0 else "N/A"
+        
+        # Get action and expectation
+        action = final_packet.get('action_taken', 'N/A')
+        expectation = final_packet.get('agent_expectation', 'N/A')
+        
+        # Build summary paragraph
+        summary_text = f"""
+        <b>Issue:</b> {diagnosis}<br/>
+        <b>Impact:</b> {impact}<br/>
+        <b>What Happened:</b> User attempted to '{action}' but expectation '{expectation}' was not met.<br/>
+        <b>Friction Score:</b> {f_score}/100 | <b>Confusion:</b> {confusion}/10 | <b>Time to Failure:</b> {time_info}<br/>
+        <b>Quick Action:</b> Review recommendations below and verify user flow completes successfully.
+        """
+        
+        summary_para = Paragraph(summary_text, exec_summary_style)
+        elements.append(summary_para)
+        elements.append(Spacer(1, 0.3*inch))
+        
+        # Add visual separator
+        separator = Paragraph("_" * 120, body_style)
+        elements.append(separator)
+        elements.append(Spacer(1, 0.3*inch))
+        
+        # ============ VISUAL EVIDENCE (NEW) ============
+        # Add heatmap and GIF if available
+        visuals_added = False
+        
+        if test_report_dir and os.path.exists(test_report_dir):
+            visuals_heading = Paragraph("Visual Evidence", heading_style)
+            elements.append(visuals_heading)
+            
+            # Look for heatmap
+            heatmap_path = os.path.join(test_report_dir, "uncertainty_heatmap.png")
+            if os.path.exists(heatmap_path):
+                try:
+                    heatmap_label = Paragraph("<b>Uncertainty Heatmap (where the test got confused):</b>", body_style)
+                    elements.append(heatmap_label)
+                    elements.append(Spacer(1, 0.1*inch))
+                    
+                    # Add heatmap image - resize to fit page
+                    img = RLImage(heatmap_path, width=5*inch, height=3.5*inch)
+                    elements.append(img)
+                    elements.append(Spacer(1, 0.2*inch))
+                    visuals_added = True
+                except Exception as e:
+                    print(f"Could not add heatmap: {e}")
+            
+            # Look for GIF replay
+            gif_path = os.path.join(test_report_dir, "ghost_replay.gif")
+            if os.path.exists(gif_path):
+                try:
+                    # Note: ReportLab doesn't support animated GIFs well, so we add a reference
+                    gif_label = Paragraph(
+                        f"<b>🎬 Replay GIF:</b> <i>See attached file or view at: {gif_path}</i>",
+                        body_style
+                    )
+                    elements.append(gif_label)
+                    elements.append(Spacer(1, 0.1*inch))
+                    
+                    # Try to add first frame as static image
+                    try:
+                        from PIL import Image as PILImage
+                        gif = PILImage.open(gif_path)
+                        # Save first frame as temporary PNG
+                        temp_png = gif_path.replace('.gif', '_frame.png')
+                        gif.save(temp_png, 'PNG')
+                        
+                        gif_img = RLImage(temp_png, width=5*inch, height=3.5*inch)
+                        elements.append(gif_img)
+                        elements.append(Spacer(1, 0.1*inch))
+                        
+                        # Add note
+                        note = Paragraph("<i>(Static preview - full animated replay in test report)</i>", info_style)
+                        elements.append(note)
+                    except ImportError:
+                        pass  # PIL not available
+                    except Exception as e:
+                        print(f"Could not add GIF preview: {e}")
+                    
+                    visuals_added = True
+                except Exception as e:
+                    print(f"Could not add GIF reference: {e}")
+            
+            if visuals_added:
+                elements.append(Spacer(1, 0.2*inch))
+                # Add visual separator
+                separator = Paragraph("_" * 120, body_style)
+                elements.append(separator)
+                elements.append(Spacer(1, 0.3*inch))
+        
         # Alert Overview
-        overview_heading = Paragraph("🚨 Alert Overview", heading_style)
+        overview_heading = Paragraph("Alert Overview", heading_style)
         elements.append(overview_heading)
         
         # Extract confusion_score from nested evidence structure
@@ -146,15 +265,15 @@ def generate_team_alert_pdf(final_packet, output_dir="reports/pdf_alerts"):
         # IMPORTANT: Higher F-Score = Worse UX (more friction/frustration)
         f_score = outcome.get('f_score', 0)
         if f_score > 80:
-            f_score_text = f"{f_score}/100 🚨 Critical friction"
+            f_score_text = f"{f_score}/100 Critical friction"
         elif f_score > 60:
-            f_score_text = f"{f_score}/100 ⚠️ High friction"
+            f_score_text = f"{f_score}/100 High friction"
         elif f_score > 40:
-            f_score_text = f"{f_score}/100 ⚡ Moderate friction"
+            f_score_text = f"{f_score}/100 Moderate friction"
         elif f_score > 20:
-            f_score_text = f"{f_score}/100 ✓ Low friction"
+            f_score_text = f"{f_score}/100 Low friction"
         else:
-            f_score_text = f"{f_score}/100 ✅ Minimal friction"
+            f_score_text = f"{f_score}/100 Minimal friction"
         
         overview_data = [
             ["Persona:", final_packet.get('persona', 'N/A')],
@@ -211,7 +330,7 @@ def generate_team_alert_pdf(final_packet, output_dir="reports/pdf_alerts"):
         # ============ ALL ISSUES FOUND (COMPREHENSIVE SECTION) ============
         all_issues = final_packet.get('all_issues', [])
         if all_issues and len(all_issues) > 1:
-            all_issues_heading = Paragraph("📋 All Issues Found Across Test", heading_style)
+            all_issues_heading = Paragraph("Issues Found Across Test", heading_style)
             elements.append(all_issues_heading)
             
             for idx, issue_report in enumerate(all_issues, 1):
@@ -255,9 +374,9 @@ def generate_team_alert_pdf(final_packet, output_dir="reports/pdf_alerts"):
                 
                 # Add context to visual change score
                 if f_score < 20:
-                    f_score_display = f"{f_score}/100 ⚠️ No response"
+                    f_score_display = f"{f_score}/100 No response"
                 elif f_score < 40:
-                    f_score_display = f"{f_score}/100 ⚠️ Minimal"
+                    f_score_display = f"{f_score}/100 Minimal"
                 else:
                     f_score_display = f"{f_score}/100"
                 
@@ -304,7 +423,7 @@ def generate_team_alert_pdf(final_packet, output_dir="reports/pdf_alerts"):
                 unique_ux_issues.append(issue)
         
         if unique_ux_issues:
-            ux_heading = Paragraph("👁️ All UX Observations", heading_style)
+            ux_heading = Paragraph("UX Observations", heading_style)
             elements.append(ux_heading)
             
             # Create a formatted list box for UX issues
@@ -314,7 +433,7 @@ def generate_team_alert_pdf(final_packet, output_dir="reports/pdf_alerts"):
             elements.append(Spacer(1, 0.2*inch))
         
         # Network Logs (ENHANCED - Show even when empty)
-        network_heading = Paragraph("🌐 Network Logs", heading_style)
+        network_heading = Paragraph("Network Logs", heading_style)
         elements.append(network_heading)
         network_logs = evidence.get('network_logs', [])
         if network_logs:
@@ -340,7 +459,7 @@ def generate_team_alert_pdf(final_packet, output_dir="reports/pdf_alerts"):
         # Console Logs (ENHANCED - Show errors prominently)
         console_logs = evidence.get('console_logs', [])
         if console_logs:
-            console_heading = Paragraph("📝 Console Errors", heading_style)
+            console_heading = Paragraph("Console Errors", heading_style)
             elements.append(console_heading)
             for log in console_logs[:8]:  # Show up to 8 logs
                 log_text = str(log)[:150]  # Truncate long logs
@@ -357,7 +476,7 @@ def generate_team_alert_pdf(final_packet, output_dir="reports/pdf_alerts"):
         elements.append(Spacer(1, 0.3*inch))
         
         # Recommendations (COMPREHENSIVE - From ALL steps)
-        recommendations_heading = Paragraph("💡 How to Fix - Actionable Recommendations", heading_style)
+        recommendations_heading = Paragraph("How to Fix - Actionable Recommendations", heading_style)
         elements.append(recommendations_heading)
         
         # Collect ALL recommendations from all steps
@@ -399,7 +518,7 @@ def generate_team_alert_pdf(final_packet, output_dir="reports/pdf_alerts"):
         # Add UX-specific recommendations based on ALL UX issues
         if unique_ux_issues:
             elements.append(Spacer(1, 0.15*inch))
-            ux_rec_para = Paragraph("<b>🎨 UX Improvements Based on Observations:</b>", subheading_style)
+            ux_rec_para = Paragraph("<b>UX Improvements Based on Observations:</b>", subheading_style)
             elements.append(ux_rec_para)
             
             # Generate UX-specific recommendations based on ALL issues detected
@@ -442,7 +561,7 @@ def generate_team_alert_pdf(final_packet, output_dir="reports/pdf_alerts"):
         elements.append(Spacer(1, 0.3*inch))
         
         # Reproduction Steps (NEW SECTION)
-        repro_heading = Paragraph("🔄 Reproduction Steps", heading_style)
+        repro_heading = Paragraph("Reproduction Steps", heading_style)
         elements.append(repro_heading)
         
         repro_steps = [
@@ -482,7 +601,7 @@ def generate_team_alert_pdf(final_packet, output_dir="reports/pdf_alerts"):
         return None
 
 
-def send_pdf_to_team_slack(pdf_path, team_name, severity, diagnosis):
+def send_pdf_to_team_slack(pdf_path, team_name, severity, diagnosis, gif_path=None):
     """
     Send PDF report to the team's Slack channel
     
@@ -491,6 +610,7 @@ def send_pdf_to_team_slack(pdf_path, team_name, severity, diagnosis):
         team_name: Name of the team (Backend, Frontend, Design, QA)
         severity: Severity level (P0, P1, P2, P3)
         diagnosis: Brief diagnosis text
+        gif_path: Optional path to GIF replay to attach
         
     Returns:
         bool: True if successful, False otherwise
@@ -523,6 +643,34 @@ def send_pdf_to_team_slack(pdf_path, team_name, severity, diagnosis):
                           f"Detailed PDF report attached with network logs, UX observations, and actionable recommendations."
         )
         
+        # Upload GIF replay as a separate file in a thread if available
+        if gif_path and os.path.exists(gif_path):
+            try:
+                # Get the thread timestamp from the PDF upload
+                thread_ts = response.get('file', {}).get('shares', {}).get('public', {}).get(channel, [{}])[0].get('ts')
+                
+                if thread_ts:
+                    # Upload GIF to same channel, threaded to the PDF message
+                    client.files_upload_v2(
+                        channel=channel,
+                        file=gif_path,
+                        title="Test Replay (Animated)",
+                        initial_comment="🎬 *Animated replay showing the failure sequence*",
+                        thread_ts=thread_ts
+                    )
+                    print(f"GIF replay also sent to thread")
+                else:
+                    # Fallback: upload separately
+                    client.files_upload_v2(
+                        channel=channel,
+                        file=gif_path,
+                        title="Test Replay (Animated)",
+                        initial_comment="🎬 *Animated replay showing the failure sequence*"
+                    )
+                    print(f"GIF replay sent separately")
+            except Exception as e:
+                print(f"Could not upload GIF: {e}")
+        
         print(f"PDF sent to {team_name} team in #{channel}")
         return True
         
@@ -536,7 +684,7 @@ def send_pdf_to_team_slack(pdf_path, team_name, severity, diagnosis):
         return False
 
 
-def generate_and_send_alert_pdf(final_packet):
+def generate_and_send_alert_pdf(final_packet, test_report_dir=None):
     """
     Generate PDF report and send to corresponding team's Slack channel
     
@@ -544,6 +692,7 @@ def generate_and_send_alert_pdf(final_packet):
     
     Args:
         final_packet: Complete failure analysis data
+        test_report_dir: Directory containing test artifacts (heatmaps, GIFs)
         
     Returns:
         bool: True if PDF was generated and sent successfully
@@ -556,16 +705,22 @@ def generate_and_send_alert_pdf(final_packet):
         
         print(f"\nGenerating PDF report for {responsible_team} team...")
         
-        # Generate PDF
-        pdf_path = generate_team_alert_pdf(final_packet)
+        # Generate PDF with visual artifacts
+        pdf_path = generate_team_alert_pdf(final_packet, test_report_dir=test_report_dir)
         
         if not pdf_path:
             print("Failed to generate PDF")
             return False
         
-        # Send to Slack
+        # Send to Slack with GIF attachment
         print(f"Sending PDF to {responsible_team} team Slack channel...")
-        success = send_pdf_to_team_slack(pdf_path, responsible_team, severity, diagnosis)
+        success = send_pdf_to_team_slack(
+            pdf_path, 
+            responsible_team, 
+            severity, 
+            diagnosis,
+            gif_path=os.path.join(test_report_dir, "ghost_replay.gif") if test_report_dir else None
+        )
         
         if success:
             print(f"PDF report delivered to {responsible_team} team!")

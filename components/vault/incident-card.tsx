@@ -57,7 +57,7 @@ export function IncidentCard({ title, description, severity, timestamp, device, 
   return (
     <div className={cn(
       "group relative rounded-2xl border-2 backdrop-blur-sm p-6 transition-all duration-300 hover:scale-[1.02]",
-      "bg-gradient-to-br from-zinc-900/60 to-zinc-900/40 border-white/10 hover:border-white/20",
+      "bg-gradient-to-br from-white to-zinc-50 dark:from-zinc-900/60 dark:to-zinc-900/40 border-zinc-200 dark:border-white/10 hover:border-zinc-300 dark:hover:border-white/20",
       "hover:shadow-2xl"
     )}>
       {/* Severity badge */}
@@ -69,19 +69,19 @@ export function IncidentCard({ title, description, severity, timestamp, device, 
           <AlertTriangle className="w-3 h-3" />
           {severity}
         </div>
-        <div className="flex items-center gap-2 text-xs text-zinc-500">
+        <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-500">
           <Clock className="w-3 h-3" />
           {timestamp}
         </div>
       </div>
 
       {/* Title */}
-      <h3 className="text-base font-semibold text-white mb-3 group-hover:text-emerald-400 transition-colors">
+      <h3 className="text-base font-semibold text-zinc-900 dark:text-white mb-3 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
         {title}
       </h3>
 
       {/* Description */}
-      <p className="text-sm text-zinc-400 leading-relaxed mb-4">
+      <p className="text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed mb-4 transition-colors duration-300">
         {description}
       </p>
 
@@ -100,7 +100,7 @@ export function IncidentCard({ title, description, severity, timestamp, device, 
               {fScore}/100
             </span>
           </div>
-          <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+          <div className="w-full h-1.5 bg-zinc-200 dark:bg-zinc-800 rounded-full overflow-hidden transition-colors duration-300">
             <div 
               className={cn(
                 "h-full rounded-full transition-all duration-500",
@@ -127,7 +127,7 @@ export function IncidentCard({ title, description, severity, timestamp, device, 
           </button>
           {showReasoning && (
             <div className="rounded-lg bg-gradient-to-br from-purple-500/10 to-purple-600/10 border border-purple-500/20 p-4 space-y-2">
-              <p className="text-xs text-zinc-300 leading-relaxed">{aiReasoning}</p>
+              <p className="text-xs text-zinc-700 dark:text-zinc-300 leading-relaxed transition-colors duration-300">{aiReasoning}</p>
               {impactEstimate && (
                 <div className="flex items-center gap-2 text-xs">
                   <span className="text-zinc-500">Impact:</span>
@@ -147,7 +147,7 @@ export function IncidentCard({ title, description, severity, timestamp, device, 
 
       {/* Footer */}
       <div className="flex items-center gap-2 flex-wrap">
-        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 text-xs text-zinc-400">
+        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-100 dark:bg-white/5 text-xs text-zinc-600 dark:text-zinc-400 transition-colors duration-300">
           {isMobile ? <Smartphone className="w-3 h-3" /> : <Monitor className="w-3 h-3" />}
           {device}
         </div>

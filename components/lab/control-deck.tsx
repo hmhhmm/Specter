@@ -75,31 +75,31 @@ export function ControlDeck({
       className="fixed bottom-16 left-1/2 -translate-x-1/2 z-40 w-full max-w-6xl px-4"
     >
       <div className={cn(
-        "relative rounded-xl border border-white/10 bg-zinc-950/95 backdrop-blur-xl px-4 py-3 shadow-2xl transition-all duration-500",
+        "relative rounded-xl border border-zinc-200/50 dark:border-white/10 bg-white/95 dark:bg-zinc-950/95 backdrop-blur-xl px-4 py-3 shadow-2xl transition-all duration-500",
         isRunning ? "border-emerald-500/30 shadow-emerald-500/10" : ""
       )}>
         <div className="flex items-center justify-between w-full gap-3">
           {/* URL Input */}
           <div className="flex-shrink min-w-0">
-            <Label className="text-[8px] font-mono uppercase tracking-wider text-zinc-500 mb-1 block">Target URL</Label>
+            <Label className="text-[8px] font-mono uppercase tracking-wider text-zinc-500 dark:text-zinc-500 mb-1 block">Target URL</Label>
             <input
               type="url"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               disabled={isRunning}
               placeholder="https://example.com"
-              className="w-[240px] bg-white/5 border border-white/10 rounded-lg font-mono text-[10px] h-8 px-2.5 text-white placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-emerald-500/50 disabled:opacity-50"
+              className="w-[240px] bg-zinc-100 dark:bg-white/5 border border-zinc-300 dark:border-white/10 rounded-lg font-mono text-[10px] h-8 px-2.5 text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-emerald-500/50 disabled:opacity-50 transition-colors duration-300"
             />
           </div>
 
           {/* Persona */}
           <div className="flex-shrink-0">
-            <Label className="text-[8px] font-mono uppercase tracking-wider text-zinc-500 mb-1 block">Persona</Label>
+            <Label className="text-[8px] font-mono uppercase tracking-wider text-zinc-500 dark:text-zinc-500 mb-1 block">Persona</Label>
             <Select value={persona} onValueChange={setPersona} disabled={isRunning}>
-              <SelectTrigger className="w-[140px] bg-white/5 border-white/10 rounded-lg font-mono text-[10px] h-8">
+              <SelectTrigger className="w-[140px] bg-zinc-100 dark:bg-white/5 border-zinc-300 dark:border-white/10 rounded-lg font-mono text-[10px] h-8 transition-colors duration-300">
                 <SelectValue placeholder="Select" />
               </SelectTrigger>
-              <SelectContent className="bg-zinc-900 border-white/10 rounded-lg">
+              <SelectContent className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-white/10 rounded-lg transition-colors duration-300">
                 <SelectItem value="zoomer" className="text-[10px]">⚡ Zoomer</SelectItem>
                 <SelectItem value="boomer" className="text-[10px]">👵 Boomer</SelectItem>
                 <SelectItem value="skeptic" className="text-[10px]">🕵️ Skeptic</SelectItem>
@@ -111,12 +111,12 @@ export function ControlDeck({
 
           {/* Device */}
           <div className="flex-shrink-0">
-            <Label className="text-[8px] font-mono uppercase tracking-wider text-zinc-500 mb-1 block">Device</Label>
+            <Label className="text-[8px] font-mono uppercase tracking-wider text-zinc-500 dark:text-zinc-500 mb-1 block">Device</Label>
             <Select value={device} onValueChange={setDevice} disabled={isRunning}>
-              <SelectTrigger className="w-[120px] bg-white/5 border-white/10 rounded-lg font-mono text-[10px] h-8">
+              <SelectTrigger className="w-[120px] bg-zinc-100 dark:bg-white/5 border-zinc-300 dark:border-white/10 rounded-lg font-mono text-[10px] h-8 transition-colors duration-300">
                 <SelectValue placeholder="Select" />
               </SelectTrigger>
-              <SelectContent className="bg-zinc-900 border-white/10 rounded-lg">
+              <SelectContent className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-white/10 rounded-lg transition-colors duration-300">
                 <SelectItem value="iphone-15" className="text-[10px]">iPhone 15 P</SelectItem>
                 <SelectItem value="s23" className="text-[10px]">Samsung S23</SelectItem>
                 <SelectItem value="desktop" className="text-[10px]">Desktop</SelectItem>
@@ -126,12 +126,12 @@ export function ControlDeck({
 
           {/* Locale */}
           <div className="flex-shrink-0">
-            <Label className="text-[8px] font-mono uppercase tracking-wider text-zinc-500 mb-1 block">Locale</Label>
+            <Label className="text-[8px] font-mono uppercase tracking-wider text-zinc-500 dark:text-zinc-500 mb-1 block">Locale</Label>
             <Select value={locale} onValueChange={setLocale} disabled={isRunning}>
-              <SelectTrigger className="w-[100px] bg-white/5 border-white/10 rounded-lg font-mono text-[10px] h-8">
+              <SelectTrigger className="w-[100px] bg-zinc-100 dark:bg-white/5 border-zinc-300 dark:border-white/10 rounded-lg font-mono text-[10px] h-8 transition-colors duration-300">
                 <SelectValue placeholder="Select" />
               </SelectTrigger>
-              <SelectContent className="bg-zinc-900 border-white/10 rounded-lg">
+              <SelectContent className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-white/10 rounded-lg transition-colors duration-300">
                 <SelectItem value="en-US" className="text-[10px]">🇺🇸 US</SelectItem>
                 <SelectItem value="de-DE" className="text-[10px]">🇩🇪 DE</SelectItem>
                 <SelectItem value="zh-CN" className="text-[10px]">🇨🇳 CN</SelectItem>
@@ -142,13 +142,13 @@ export function ControlDeck({
 
           {/* Network */}
           <div className="flex-shrink-0">
-            <Label className="text-[8px] font-mono uppercase tracking-wider text-zinc-500 mb-1 block">Network</Label>
+            <Label className="text-[8px] font-mono uppercase tracking-wider text-zinc-500 dark:text-zinc-500 mb-1 block">Network</Label>
             <ToggleGroup 
               type="single" 
               value={network} 
               onValueChange={(v) => v && setNetwork(v)}
               disabled={isRunning}
-              className="bg-white/5 p-0.5 rounded-lg border border-white/10"
+              className="bg-zinc-100 dark:bg-white/5 p-0.5 rounded-lg border border-zinc-300 dark:border-white/10 transition-colors duration-300"
             >
               <ToggleGroupItem value="wifi" className="rounded data-[state=on]:bg-emerald-500/20 data-[state=on]:text-emerald-500 h-7 px-2.5 text-[9px] font-mono">
                 <Wifi className="w-3 h-3" />
@@ -164,7 +164,7 @@ export function ControlDeck({
 
           {/* Voice */}
           <div className="flex-shrink-0 flex items-end gap-2 pb-0.5">
-            <Label className="text-[8px] font-mono uppercase tracking-wider text-zinc-500">Voice</Label>
+            <Label className="text-[8px] font-mono uppercase tracking-wider text-zinc-500 dark:text-zinc-500 transition-colors duration-300">Voice</Label>
             <Switch 
               id="voice-mode" 
               checked={isVoiceEnabled} 
@@ -183,7 +183,7 @@ export function ControlDeck({
             ) : (
               <button 
                 onClick={onReset}
-                className="flex items-center gap-2 px-4 h-8 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-colors font-mono text-[10px] uppercase"
+                className="flex items-center gap-2 px-4 h-8 rounded-lg bg-zinc-100 dark:bg-white/5 border border-zinc-300 dark:border-white/10 hover:bg-zinc-200 dark:hover:bg-white/10 transition-colors font-mono text-[10px] uppercase"
               >
                 <RotateCcw className={cn("w-3 h-3", isRunning && "animate-spin-slow")} />
                 {state === "complete" ? "Reset" : "..."}

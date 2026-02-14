@@ -47,19 +47,19 @@ const TypingCode = ({ text }: { text: string }) => {
   }, [currentIndex, text]);
 
   return (
-    <div className="relative mt-6 bg-black/80 rounded-xl p-5 font-mono text-[11px] leading-relaxed text-emerald-400/90 border border-emerald-500/20 h-[140px] overflow-hidden shadow-2xl">
-      <div className="flex gap-2 mb-3 border-b border-white/5 pb-2">
+    <div className="relative mt-6 bg-zinc-100 dark:bg-black/80 rounded-xl p-5 font-mono text-[11px] leading-relaxed text-emerald-600 dark:text-emerald-400/90 border border-emerald-500/20 h-[140px] overflow-hidden shadow-2xl transition-colors duration-300">
+      <div className="flex gap-2 mb-3 border-b border-zinc-200 dark:border-white/5 pb-2">
         <div className="w-2.5 h-2.5 rounded-full bg-red-500/40" />
         <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/40" />
         <div className="w-2.5 h-2.5 rounded-full bg-green-500/40" />
-        <span className="text-[9px] text-zinc-600 ml-2 uppercase tracking-widest">patch_engine.sh</span>
+        <span className="text-[9px] text-zinc-500 dark:text-zinc-600 ml-2 uppercase tracking-widest">patch_engine.sh</span>
       </div>
       <pre className="whitespace-pre-wrap">
-        <span className="text-zinc-500 mr-2">$</span>
+        <span className="text-zinc-400 dark:text-zinc-500 mr-2">$</span>
         {displayedText}
         <span className="animate-pulse bg-emerald-500 text-transparent ml-1">|</span>
       </pre>
-      <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-black to-transparent pointer-events-none" />
+      <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-zinc-100 dark:from-black to-transparent pointer-events-none" />
     </div>
   );
 };
@@ -99,7 +99,7 @@ function FeatureCard({
       variants={fadeInUp}
       onMouseMove={handleMouseMove}
       className={cn(
-        "group relative p-10 rounded-[2rem] bg-zinc-900/40 border border-white/5 hover:border-white/10 transition-all duration-700 overflow-hidden flex flex-col h-full",
+        "group relative p-10 rounded-[2rem] bg-white/80 dark:bg-zinc-900/40 border border-zinc-200/50 dark:border-white/5 hover:border-zinc-300 dark:hover:border-white/10 transition-all duration-700 overflow-hidden flex flex-col h-full",
         className
       )}
     >
@@ -110,7 +110,7 @@ function FeatureCard({
       
       {/* Background Icon Watermark */}
       <div className="absolute -top-12 -right-12 p-4 opacity-[0.03] group-hover:opacity-[0.08] transition-opacity duration-700 rotate-12 group-hover:rotate-0">
-         <Icon className="w-64 h-64 text-white" />
+         <Icon className="w-64 h-64 text-zinc-900 dark:text-white" />
       </div>
 
       <div className="relative z-10 flex flex-col h-full">
@@ -123,11 +123,11 @@ function FeatureCard({
           <Icon className="w-8 h-8" />
         </div>
 
-        <h3 className="text-3xl font-bold text-white mb-4 font-bricolage tracking-tight leading-none group-hover:translate-x-1 transition-transform duration-500">
+        <h3 className="text-3xl font-bold text-zinc-900 dark:text-white mb-4 font-bricolage tracking-tight leading-none group-hover:translate-x-1 transition-transform duration-500">
           {title}
         </h3>
         
-        <p className="text-zinc-400 text-lg mb-8 leading-relaxed font-light tracking-tight">
+        <p className="text-zinc-600 dark:text-zinc-400 text-lg mb-8 leading-relaxed font-light tracking-tight">
           {description}
         </p>
 
@@ -155,10 +155,10 @@ export function ProblemGrid() {
           className="text-center mb-24 relative"
         >
 
-          <h2 className="font-bricolage text-4xl md:text-6xl font-bold text-white mb-6 tracking-tighter">
-            Identifying the <span className="text-emerald-500">Silent</span> Killers
+          <h2 className="font-bricolage text-4xl md:text-6xl font-bold text-zinc-900 dark:text-white mb-6 tracking-tighter transition-colors duration-300">
+            Identifying the <span className="text-emerald-600 dark:text-emerald-500">Silent</span> Killers
           </h2>
-          <p className="text-zinc-500 font-mono text-base max-w-2xl mx-auto leading-relaxed">
+          <p className="text-zinc-600 dark:text-zinc-500 font-mono text-base max-w-2xl mx-auto leading-relaxed transition-colors duration-300">
             While traditional logs catch explicit errors, Specter’s vision-first agents detect the nuanced friction that kills conversion.
           </p>
         </motion.div>
@@ -177,7 +177,7 @@ export function ProblemGrid() {
             icon={Eye}
             accentColor="emerald"
           >
-            <div className="relative h-32 bg-zinc-950/50 rounded-xl border border-emerald-500/10 flex items-center justify-center">
+            <div className="relative h-32 bg-zinc-100 dark:bg-zinc-950/50 rounded-xl border border-emerald-500/10 flex items-center justify-center transition-colors duration-300">
                <div className="flex items-center gap-2">
                   <Cpu className="w-4 h-4 text-emerald-500" />
                   <span className="text-xs font-mono text-emerald-500/80 uppercase tracking-wider">Neural Scan Active</span>
@@ -192,10 +192,10 @@ export function ProblemGrid() {
             icon={TrendingDown}
             accentColor="red"
           >
-            <div className="p-6 bg-black/40 rounded-xl border border-red-500/10">
+            <div className="p-6 bg-zinc-100 dark:bg-black/40 rounded-xl border border-red-500/10 transition-colors duration-300">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs font-mono text-zinc-600 uppercase mb-1">Impact</p>
+                  <p className="text-xs font-mono text-zinc-500 dark:text-zinc-600 uppercase mb-1">Impact</p>
                   <p className="text-2xl font-bold text-red-500 font-bricolage">$42,850<span className="text-sm text-red-500/50">/mo</span></p>
                 </div>
                 <AlertTriangle className="w-5 h-5 text-red-500" />
@@ -210,18 +210,18 @@ export function ProblemGrid() {
             icon={Code2}
             accentColor="emerald"
           >
-            <div className="p-4 bg-black/80 rounded-xl border border-emerald-500/20 font-mono">
-              <div className="flex items-center gap-2 mb-2 pb-2 border-b border-white/5">
+            <div className="p-4 bg-zinc-100 dark:bg-black/80 rounded-xl border border-emerald-500/20 font-mono transition-colors duration-300">
+              <div className="flex items-center gap-2 mb-2 pb-2 border-b border-zinc-200 dark:border-white/5">
                 <div className="flex gap-1.5">
                   <div className="w-2 h-2 rounded-full bg-red-500/40" />
                   <div className="w-2 h-2 rounded-full bg-yellow-500/40" />
                   <div className="w-2 h-2 rounded-full bg-green-500/40" />
                 </div>
-                <span className="text-[10px] text-zinc-600 uppercase">patch_engine.sh</span>
+                <span className="text-[10px] text-zinc-500 dark:text-zinc-600 uppercase">patch_engine.sh</span>
               </div>
-              <p className="text-xs text-emerald-400/90">
-                <span className="text-zinc-500">$</span> Resolving hydration mismatch<br/>
-                <span className="text-zinc-500">$</span> Patching layout overflow
+              <p className="text-xs text-emerald-600 dark:text-emerald-400/90">
+                <span className="text-zinc-400 dark:text-zinc-500">$</span> Resolving hydration mismatch<br/>
+                <span className="text-zinc-400 dark:text-zinc-500">$</span> Patching layout overflow
               </p>
             </div>
           </FeatureCard>
@@ -236,15 +236,15 @@ export function ProblemGrid() {
         >
           <div className="flex -space-x-3">
              {[1,2,3,4].map(i => (
-               <div key={i} className="w-10 h-10 rounded-full border-2 border-zinc-950 bg-zinc-800 flex items-center justify-center overflow-hidden">
+               <div key={i} className="w-10 h-10 rounded-full border-2 border-white dark:border-zinc-950 bg-zinc-200 dark:bg-zinc-800 flex items-center justify-center overflow-hidden transition-colors duration-300">
                  <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${i + 10}`} alt="Agent Avatar" />
                </div>
              ))}
-             <div className="w-10 h-10 rounded-full border-2 border-zinc-950 bg-emerald-500 flex items-center justify-center text-[10px] font-bold text-black">
+             <div className="w-10 h-10 rounded-full border-2 border-white dark:border-zinc-950 bg-emerald-500 flex items-center justify-center text-[10px] font-bold text-black transition-colors duration-300">
                +12
              </div>
           </div>
-          <p className="text-zinc-600 font-mono text-xs uppercase tracking-[0.2em]">Active Sentinel Agents Monitoring Global Flows</p>
+          <p className="text-zinc-500 dark:text-zinc-600 font-mono text-xs uppercase tracking-[0.2em] transition-colors duration-300">Active Sentinel Agents Monitoring Global Flows</p>
         </motion.div>
       </div>
     </section>

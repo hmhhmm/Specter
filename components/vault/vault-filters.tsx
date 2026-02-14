@@ -21,8 +21,8 @@ export function VaultFilters({ activeFilter, onFilterChange }: VaultFiltersProps
           onClick={() => onFilterChange(filter.id)}
           className={`group relative px-6 py-3 rounded-xl text-sm font-medium transition-all duration-300 ${
             activeFilter === filter.id
-              ? "bg-gradient-to-br from-emerald-500/20 to-emerald-600/20 text-emerald-400 border-2 border-emerald-500/50 shadow-lg shadow-emerald-500/20"
-              : "bg-zinc-900/60 text-zinc-400 border-2 border-white/5 hover:border-white/10 hover:bg-zinc-900/80"
+              ? "bg-gradient-to-br from-emerald-500/20 to-emerald-600/20 text-emerald-600 dark:text-emerald-400 border-2 border-emerald-500/50 shadow-lg shadow-emerald-500/20"
+              : "bg-zinc-100 dark:bg-zinc-900/60 text-zinc-700 dark:text-zinc-400 border-2 border-zinc-300 dark:border-white/5 hover:border-zinc-400 dark:hover:border-white/10 hover:bg-zinc-200 dark:hover:bg-zinc-900/80"
           }`}
         >
           <span className="relative z-10">

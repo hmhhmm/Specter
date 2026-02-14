@@ -1,0 +1,75 @@
+.theme-toggle {
+  position: fixed;
+  top: 1.5rem;
+  right: 1.5rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  z-index: 1000;
+  transition: transform 0.2s ease;
+}
+
+.theme-toggle:hover {
+  transform: scale(1.05);
+}
+
+.theme-toggle:active {
+  transform: scale(0.95);
+}
+
+.toggle-track {
+  width: 60px;
+  height: 32px;
+  background: var(--toggle-bg);
+  border-radius: 16px;
+  position: relative;
+  transition: background-color 0.3s ease;
+  border: 2px solid var(--toggle-border);
+}
+
+.toggle-thumb {
+  width: 26px;
+  height: 26px;
+  background: var(--toggle-thumb);
+  border-radius: 50%;
+  position: absolute;
+  top: 1px;
+  left: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--toggle-icon-color);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+[data-theme='light'] .toggle-thumb {
+  transform: translateX(28px);
+}
+
+.toggle-thumb svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Responsive positioning */
+@media (max-width: 768px) {
+  .theme-toggle {
+    top: 1rem;
+    right: 1rem;
+  }
+  
+  .toggle-track {
+    width: 52px;
+    height: 28px;
+  }
+  
+  .toggle-thumb {
+    width: 22px;
+    height: 22px;
+  }
+  
+  [data-theme='light'] .toggle-thumb {
+    transform: translateX(24px);
+  }
+}

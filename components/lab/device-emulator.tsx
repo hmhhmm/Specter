@@ -41,7 +41,7 @@ export function DeviceEmulator({
         animate={{ scale: 1, opacity: 1 }}
         transition={{ duration: 1, ease: "circOut" }}
         className={cn(
-          "relative rounded-[2rem] shadow-2xl bg-zinc-900 overflow-hidden transition-all duration-700 border-4 border-zinc-800",
+          "relative rounded-[2rem] shadow-2xl bg-zinc-200 dark:bg-zinc-900 overflow-hidden transition-all duration-700 border-4 border-zinc-300 dark:border-zinc-800",
           isIphone ? "w-[320px] h-[640px]" : "w-full max-w-2xl h-[500px]"
         )}
       >
@@ -55,8 +55,8 @@ export function DeviceEmulator({
             />
           </div>
         ) : (
-          <div className="absolute inset-0 bg-zinc-900 z-10 flex items-center justify-center">
-            <p className="text-sm text-zinc-500">No preview available</p>
+          <div className="absolute inset-0 bg-zinc-200 dark:bg-zinc-900 z-10 flex items-center justify-center transition-colors duration-300">
+            <p className="text-sm text-zinc-600 dark:text-zinc-500">No preview available</p>
           </div>
         )}
         
@@ -76,7 +76,7 @@ export function DeviceEmulator({
                 "flex items-center justify-center p-2 rounded-lg text-[10px] font-mono uppercase tracking-wider transition-all",
                 isLiveMode
                   ? "bg-red-500/20 text-red-400 border border-red-500/30"
-                  : "text-zinc-500 hover:text-zinc-300 border border-white/5"
+                  : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 border border-zinc-200 dark:border-white/5"
               )}
               title="Live View"
             >
@@ -104,8 +104,8 @@ export function DeviceEmulator({
             className={cn(
               "flex items-center justify-center p-2 rounded-lg text-[10px] font-mono uppercase tracking-wider transition-all",
               !isLiveMode
-                ? "bg-white/5 text-zinc-300 border border-white/10"
-                : "text-zinc-500 hover:text-zinc-300 border border-white/5"
+                ? "bg-zinc-100 dark:bg-white/5 text-zinc-700 dark:text-zinc-300 border border-zinc-300 dark:border-white/10"
+                : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 border border-zinc-200 dark:border-white/5"
             )}
             title="Screenshot History"
           >

@@ -1,74 +1,45 @@
-"use client";
-
-import { motion } from "framer-motion";
-import { useEffect, useState } from "react";
+import { Globe } from "lucide-react";
 
 export function RegionalMap() {
-  const [regions, setRegions] = useState([
-    { id: "na", name: "North America", x: 20, y: 30, issues: 0, status: "healthy" },
-    { id: "eu", name: "Europe", x: 50, y: 25, issues: 0, status: "healthy" },
-    { id: "apac", name: "Asia Pacific", x: 75, y: 35, issues: 0, status: "healthy" },
-    { id: "sa", name: "South America", x: 30, y: 65, issues: 0, status: "healthy" },
-  ]);
-
-  useEffect(() => {
-    async function fetchRegionalData() {
-      try {
-        const response = await fetch("http://localhost:8000/api/dashboard/stats");
-        if (response.ok) {
-          const data = await response.json();
-          if (data.regional_data && data.regional_data.length > 0) {
-            setRegions([
-              { id: "na", name: "North America", x: 20, y: 30, issues: data.regional_data[0]?.issues || 0, status: (data.regional_data[0]?.issues || 0) > 0 ? "warning" : "healthy" },
-              { id: "eu", name: "Europe", x: 50, y: 25, issues: data.regional_data[1]?.issues || 0, status: (data.regional_data[1]?.issues || 0) > 0 ? "warning" : "healthy" },
-              { id: "apac", name: "Asia Pacific", x: 75, y: 35, issues: data.regional_data[2]?.issues || 0, status: (data.regional_data[2]?.issues || 0) > 0 ? "warning" : "healthy" },
-              { id: "sa", name: "South America", x: 30, y: 65, issues: 0, status: "healthy" },
-            ]);
-          }
-        }
-      } catch (err) {
-        console.error("Error fetching regional data:", err);
-      }
-    }
-    fetchRegionalData();
-  }, []);
+  const regions = [
+    { name: "North America", rate: 65, color: "red", gradient: "from-red-500 to-red-600" },
+    { name: "Europe", rate: 42, color: "orange", gradient: "from-orange-500 to-orange-600" },
+    { name: "Asia Pacific", rate: 28, color: "yellow", gradient: "from-yellow-500 to-yellow-600" },
+    { name: "Latin America", rate: 18, color: "emerald", gradient: "from-emerald-500 to-emerald-600" }
+  ];
 
   return (
-    <div className="relative w-full h-full bg-zinc-950/60 rounded-lg border border-zinc-800/50 overflow-hidden">
-      {/* World Map Background */}
-      <svg viewBox="0 0 100 80" className="w-full h-full opacity-10 absolute inset-0">
-        <defs>
-          <pattern id="grid" width="10" height="10" patternUnits="userSpaceOnUse">
-            <path d="M 10 0 L 0 0 0 10" fill="none" stroke="currentColor" strokeWidth="0.5" className="text-zinc-700"/>
-          </pattern>
-        </defs>
-        <rect width="100" height="80" fill="url(#grid)" />
-      </svg>
-
-      {/* Region Cards */}
-      <div className="relative w-full h-full">
-        {regions.map((region, i) => (
-          <div 
-            key={region.id}
-            className="absolute transition-transform hover:scale-110"
-            style={{ left: `${region.x}%`, top: `${region.y}%`, transform: 'translate(-50%, -50%)' }}
-          >
-            <div className="flex flex-col items-center gap-1">
-              {/* Status Indicator */}
-              <div className={`w-2 h-2 rounded-full ${region.status === 'healthy' ? 'bg-emerald-500' : 'bg-amber-500'} shadow-lg`}>
-                <div className={`w-2 h-2 rounded-full ${region.status === 'healthy' ? 'bg-emerald-500' : 'bg-amber-500'} animate-ping opacity-75`} />
-              </div>
-              
-              {/* Region Label */}
-              <div className="px-2 py-0.5 rounded bg-zinc-900/80 border border-zinc-700/50 backdrop-blur-sm">
-                <div className="text-[7px] font-medium text-zinc-400 whitespace-nowrap">{region.name}</div>
-                {region.issues > 0 && (
-                  <div className="text-[6px] text-amber-400 text-center">{region.issues} issues</div>
-                )}
+    <div className="rounded-2xl border-2 border-zinc-200 dark:border-white/10 bg-gradient-to-br from-white to-zinc-50 dark:from-zinc-900/80 dark:to-zinc-900/40 backdrop-blur-sm p-6 transition-colors duration-300">
+      <div className="flex items-center gap-2 mb-6">
+        <Globe className="w-5 h-5 text-zinc-600 dark:text-zinc-400" />
+        <h3 className="text-lg font-bold">Geographic Distribution</h3>
+      </div>
+      
+      <div className="space-y-5">
+        {regions.map((region) => (
+          <div key={region.name}>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm text-zinc-700 dark:text-zinc-300">{region.name}</span>
+              <div className="flex items-center gap-3">
+                <div className="w-32 h-2 bg-zinc-200 dark:bg-white/5 rounded-full overflow-hidden">
+                  <div 
+                    className={`h-full bg-gradient-to-r ${region.gradient} rounded-full transition-all duration-500`}
+                    style={{width: `${region.rate}%`}}
+                  />
+                </div>
+                <span className={`text-sm font-bold font-mono text-${region.color}-400 w-12 text-right`}>
+                  {region.rate}%
+                </span>
               </div>
             </div>
           </div>
         ))}
+
+        <div className="pt-4 mt-4 border-t border-zinc-200 dark:border-white/10">
+          <p className="text-xs text-zinc-500 dark:text-zinc-500">
+            Failure rate by region over last 24 hours
+          </p>
+        </div>
       </div>
     </div>
   );

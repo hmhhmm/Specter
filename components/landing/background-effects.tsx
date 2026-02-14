@@ -7,8 +7,8 @@ export function BackgroundEffects() {
   const mouseX = useMotionValue(0);
   const mouseY = useMotionValue(0);
 
-  const bloomX = useTransform(mouseX, [0, typeof window !== 'undefined' ? window.innerWidth : 1920], [-30, 30]);
-  const bloomY = useTransform(mouseY, [0, typeof window !== 'undefined' ? window.innerHeight : 1080], [-30, 30]);
+  const bloomX = useTransform(mouseX, [0, window.innerWidth], [-30, 30]);
+  const bloomY = useTransform(mouseY, [0, window.innerHeight], [-30, 30]);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -21,7 +21,7 @@ export function BackgroundEffects() {
   }, [mouseX, mouseY]);
 
   return (
-    <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden bg-[#050505]">
+    <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden bg-white dark:bg-[#050505] transition-colors duration-300">
       {/* Static subtle gradient */}
       <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 via-transparent to-transparent" />
       

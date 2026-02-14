@@ -15,10 +15,9 @@ interface NeuralMonologueProps {
   currentStepData?: any;
   currentAction?: string;
   maxSteps?: number;
-  isVoiceEnabled?: boolean;
 }
 
-export function NeuralMonologue({ state, step, persona, logs = [], results, currentStepData, currentAction, maxSteps = 5, isVoiceEnabled }: NeuralMonologueProps) {
+export function NeuralMonologue({ state, step, persona, logs = [], results, currentStepData, currentAction, maxSteps = 5 }: NeuralMonologueProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [currentTime, setCurrentTime] = useState("");
 
@@ -59,7 +58,7 @@ export function NeuralMonologue({ state, step, persona, logs = [], results, curr
                   "flex-1 h-1 rounded-full transition-all duration-300",
                   (isPast || isComplete) && "bg-emerald-500",
                   isCurrent && "bg-blue-500 animate-pulse",
-                  stepNum > step && "bg-zinc-800"
+                  stepNum > step && "bg-zinc-300 dark:bg-zinc-800"
                 )}
               />
             );
@@ -72,13 +71,13 @@ export function NeuralMonologue({ state, step, persona, logs = [], results, curr
         initial={{ x: 50, opacity: 0 }}
         animate={{ x: 0, opacity: 1 }}
         transition={{ duration: 0.8, delay: 0.2 }}
-        className="flex-1 rounded-2xl border border-white/5 bg-zinc-900/30 backdrop-blur-xl overflow-hidden flex flex-col shadow-2xl"
+        className="flex-1 rounded-2xl border border-zinc-200 dark:border-white/5 bg-zinc-100 dark:bg-zinc-900/30 backdrop-blur-xl overflow-hidden flex flex-col shadow-2xl transition-colors duration-300"
       >
         {/* Terminal Header */}
-        <div className="px-6 py-4 border-b border-white/5 flex items-center justify-between bg-white/5">
+        <div className="px-6 py-4 border-b border-zinc-200 dark:border-white/5 flex items-center justify-between bg-zinc-200/50 dark:bg-white/5 transition-colors duration-300">
           <div className="flex items-center gap-3">
             <Terminal className="w-4 h-4 text-emerald-500" />
-            <span className="font-mono text-xs uppercase text-zinc-400">Test Output</span>
+            <span className="font-mono text-xs uppercase text-zinc-600 dark:text-zinc-400 transition-colors duration-300">Test Output</span>
           </div>
         </div>
 
@@ -110,44 +109,14 @@ export function NeuralMonologue({ state, step, persona, logs = [], results, curr
                 className="group flex gap-4 items-start border-l-2 border-transparent hover:border-emerald-500/30 pl-2 transition-colors duration-300"
               >
                 <div className="flex-shrink-0 flex flex-col items-center pt-1">
-                  <div className="w-6 h-6 rounded-lg bg-zinc-800 flex items-center justify-center border border-white/5 group-hover:scale-110 transition-transform text-emerald-400">
+                  <div className="w-6 h-6 rounded-lg bg-zinc-200 dark:bg-zinc-800 flex items-center justify-center border border-zinc-300 dark:border-white/5 group-hover:scale-110 transition-transform text-emerald-500 dark:text-emerald-400 transition-colors duration-300">
                     <Terminal className="w-3 h-3" />
                   </div>
                 </div>
                 
                 <div className="flex-1 space-y-1">
-                  <p className="text-zinc-300 leading-relaxed group-hover:text-white transition-colors text-xs">
-                    {(() => {
-                      const timePart = log.match(/^\[.*?\]/)?.[0] || "";
-                      const contentPart = log.replace(timePart, "").trim();
-                      
-                      if (contentPart.startsWith("Thought:")) {
-                        return (
-                          <>
-                            <span className="text-[10px] text-zinc-500 mr-2">{timePart}</span>
-                            <span className="text-emerald-500 font-bold mr-2">THOUGHT:</span>
-                            <span className="text-zinc-100">{contentPart.replace("Thought: ", "")}</span>
-                          </>
-                        );
-                      }
-                      
-                      if (contentPart.startsWith("Vision:")) {
-                        return (
-                          <>
-                            <span className="text-[10px] text-zinc-500 mr-2">{timePart}</span>
-                            <span className="text-cyan-500 font-bold mr-2">VISION:</span>
-                            <span className="text-zinc-200 italic">{contentPart.replace("Vision: ", "")}</span>
-                          </>
-                        );
-                      }
-
-                      return (
-                        <>
-                          <span className="text-[10px] text-zinc-500 mr-2">{timePart}</span>
-                          <span>{contentPart}</span>
-                        </>
-                      );
-                    })()}
+                  <p className="text-zinc-700 dark:text-zinc-300 leading-relaxed group-hover:text-zinc-900 dark:group-hover:text-white transition-colors text-xs">
+                    {log}
                   </p>
                 </div>
               </motion.div>
@@ -159,10 +128,10 @@ export function NeuralMonologue({ state, step, persona, logs = [], results, curr
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="mt-4 p-4 rounded-xl bg-gradient-to-br from-zinc-800/80 to-zinc-900/80 border border-emerald-500/30 shadow-2xl"
+              className="mt-4 p-4 rounded-xl bg-gradient-to-br from-zinc-100 to-zinc-200 dark:from-zinc-800/80 dark:to-zinc-900/80 border border-emerald-500/30 shadow-2xl transition-colors duration-300"
             >
               {/* Header with Severity & Team */}
-              <div className="flex items-start justify-between mb-3 pb-3 border-b border-white/10">
+              <div className="flex items-start justify-between mb-3 pb-3 border-b border-zinc-300 dark:border-white/10 transition-colors duration-300">
                 <div className="flex items-center gap-2">
                   <AlertTriangle className={cn(
                     "w-5 h-5",
@@ -174,7 +143,7 @@ export function NeuralMonologue({ state, step, persona, logs = [], results, curr
                   )} />
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold uppercase tracking-wider text-white">
+                      <span className="text-xs font-bold uppercase tracking-wider text-zinc-900 dark:text-white transition-colors duration-300">
                         Diagnostic Report
                       </span>
                       {currentStepData.severity && (
@@ -201,8 +170,8 @@ export function NeuralMonologue({ state, step, persona, logs = [], results, curr
                     </div>
                     {currentStepData.responsible_team && (
                       <div className="flex items-center gap-1.5 mt-1">
-                        <span className="text-[9px] text-zinc-500">Assigned to</span>
-                        <span className="text-[10px] font-semibold text-emerald-400">
+                        <span className="text-[9px] text-zinc-500 dark:text-zinc-500">Assigned to</span>
+                        <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
                           {currentStepData.responsible_team} Team
                         </span>
                       </div>
@@ -227,60 +196,60 @@ export function NeuralMonologue({ state, step, persona, logs = [], results, curr
               {/* Main Diagnosis */}
               {currentStepData.diagnosis && (
                 <div className="mb-3">
-                  <p className="text-sm text-zinc-200 leading-relaxed font-medium">
+                  <p className="text-sm text-zinc-800 dark:text-zinc-200 leading-relaxed font-medium transition-colors duration-300">
                     {currentStepData.diagnosis}
                   </p>
                 </div>
               )}
 
               {/* Metrics Summary - Compact */}
-              <div className="grid grid-cols-3 gap-2 mb-3 pb-3 border-b border-white/5">
+              <div className="grid grid-cols-3 gap-2 mb-3 pb-3 border-b border-zinc-300 dark:border-white/5 transition-colors duration-300">
                 {currentStepData.f_score !== undefined && (
-                  <div className="bg-zinc-900/50 rounded-lg p-2">
+                  <div className="bg-zinc-200 dark:bg-zinc-900/50 rounded-lg p-2 transition-colors duration-300">
                     <div className="flex items-center gap-1 mb-1">
-                      <Zap className="w-3 h-3 text-amber-400" />
-                      <span className="text-[8px] uppercase tracking-wider text-zinc-500">F-Score</span>
+                      <Zap className="w-3 h-3 text-amber-500 dark:text-amber-400" />
+                      <span className="text-[8px] uppercase tracking-wider text-zinc-500 dark:text-zinc-500">F-Score</span>
                     </div>
-                    <span className="text-lg font-bold font-mono text-amber-400">
+                    <span className="text-lg font-bold font-mono text-amber-600 dark:text-amber-400">
                       {currentStepData.f_score}
                     </span>
-                    <span className="text-xs text-zinc-600">/100</span>
+                    <span className="text-xs text-zinc-500 dark:text-zinc-600">/100</span>
                   </div>
                 )}
                 
                 {currentStepData.confusion_score !== undefined && (
-                  <div className="bg-zinc-900/50 rounded-lg p-2">
+                  <div className="bg-zinc-200 dark:bg-zinc-900/50 rounded-lg p-2 transition-colors duration-300">
                     <div className="flex items-center gap-1 mb-1">
                       <Activity className={cn(
                         "w-3 h-3",
-                        currentStepData.confusion_score >= 7 ? "text-red-400" :
-                        currentStepData.confusion_score >= 4 ? "text-yellow-400" :
-                        "text-emerald-400"
+                        currentStepData.confusion_score >= 7 ? "text-red-500 dark:text-red-400" :
+                        currentStepData.confusion_score >= 4 ? "text-yellow-500 dark:text-yellow-400" :
+                        "text-emerald-600 dark:text-emerald-400"
                       )} />
-                      <span className="text-[8px] uppercase tracking-wider text-zinc-500">Confusion</span>
+                      <span className="text-[8px] uppercase tracking-wider text-zinc-500 dark:text-zinc-500">Confusion</span>
                     </div>
                     <span className={cn(
                       "text-lg font-bold font-mono",
-                      currentStepData.confusion_score >= 7 ? "text-red-400" :
-                      currentStepData.confusion_score >= 4 ? "text-yellow-400" :
-                      "text-emerald-400"
+                      currentStepData.confusion_score >= 7 ? "text-red-600 dark:text-red-400" :
+                      currentStepData.confusion_score >= 4 ? "text-yellow-600 dark:text-yellow-400" :
+                      "text-emerald-600 dark:text-emerald-400"
                     )}>
                       {currentStepData.confusion_score}
                     </span>
-                    <span className="text-xs text-zinc-600">/10</span>
+                    <span className="text-xs text-zinc-500 dark:text-zinc-600">/10</span>
                   </div>
                 )}
                 
                 {currentStepData.dwell_time_ms !== undefined && currentStepData.dwell_time_ms > 0 && (
-                  <div className="bg-zinc-900/50 rounded-lg p-2">
+                  <div className="bg-zinc-200 dark:bg-zinc-900/50 rounded-lg p-2 transition-colors duration-300">
                     <div className="flex items-center gap-1 mb-1">
-                      <Activity className="w-3 h-3 text-purple-400" />
-                      <span className="text-[8px] uppercase tracking-wider text-zinc-500">Duration</span>
+                      <Activity className="w-3 h-3 text-purple-500 dark:text-purple-400" />
+                      <span className="text-[8px] uppercase tracking-wider text-zinc-500 dark:text-zinc-500">Duration</span>
                     </div>
-                    <span className="text-lg font-bold font-mono text-purple-400">
+                    <span className="text-lg font-bold font-mono text-purple-600 dark:text-purple-400">
                       {(currentStepData.dwell_time_ms / 1000).toFixed(1)}
                     </span>
-                    <span className="text-xs text-zinc-600">s</span>
+                    <span className="text-xs text-zinc-500 dark:text-zinc-600">s</span>
                   </div>
                 )}
               </div>
@@ -289,10 +258,10 @@ export function NeuralMonologue({ state, step, persona, logs = [], results, curr
               <div className="space-y-2">
                 {/* Network Evidence */}
                 {currentStepData.network_logs && currentStepData.network_logs.length > 0 && (
-                  <div className="bg-zinc-900/30 rounded-lg p-2.5">
+                  <div className="bg-zinc-200 dark:bg-zinc-900/30 rounded-lg p-2.5 transition-colors duration-300">
                     <div className="flex items-center gap-1.5 mb-1.5">
-                      <Network className="w-3.5 h-3.5 text-blue-400" />
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+                      <Network className="w-3.5 h-3.5 text-blue-500 dark:text-blue-400" />
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-700 dark:text-zinc-400 transition-colors duration-300">
                         Network Evidence
                       </span>
                     </div>
@@ -301,14 +270,14 @@ export function NeuralMonologue({ state, step, persona, logs = [], results, curr
                         <div key={i} className="flex items-center gap-2 text-[10px]">
                           <span className={cn(
                             "font-bold w-9 text-center rounded px-1",
-                            log.status >= 500 ? "text-red-400 bg-red-500/10" :
-                            log.status >= 400 ? "text-amber-400 bg-amber-500/10" :
-                            "text-emerald-400 bg-emerald-500/10"
+                            log.status >= 500 ? "text-red-500 dark:text-red-400 bg-red-500/10" :
+                            log.status >= 400 ? "text-amber-500 dark:text-amber-400 bg-amber-500/10" :
+                            "text-emerald-600 dark:text-emerald-400 bg-emerald-500/10"
                           )}>
                             {log.status}
                           </span>
-                          <span className="text-zinc-500 w-12">{log.method}</span>
-                          <span className="text-zinc-400 truncate flex-1">{log.url}</span>
+                          <span className="text-zinc-600 dark:text-zinc-500 w-12">{log.method}</span>
+                          <span className="text-zinc-700 dark:text-zinc-400 truncate flex-1">{log.url}</span>
                         </div>
                       ))}
                     </div>
@@ -317,16 +286,16 @@ export function NeuralMonologue({ state, step, persona, logs = [], results, curr
 
                 {/* Console Evidence */}
                 {currentStepData.console_logs && currentStepData.console_logs.length > 0 && (
-                  <div className="bg-zinc-900/30 rounded-lg p-2.5">
+                  <div className="bg-zinc-200 dark:bg-zinc-900/30 rounded-lg p-2.5 transition-colors duration-300">
                     <div className="flex items-center gap-1.5 mb-1.5">
-                      <Terminal className="w-3.5 h-3.5 text-yellow-400" />
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+                      <Terminal className="w-3.5 h-3.5 text-yellow-500 dark:text-yellow-400" />
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-700 dark:text-zinc-400 transition-colors duration-300">
                         Console Evidence
                       </span>
                     </div>
                     <div className="space-y-1 font-mono text-[9px]">
                       {currentStepData.console_logs.slice(0, 3).map((log: string, i: number) => (
-                        <div key={i} className="text-zinc-400 leading-relaxed pl-2 border-l border-yellow-500/30">
+                        <div key={i} className="text-zinc-700 dark:text-zinc-400 leading-relaxed pl-2 border-l border-yellow-500/30 transition-colors duration-300">
                           {log}
                         </div>
                       ))}
@@ -336,18 +305,18 @@ export function NeuralMonologue({ state, step, persona, logs = [], results, curr
 
                 {/* UX Issues */}
                 {currentStepData.ux_issues && currentStepData.ux_issues.length > 0 && (
-                  <div className="bg-zinc-900/30 rounded-lg p-2.5">
+                  <div className="bg-zinc-200 dark:bg-zinc-900/30 rounded-lg p-2.5 transition-colors duration-300">
                     <div className="flex items-center gap-1.5 mb-1.5">
-                      <Eye className="w-3.5 h-3.5 text-cyan-400" />
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+                      <Eye className="w-3.5 h-3.5 text-cyan-500 dark:text-cyan-400" />
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-700 dark:text-zinc-400 transition-colors duration-300">
                         UX Observations
                       </span>
                     </div>
                     <div className="space-y-1">
                       {currentStepData.ux_issues.slice(0, 3).map((issue: string, i: number) => (
                         <div key={i} className="flex items-start gap-2 text-[10px]">
-                          <span className="text-cyan-500 mt-0.5">•</span>
-                          <span className="text-zinc-400 leading-relaxed">{issue}</span>
+                          <span className="text-cyan-600 dark:text-cyan-500 mt-0.5">•</span>
+                          <span className="text-zinc-700 dark:text-zinc-400 leading-relaxed transition-colors duration-300">{issue}</span>
                         </div>
                       ))}
                     </div>
@@ -362,17 +331,17 @@ export function NeuralMonologue({ state, step, persona, logs = [], results, curr
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="mt-6 p-4 rounded-lg bg-zinc-800/50 border border-emerald-500/30"
+              className="mt-6 p-4 rounded-lg bg-zinc-200 dark:bg-zinc-800/50 border border-emerald-500/30 transition-colors duration-300"
             >
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <ShieldCheck className="w-4 h-4 text-emerald-500" />
-                  <span className="font-bold text-emerald-500">Test Complete</span>
+                  <span className="font-bold text-emerald-600 dark:text-emerald-500">Test Complete</span>
                 </div>
-                <div className="text-xs text-zinc-400 space-y-1">
-                  <div>Status: <span className="text-white">{results.status || 'N/A'}</span></div>
+                <div className="text-xs text-zinc-700 dark:text-zinc-400 space-y-1 transition-colors duration-300">
+                  <div>Status: <span className="text-zinc-900 dark:text-white">{results.status || 'N/A'}</span></div>
                   {results.passed !== undefined && (
-                    <div>Passed: <span className="text-white">{results.passed}/{results.passed + results.failed}</span></div>
+                    <div>Passed: <span className="text-zinc-900 dark:text-white">{results.passed}/{results.passed + results.failed}</span></div>
                   )}
                 </div>
               </div>

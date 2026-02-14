@@ -1,116 +1,48 @@
-"use client";
-
-import { motion } from "framer-motion";
-import { GitBranch, TrendingUp, AlertCircle, Users } from "lucide-react";
-import { useEffect, useState } from "react";
-import { cn } from "@/lib/utils";
-
-interface Pattern {
-  pattern_id: string;
-  error_type: string;
-  component: string;
-  occurrences: number;
-  test_runs: string[];
-  team: string;
-}
+import { FileCode2, Users } from "lucide-react";
 
 export function RootCausePanel() {
-  const [patterns, setPatterns] = useState<Pattern[]>([]);
-  const [loading, setLoading] = useState(true);
+  const issues = [
+    { severity: "P0", file: "ChatWidget.tsx", line: 47, owner: "frontend-team", color: "red" },
+    { severity: "P0", file: "PaymentModal.tsx", line: 128, owner: "checkout-team", color: "red" },
+    { severity: "P1", file: "LocaleSwitch.tsx", line: 89, owner: "i18n-team", color: "orange" },
+    { severity: "P2", file: "PriceDisplay.tsx", line: 34, owner: "design-system", color: "yellow" }
+  ];
 
-  useEffect(() => {
-    fetchPatterns();
-  }, []);
-
-  const fetchPatterns = async () => {
-    try {
-      const response = await fetch('http://localhost:8000/api/root-cause/patterns');
-      const data = await response.json();
-      setPatterns(data.patterns || []);
-    } catch (error) {
-      console.error('Error fetching patterns:', error);
-    } finally {
-      setLoading(false);
-    }
+  const colorMap = {
+    red: "from-red-500/20 to-red-600/20 border-red-500/30 text-red-400",
+    orange: "from-orange-500/20 to-orange-600/20 border-orange-500/30 text-orange-400",
+    yellow: "from-yellow-500/20 to-yellow-600/20 border-yellow-500/30 text-yellow-400"
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-40">
-        <div className="animate-pulse text-zinc-600 text-sm">Analyzing patterns...</div>
-      </div>
-    );
-  }
-
   return (
-    <div className="space-y-4">
-      {patterns.length === 0 ? (
-        <div className="text-center text-zinc-600 text-sm py-8">
-          No recurring patterns detected yet
-        </div>
-      ) : (
-        patterns.slice(0, 2).map((pattern, index) => (
-          <motion.div
-            key={pattern.pattern_id}
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: index * 0.1 }}
-            className="p-4 rounded-xl bg-white/5 border border-white/10 hover:border-emerald-500/30 transition-all duration-300 group"
+    <div className="rounded-2xl border-2 border-zinc-200 dark:border-white/10 bg-gradient-to-br from-white to-zinc-50 dark:from-zinc-900/80 dark:to-zinc-900/40 backdrop-blur-sm p-6 transition-colors duration-300">
+      <h3 className="text-lg font-bold mb-6">Root Cause Tracing</h3>
+      
+      <div className="space-y-3">
+        {issues.map((issue, i) => (
+          <div
+            key={i}
+            className="group rounded-xl border-2 border-zinc-200 dark:border-white/5 bg-zinc-100 dark:bg-white/5 p-4 hover:border-zinc-300 dark:hover:border-white/10 hover:bg-zinc-200 dark:hover:bg-white/10 transition-all"
           >
-            <div className="flex items-start justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <GitBranch className="w-4 h-4 text-emerald-500" />
-                <span className="text-xs font-mono text-emerald-400">
-                  {pattern.component.replace('_', ' ').toUpperCase()}
-                </span>
+            <div className="flex items-start gap-4">
+              <div className={`px-2.5 py-1 rounded-lg text-xs font-bold border-2 bg-gradient-to-br ${colorMap[issue.color as keyof typeof colorMap]}`}>
+                {issue.severity}
               </div>
-              <div className="flex items-center gap-2">
-                <TrendingUp className={cn(
-                  "w-3 h-3",
-                  pattern.occurrences >= 5 ? "text-red-500" :
-                  pattern.occurrences >= 3 ? "text-amber-500" :
-                  "text-blue-500"
-                )} />
-                <span className="text-xs font-bold text-zinc-400">
-                  {pattern.occurrences}x
-                </span>
+              <div className="flex-1 space-y-2">
+                <div className="flex items-center gap-2">
+                  <FileCode2 className="w-4 h-4 text-zinc-600 dark:text-zinc-400" />
+                  <span className="text-sm font-mono text-zinc-900 dark:text-white">{issue.file}</span>
+                  <span className="text-xs text-zinc-500 dark:text-zinc-500">L{issue.line}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Users className="w-3 h-3 text-zinc-500 dark:text-zinc-500" />
+                  <span className="text-xs text-zinc-600 dark:text-zinc-400">@{issue.owner}</span>
+                </div>
               </div>
             </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <AlertCircle className="w-3 h-3 text-zinc-600" />
-                <span className="text-[10px] text-zinc-500 uppercase tracking-widest">
-                  {pattern.error_type.replace('_', ' ')}
-                </span>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <Users className="w-3 h-3 text-zinc-600" />
-                <span className="text-[10px] text-zinc-500">
-                  Assigned to: <span className="text-emerald-500">{pattern.team}</span>
-                </span>
-              </div>
-
-              <div className="flex gap-1 flex-wrap mt-2">
-                {pattern.test_runs.slice(0, 3).map((run, i) => (
-                  <div
-                    key={i}
-                    className="px-2 py-0.5 rounded bg-zinc-800/50 text-[8px] text-zinc-600 font-mono"
-                  >
-                    {run.split('_').slice(-2).join('-')}
-                  </div>
-                ))}
-                {pattern.test_runs.length > 3 && (
-                  <div className="px-2 py-0.5 rounded bg-zinc-800/50 text-[8px] text-zinc-600 font-mono">
-                    +{pattern.test_runs.length - 3}
-                  </div>
-                )}
-              </div>
-            </div>
-          </motion.div>
-        ))
-      )}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
