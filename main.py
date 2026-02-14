@@ -12,7 +12,7 @@ Fully powered by webqa_agent + raw Anthropic API.
 
 FEATURE 1: Multimodal Persona-Driven Navigator
   - LLM observes screenshot + DOM -> decides next action autonomously
-  - Persona simulation (normal, cautious, confused, elderly, mobile_novice)
+  - Persona simulation (zoomer, boomer, skeptic, chaos, mobile)
   - Device emulation, network throttling, locale
   - AI decides ALL steps -- no hardcoded sequences
 
@@ -23,7 +23,7 @@ FEATURE 2: Cognitive UX Analyst & Diagnosis
 Usage:
     python main.py                                    # Demo with mock data
     python main.py autonomous https://example.com    # Full autonomous test
-    python main.py autonomous https://deriv.com/signup --persona elderly --device iphone13
+    python main.py autonomous https://deriv.com/signup --persona boomer --device iphone13
 """
 
 import asyncio
@@ -131,36 +131,92 @@ NETWORKS = {
 }
 
 PERSONAS = {
-    'normal': {
-        'name': 'Normal User',
-        'desc': 'Typical first-time user signing up',
-        'typing_delay': 0.1, 'action_delay': 1.0, 'hesitation': 0.0,
-        'behavior': 'You are a normal user visiting this website for the first time. You proceed at a normal pace, fill in forms efficiently, and click obvious buttons.',
+    # 1. THE HAPPY PATH (Speed & Performance)
+    'zoomer': {
+        'name': 'Zoomer (Speedster)',
+        'desc': 'Tech-savvy user speed-running the signup',
+        'typing_delay': 0.05,
+        'action_delay': 0.5,
+        'hesitation': 0.0,
+        'system_prompt': """
+            You are an impatient, tech-savvy Gen Z user.
+            GOAL: Finish signup in under 10 seconds.
+            BEHAVIOR:
+            - Do NOT read instructions. 
+            - Always choose "Sign up with Google" if available.
+            - If a page takes >2 seconds to load, COMPLAIN: "Laggy interface".
+            - Ignore "Terms" and "Privacy" links.
+        """
     },
-    'cautious': {
-        'name': 'Cautious User',
-        'desc': 'Reads everything carefully before acting',
-        'typing_delay': 0.2, 'action_delay': 3.0, 'hesitation': 1.5,
-        'behavior': 'You are a cautious user who reads every label, tooltip, and fine print before acting. You look for privacy policies, terms, and security indicators before entering personal data.',
+
+    # 2. THE INSIGHT GENERATOR (UX & Copy Analysis)
+    'boomer': {
+        'name': 'Boomer (The Critic)',
+        'desc': 'Anxious first-timer who gets stuck easily',
+        'typing_delay': 0.5,
+        'action_delay': 4.0,
+        'hesitation': 5.0,
+        'system_prompt': """
+            You are a 65-year-old non-technical user. You are nervous.
+            GOAL: Ensure everything is 100% clear before clicking.
+            BEHAVIOR:
+            - Scroll up and down to read everything.
+            - If a label is vague (like just "ID"), STOP and flag "High Confusion".
+            - If text is small (<16px) or low contrast, COMPLAIN: "I can't read this".
+            - Verify: "Does this button actually look clickable?"
+        """
     },
-    'confused': {
-        'name': 'Confused User',
-        'desc': 'Struggles with UI, clicks wrong things',
-        'typing_delay': 0.3, 'action_delay': 5.0, 'hesitation': 3.0,
-        'behavior': 'You are a confused user who struggles with modern web UIs. You sometimes miss form fields, click the wrong buttons, or get lost. If the UI is ambiguous, report exactly what confuses you.',
+
+    # 3. THE EDGE CASE (Legal & Link Verification)
+    'skeptic': {
+        'name': 'The Skeptic',
+        'desc': 'Privacy-focused user checking legal pages',
+        'typing_delay': 0.2,
+        'action_delay': 2.0,
+        'hesitation': 2.0,
+        'system_prompt': """
+            You are a paranoid privacy advocate.
+            GOAL: Find security flaws and broken links.
+            BEHAVIOR:
+            - Refuse Social Logins (Google/FB). Use Email only.
+            - Click "Terms of Service" first. If it's a broken link, flag CRITICAL BUG.
+            - Look for "Marketing Consent" checkboxes and uncheck them.
+        """
     },
-    'elderly': {
-        'name': 'Elderly User (65+)',
-        'desc': 'Needs large buttons, high contrast, simple language',
-        'typing_delay': 0.5, 'action_delay': 7.0, 'hesitation': 5.0,
-        'behavior': 'You are a 70-year-old user with limited tech experience. You need large text (16px+), high contrast, and big touch targets (44px+). Flag small buttons, low contrast text, and complex flows.',
+
+    # 4. THE CHAOS MONKEY (Robustness & Form Validation)
+    'chaos': {
+        'name': 'Chaos Monkey',
+        'desc': 'Clumsy user trying to break the form',
+        'typing_delay': 0.1,
+        'action_delay': 1.0,
+        'hesitation': 0.0,
+        'system_prompt': """
+            You are a clumsy user testing error handling.
+            GOAL: Trigger validation errors.
+            BEHAVIOR:
+            - Click "Next" immediately without filling anything.
+            - Enter invalid email formats (e.g., "felicia@" or "test.com").
+            - If the app crashes or lets you pass with bad data, flag a BUG.
+        """
     },
-    'mobile_novice': {
-        'name': 'Mobile Novice',
-        'desc': 'First time smartphone user',
-        'typing_delay': 0.4, 'action_delay': 8.0, 'hesitation': 6.0,
-        'behavior': 'You are using a smartphone for the first time. Touch targets must be obvious and large. Anything requiring precise tapping or small text is extremely difficult.',
-    },
+
+    # 5. THE CONSTRAINT TESTER (New! - Mobile & Accessibility)
+    'mobile': {
+        'name': 'Mobile Native',
+        'desc': 'User on a small screen with fat fingers',
+        'typing_delay': 0.3,
+        'action_delay': 1.5,
+        'hesitation': 1.0,
+        'system_prompt': """
+            You are using a smartphone with a cracked screen under bright sunlight.
+            GOAL: Test touch targets and readability.
+            BEHAVIOR:
+            - If buttons are too close together (<10px gap), COMPLAIN: "Fat finger risk".
+            - If the keyboard would cover the input field, flag a UI BUG.
+            - If you have to scroll horizontally to see content, flag as "Not Mobile Responsive".
+        """
+    }
 }
 
 
@@ -278,7 +334,7 @@ def build_planner_prompt(persona_cfg, device_cfg, elements_json, page_url, page_
 - Page Title: {page_title}
 - Device: {device_cfg['name']} ({device_cfg['viewport']['width']}x{device_cfg['viewport']['height']})
 - Persona: {persona_cfg['name']} -- {persona_cfg['desc']}
-- Persona Behavior: {persona_cfg['behavior']}
+- Persona Behavior: {persona_cfg['system_prompt']}
 {history_text}{failure_warning}
 
 INTERACTIVE ELEMENTS ON PAGE:
@@ -429,13 +485,14 @@ async def autonomous_signup_test(
     url: str,
     device: str = 'desktop',
     network: str = 'wifi',
-    persona: str = 'normal',
+    persona: str = 'zoomer',
     locale: str = 'en-US',
-    max_steps: int = 5,
+    max_steps: int = 10,
     screenshot_callback = None,
     diagnostic_callback = None,
     page_callback = None,
     headless: bool = False,
+    test_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Autonomous signup testing -- AI decides every step.
@@ -493,7 +550,7 @@ async def autonomous_signup_test(
     try:
         page = session.page
 
-        # Expose the live page object to callers (e.g. live-stream endpoint)
+        # Expose the live page object to callers (e.g. live endpoint)
         if page_callback:
             await page_callback(page)
 
@@ -531,11 +588,24 @@ async def autonomous_signup_test(
         print("Page loaded\n")
 
         # -- 3. Initialize webqa_agent tools --
+        # Ensure any prior in-process screenshot session is cleared so each
+        # test run creates a fresh, unique report directory.
+        ActionHandler.clear_screenshot_session()
+
+        # Prefer initializing the screenshot session directory BEFORE creating
+        # the ActionHandler instance to avoid any timing/race conditions.
+        # Configure screenshot saving behavior (class-level) BEFORE initializing
+        # the session so init will create the desired directory.
         ActionHandler.set_screenshot_config(save_screenshots=True)
+
+        if test_id:
+            custom_reports_dir = os.path.join('reports', test_id)
+            os.makedirs(custom_reports_dir, exist_ok=True)
+            screenshot_dir = ActionHandler.init_screenshot_session(custom_report_dir=custom_reports_dir)
+        else:
+            screenshot_dir = ActionHandler.init_screenshot_session()
         action_handler = ActionHandler()
         await action_handler.initialize(page)
-
-        screenshot_dir = action_handler.init_screenshot_session()
         reports_dir = str(screenshot_dir.parent)
         os.makedirs(reports_dir, exist_ok=True)
         print(f"Report directory: {reports_dir}")
@@ -607,12 +677,32 @@ async def autonomous_signup_test(
                 await crawler.remove_marker()
                 
                 # Stream screenshot to frontend if callback provided
+                # Line 815-827 in main.py
                 if screenshot_callback:
-                    # Convert relative path to absolute using screenshot_dir
                     from pathlib import Path
-                    abs_screenshot_path = str(Path(screenshot_dir) / Path(screenshot_path).name)
+                    abs_screenshot_path = None
+                    try:
+                        if screenshot_path:
+                            p = Path(screenshot_path)
+                            # FIX: Check if path is already absolute OR construct from screenshot_dir
+                            if p.is_absolute():
+                                abs_screenshot_path = str(p)
+                            else:
+                                 # Use the full relative path, not just the filename
+                                 abs_screenshot_path = str(Path(screenshot_dir) / p)  # Changed from p.name to p
+                    except Exception:
+                        abs_screenshot_path = str(Path(screenshot_dir) / Path(screenshot_path or '').name)
+    
                     await screenshot_callback(abs_screenshot_path, step_num, "Observing page")
-
+                
+    
+ 
+                print(f"  📸 Screenshot saved:")
+                print(f"     Expected dir: {screenshot_dir}")
+                print(f"     Returned path: {screenshot_path}")
+                if screenshot_path:
+                    print(f"     Path exists: {os.path.exists(screenshot_path)}")
+                    print(f"     Is absolute: {Path(screenshot_path).is_absolute()}")
                 page_url, page_title = await session.get_url()
 
                 # -- DECIDE: Ask Claude what to do --
@@ -1038,8 +1128,14 @@ async def autonomous_signup_test(
                     print(f"     Issues: {len(team_issues)} step(s), Severity: {severity}")
                     print(f"     Diagnosis: {diagnosis[:80]}...")
                     
-                    send_alert(handoff_for_alert)
-                    print(f"  ✅ {team} PDF sent to their Slack channel")
+                    try:
+                        success = send_alert(handoff_for_alert)
+                        if success:
+                            print(f"  ✅ {team} PDF sent to their Slack channel")
+                        else:
+                            print(f"  ⚠️ {team} alert failed or no evidence; PDF generation attempted")
+                    except Exception as e:
+                        print(f"  ⚠️ send_alert raised exception: {e}")
                 
                 # Send final diagnostic update to indicate alert has been sent
                 if diagnostic_callback:
@@ -1150,7 +1246,7 @@ def run_specter_pipeline(handoff_packet: Dict[str, Any]) -> str:
     # Mark issue but don't send alert yet (will send summary at test end)
     severity = final_packet.get('outcome', {}).get('severity', '')
     responsible_team = final_packet.get('outcome', {}).get('responsible_team', 'Unknown')
-    print(f"  🔍 Issue detected: {severity} - {responsible_team} team (Alert queued for end)")
+    print(f"   Issue detected: {severity} - {responsible_team} team (Alert queued for end)")
     
     return "FAIL"
 
@@ -1166,12 +1262,12 @@ def parse_args():
         epilog="""
 Examples:
   python main.py https://deriv.com/signup
-  python main.py https://example.com --persona elderly --device iphone13
+  python main.py https://example.com --persona boomer --device iphone13
   python main.py https://example.com --network 3g --max-steps 20
         """
     )
     parser.add_argument('url', help='URL to test')
-    parser.add_argument('--persona', default='normal', choices=PERSONAS.keys())
+    parser.add_argument('--persona', default='zoomer', choices=PERSONAS.keys())
     parser.add_argument('--device', default='desktop', choices=DEVICES.keys())
     parser.add_argument('--network', default='wifi', choices=NETWORKS.keys())
     parser.add_argument('--locale', default='en-US')
@@ -1184,7 +1280,7 @@ async def main_async():
     os.makedirs("backend/assets", exist_ok=True)
     return await autonomous_signup_test(
         url=args.url, device=args.device, network=args.network,
-        persona=args.persona, locale=args.locale, max_steps=args.max_steps,
+        persona=args.persona, locale=args.locale, max_steps=args.sps,
     )
 
 

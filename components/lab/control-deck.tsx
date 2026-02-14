@@ -2,9 +2,10 @@
 
 import { motion } from "framer-motion";
 import { 
-  User, 
-  Briefcase, 
-  ShoppingCart, 
+  Zap, 
+  Glasses, 
+  ShieldAlert, 
+  Bug, 
   Smartphone, 
   Monitor, 
   Signal, 
@@ -43,6 +44,8 @@ interface ControlDeckProps {
   setNetwork: (v: string) => void;
   isVoiceEnabled: boolean;
   setIsVoiceEnabled: (v: boolean) => void;
+  locale: string;
+  setLocale: (v: string) => void;
 }
 
 export function ControlDeck({
@@ -58,7 +61,9 @@ export function ControlDeck({
   network,
   setNetwork,
   isVoiceEnabled,
-  setIsVoiceEnabled
+  setIsVoiceEnabled,
+  locale,
+  setLocale
 }: ControlDeckProps) {
   const isRunning = state !== "idle" && state !== "complete";
 
@@ -67,157 +72,121 @@ export function ControlDeck({
       initial={{ y: 100, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={{ delay: 0.5, duration: 0.8 }}
-      className="fixed bottom-12 left-1/2 -translate-x-1/2 z-40 w-full max-w-5xl px-6"
+      className="fixed bottom-16 left-1/2 -translate-x-1/2 z-40 w-full max-w-6xl px-4"
     >
       <div className={cn(
-        "relative rounded-[2rem] border border-white/10 bg-zinc-950/80 backdrop-blur-2xl px-8 py-4 shadow-2xl transition-all duration-500 min-h-[80px] flex items-center",
+        "relative rounded-xl border border-white/10 bg-zinc-950/95 backdrop-blur-xl px-4 py-3 shadow-2xl transition-all duration-500",
         isRunning ? "border-emerald-500/30 shadow-emerald-500/10" : ""
       )}>
-        <div className="flex items-center justify-between w-full gap-4">
+        <div className="flex items-center justify-between w-full gap-3">
           {/* URL Input */}
-          <div className="flex items-center gap-4">
-            <div className="space-y-1">
-              <Label className="text-[9px] font-mono uppercase tracking-[0.2em] text-zinc-500 ml-1">Target URL</Label>
-              <input
-                type="url"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                disabled={isRunning}
-                placeholder="https://example.com"
-                className="w-[280px] bg-white/5 border border-white/10 rounded-xl font-mono text-[10px] h-9 px-3 text-white placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-emerald-500/50 disabled:opacity-50"
-              />
-            </div>
+          <div className="flex-shrink min-w-0">
+            <Label className="text-[8px] font-mono uppercase tracking-wider text-zinc-500 mb-1 block">Target URL</Label>
+            <input
+              type="url"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              disabled={isRunning}
+              placeholder="https://example.com"
+              className="w-[240px] bg-white/5 border border-white/10 rounded-lg font-mono text-[10px] h-8 px-2.5 text-white placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-emerald-500/50 disabled:opacity-50"
+            />
           </div>
 
-          {/* Persona & Device Section */}
-          <div className="flex items-center gap-4">
-            <div className="space-y-1">
-              <Label className="text-[9px] font-mono uppercase tracking-[0.2em] text-zinc-500 ml-1">Persona</Label>
-              <Select value={persona} onValueChange={setPersona} disabled={isRunning}>
-                <SelectTrigger className="w-[160px] bg-white/5 border-white/10 rounded-xl font-mono text-[10px] h-9">
-                  <SelectValue placeholder="Select Persona" />
-                </SelectTrigger>
-                <SelectContent className="bg-zinc-900 border-white/10 rounded-xl">
-                  <SelectItem value="normal" className="focus:bg-emerald-500/20 focus:text-white text-[10px]">
-                    <div className="flex items-center gap-2">
-                      <User className="w-3 h-3" />
-                      <span>Normal User</span>
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="cautious" className="focus:bg-emerald-500/20 focus:text-white text-[10px]">
-                    <div className="flex items-center gap-2">
-                      <Briefcase className="w-3 h-3" />
-                      <span>Cautious User</span>
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="elderly" className="focus:bg-emerald-500/20 focus:text-white text-[10px]">
-                    <div className="flex items-center gap-2">
-                      <User className="w-3 h-3" />
-                      <span>Elderly User (65+)</span>
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="confused" className="focus:bg-emerald-500/20 focus:text-white text-[10px]">
-                    <div className="flex items-center gap-2">
-                      <ShoppingCart className="w-3 h-3" />
-                      <span>Confused User</span>
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="mobile_novice" className="focus:bg-emerald-500/20 focus:text-white text-[10px]">
-                    <div className="flex items-center gap-2">
-                      <User className="w-3 h-3" />
-                      <span>Mobile Novice</span>
-                    </div>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1">
-              <Label className="text-[9px] font-mono uppercase tracking-[0.2em] text-zinc-500 ml-1">Device</Label>
-              <Select value={device} onValueChange={setDevice} disabled={isRunning}>
-                <SelectTrigger className="w-[140px] bg-white/5 border-white/10 rounded-xl font-mono text-[10px] h-9">
-                  <SelectValue placeholder="Select Device" />
-                </SelectTrigger>
-                <SelectContent className="bg-zinc-900 border-white/10 rounded-xl">
-                  <SelectItem value="iphone-15" className="focus:bg-emerald-500/20 focus:text-white text-[10px]">
-                    <div className="flex items-center gap-2">
-                      <Smartphone className="w-3 h-3" />
-                      <span>iPhone 15 Pro</span>
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="s23" className="focus:bg-emerald-500/20 focus:text-white text-[10px]">
-                    <div className="flex items-center gap-2">
-                      <Smartphone className="w-3 h-3" />
-                      <span>Samsung S23</span>
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="desktop" className="focus:bg-emerald-500/20 focus:text-white text-[10px]">
-                    <div className="flex items-center gap-2">
-                      <Monitor className="w-3 h-3" />
-                      <span>Desktop Chrome</span>
-                    </div>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+          {/* Persona */}
+          <div className="flex-shrink-0">
+            <Label className="text-[8px] font-mono uppercase tracking-wider text-zinc-500 mb-1 block">Persona</Label>
+            <Select value={persona} onValueChange={setPersona} disabled={isRunning}>
+              <SelectTrigger className="w-[140px] bg-white/5 border-white/10 rounded-lg font-mono text-[10px] h-8">
+                <SelectValue placeholder="Select" />
+              </SelectTrigger>
+              <SelectContent className="bg-zinc-900 border-white/10 rounded-lg">
+                <SelectItem value="zoomer" className="text-[10px]">⚡ Zoomer</SelectItem>
+                <SelectItem value="boomer" className="text-[10px]">👵 Boomer</SelectItem>
+                <SelectItem value="skeptic" className="text-[10px]">🕵️ Skeptic</SelectItem>
+                <SelectItem value="chaos" className="text-[10px]">💥 Chaos</SelectItem>
+                <SelectItem value="mobile" className="text-[10px]">📱 Mobile</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
-          <div className="h-8 w-px bg-white/5 mx-2" />
+          {/* Device */}
+          <div className="flex-shrink-0">
+            <Label className="text-[8px] font-mono uppercase tracking-wider text-zinc-500 mb-1 block">Device</Label>
+            <Select value={device} onValueChange={setDevice} disabled={isRunning}>
+              <SelectTrigger className="w-[120px] bg-white/5 border-white/10 rounded-lg font-mono text-[10px] h-8">
+                <SelectValue placeholder="Select" />
+              </SelectTrigger>
+              <SelectContent className="bg-zinc-900 border-white/10 rounded-lg">
+                <SelectItem value="iphone-15" className="text-[10px]">iPhone 15 P</SelectItem>
+                <SelectItem value="s23" className="text-[10px]">Samsung S23</SelectItem>
+                <SelectItem value="desktop" className="text-[10px]">Desktop</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
-          {/* Network Section */}
-          <div className="space-y-1">
-            <Label className="text-[9px] font-mono uppercase tracking-[0.2em] text-zinc-500 ml-1">Network</Label>
+          {/* Locale */}
+          <div className="flex-shrink-0">
+            <Label className="text-[8px] font-mono uppercase tracking-wider text-zinc-500 mb-1 block">Locale</Label>
+            <Select value={locale} onValueChange={setLocale} disabled={isRunning}>
+              <SelectTrigger className="w-[100px] bg-white/5 border-white/10 rounded-lg font-mono text-[10px] h-8">
+                <SelectValue placeholder="Select" />
+              </SelectTrigger>
+              <SelectContent className="bg-zinc-900 border-white/10 rounded-lg">
+                <SelectItem value="en-US" className="text-[10px]">🇺🇸 US</SelectItem>
+                <SelectItem value="de-DE" className="text-[10px]">🇩🇪 DE</SelectItem>
+                <SelectItem value="zh-CN" className="text-[10px]">🇨🇳 CN</SelectItem>
+                <SelectItem value="ar-SA" className="text-[10px]">🇸🇦 SA</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Network */}
+          <div className="flex-shrink-0">
+            <Label className="text-[8px] font-mono uppercase tracking-wider text-zinc-500 mb-1 block">Network</Label>
             <ToggleGroup 
               type="single" 
               value={network} 
               onValueChange={(v) => v && setNetwork(v)}
               disabled={isRunning}
-              className="bg-white/5 p-1 rounded-xl border border-white/10"
+              className="bg-white/5 p-0.5 rounded-lg border border-white/10"
             >
-              <ToggleGroupItem value="wifi" className="rounded-lg data-[state=on]:bg-emerald-500/20 data-[state=on]:text-emerald-500 h-7 px-3 text-[9px] font-mono">
-                <Wifi className="w-3 h-3 mr-1" />
-                WiFi
+              <ToggleGroupItem value="wifi" className="rounded data-[state=on]:bg-emerald-500/20 data-[state=on]:text-emerald-500 h-7 px-2.5 text-[9px] font-mono">
+                <Wifi className="w-3 h-3" />
               </ToggleGroupItem>
-              <ToggleGroupItem value="4g" className="rounded-lg data-[state=on]:bg-emerald-500/20 data-[state=on]:text-emerald-500 h-7 px-3 text-[9px] font-mono">
-                <Signal className="w-3 h-3 mr-1" />
+              <ToggleGroupItem value="4g" className="rounded data-[state=on]:bg-emerald-500/20 data-[state=on]:text-emerald-500 h-7 px-2.5 text-[9px] font-mono">
                 4G
               </ToggleGroupItem>
-              <ToggleGroupItem value="3g" className="rounded-lg data-[state=on]:bg-emerald-500/20 data-[state=on]:text-emerald-500 h-7 px-3 text-[9px] font-mono">
-                <SignalLow className="w-3 h-3 mr-1" />
+              <ToggleGroupItem value="3g" className="rounded data-[state=on]:bg-emerald-500/20 data-[state=on]:text-emerald-500 h-7 px-2.5 text-[9px] font-mono">
                 3G
               </ToggleGroupItem>
             </ToggleGroup>
           </div>
 
-          <div className="h-8 w-px bg-white/5 mx-2" />
+          {/* Voice */}
+          <div className="flex-shrink-0 flex items-end gap-2 pb-0.5">
+            <Label className="text-[8px] font-mono uppercase tracking-wider text-zinc-500">Voice</Label>
+            <Switch 
+              id="voice-mode" 
+              checked={isVoiceEnabled} 
+              onCheckedChange={setIsVoiceEnabled}
+              className="data-[state=checked]:bg-emerald-500 h-4 w-7"
+            />
+          </div>
 
-          {/* Voice & Action Section */}
-          <div className="flex items-center gap-6">
-            <div className="flex items-center gap-3">
-              {isVoiceEnabled ? <Volume2 className="w-3.5 h-3.5 text-emerald-500" /> : <VolumeX className="w-3.5 h-3.5 text-zinc-600" />}
-              <div className="space-y-0">
-                <Label htmlFor="voice-mode" className="text-[9px] font-mono uppercase tracking-widest text-zinc-500">Voice</Label>
-                <Switch 
-                  id="voice-mode" 
-                  checked={isVoiceEnabled} 
-                  onCheckedChange={setIsVoiceEnabled}
-                  className="data-[state=checked]:bg-emerald-500 h-4 w-8 scale-75"
-                />
-              </div>
-            </div>
-
+          {/* Action Button */}
+          <div className="flex-shrink-0">
             {state === "idle" ? (
-              <GlowButton onClick={onStart} className="px-5 py-0 rounded-xl h-10 text-[10px]">
+              <GlowButton onClick={onStart} className="px-4 py-0 rounded-lg h-8 text-[10px] mt-auto">
                 <Play className="w-3 h-3 fill-current" />
                 Start Test
               </GlowButton>
             ) : (
               <button 
                 onClick={onReset}
-                className="flex items-center gap-2 px-5 h-10 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition-colors font-mono text-[10px] uppercase tracking-widest"
+                className="flex items-center gap-2 px-4 h-8 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-colors font-mono text-[10px] uppercase"
               >
                 <RotateCcw className={cn("w-3 h-3", isRunning && "animate-spin-slow")} />
-                {state === "complete" ? "Reset" : "Resetting..."}
+                {state === "complete" ? "Reset" : "..."}
               </button>
             )}
           </div>

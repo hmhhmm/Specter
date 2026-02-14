@@ -71,7 +71,7 @@ class ActionHandler:
     # Session management for screenshot organization
     _screenshot_session_dir: Optional[Path] = None
     _screenshot_session_timestamp: Optional[str] = None
-    _save_screenshots_locally: bool = False  # Whether to save screenshots as files
+    _save_screenshots_locally: bool = True  # Whether to save screenshots as files (default ON)
 
     @classmethod
     def clear_screenshot_session(cls):
@@ -108,30 +108,30 @@ class ActionHandler:
 
         Returns:
             Path: The screenshot directory path
-
-        Examples:
-            >>> # Default directory
-            >>> ActionHandler.init_screenshot_session()
-            PosixPath('reports/20260105_155547/screenshots')
-
-            >>> # Custom directory
-            >>> ActionHandler.init_screenshot_session('./my_reports')
-            PosixPath('my_reports/screenshots')
         """
-        if cls._save_screenshots_locally and cls._screenshot_session_dir is None:
-            timestamp = os.getenv('WEBQA_REPORT_TIMESTAMP') or datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S_%f')
-            cls._screenshot_session_timestamp = timestamp
 
+        if cls._screenshot_session_dir and not custom_report_dir:
+            logging.debug(f'Screenshot session already initialized: {cls._screenshot_session_dir}')
+            return cls._screenshot_session_dir  
+        # Only create a directory when local saving is enabled
+        if cls._save_screenshots_locally:
+            # Always generate a unique timestamp for each run to avoid collisions.x
             if custom_report_dir:
-                # User-defined directory: {custom_report_dir}/screenshots/
                 report_base = Path(custom_report_dir)
+                cls._screenshot_session_timestamp = report_base.name
             else:
-                # Default directory: reports/test_{timestamp}/
+                import random
+                timestamp = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S_%f') + f"_{random.randrange(100000,999999)}"
+                cls._screenshot_session_timestamp = timestamp
                 report_base = Path('reports') / f'test_{timestamp}'
 
             cls._screenshot_session_dir = report_base / 'screenshots'
             cls._screenshot_session_dir.mkdir(parents=True, exist_ok=True)
             logging.info(f'Initialized screenshot directory: {cls._screenshot_session_dir}')
+            try:
+                logging.info(f'ActionHandler._save_screenshots_locally={cls._save_screenshots_locally}, timestamp={cls._screenshot_session_timestamp}')
+            except Exception:
+                pass
 
         return cls._screenshot_session_dir
 
@@ -1708,12 +1708,44 @@ class ActionHandler:
             current_page = self._get_current_page()
             timeout = 90000 if full_page else 60000  # 90s for full page, 60s for viewport
 
+            # --- Prefer existing report screenshots when available ---
+            # Historically we would reuse matching screenshots from older reports
+            # to avoid recapturing. That causes live runs to pick images from
+            # previous tests (unexpected). Only allow reuse when local saving is
+            # disabled or no active session is present.
+            if file_name:
+                try:
+                    reports_dir = Path('reports')
+                    # Do not reuse existing screenshots when we're actively
+                    # saving screenshots into a session directory for this run.
+                    reuse_allowed = not (self._save_screenshots_locally and ActionHandler._screenshot_session_dir)
+                    if reports_dir.exists() and reuse_allowed:
+                        # Find all png files containing the file_name substring
+                        matches = list(reports_dir.rglob(f'*{file_name}*.png'))
+                        if matches:
+                            # Pick the most recently modified match
+                            matches.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+                            chosen = matches[0]
+                            logging.info(f'Using existing report screenshot for "{file_name}": {chosen}')
+                            data = chosen.read_bytes()
+                            b64 = base64.b64encode(data).decode('utf-8')
+                            base64_data = f'data:image/png;base64,{b64}'
+                            # Return absolute path to avoid ambiguity for callers
+                            try:
+                                absolute = str(chosen.resolve())
+                                return base64_data, absolute
+                            except Exception:
+                                return base64_data, str(chosen)
+                except Exception as e:
+                    logging.debug(f'Existing-screenshot lookup failed: {e}')
+
             file_path_str = None
             relative_path = None
 
             # Only prepare file path and session if local saving is enabled
             if self._save_screenshots_locally:
-                session_dir = self.init_screenshot_session()
+                session_dir = self._screenshot_session_dir or self.init_screenshot_session()
+                logging.info(f'b64_page_screenshot: session_dir={session_dir}')
 
                 # Generate timestamp and filename
                 # Use high-precision timestamp and random suffix to avoid collisions in parallel execution
@@ -1733,8 +1765,8 @@ class ActionHandler:
                 file_path = session_dir / filename
                 file_path_str = str(file_path)
 
-                # Use POSIX separators to keep HTML assets valid on Windows/macOS/Linux.
-                relative_path = str(PurePosixPath(session_dir.name) / filename)
+                # Use absolute file path to avoid downstream path resolution issues.
+                relative_path = file_path_str
 
             # Capture screenshot (always returns bytes)
             screenshot_bytes = await self.take_screenshot(
@@ -1743,6 +1775,8 @@ class ActionHandler:
                 file_path=file_path_str,
                 timeout=timeout
             )
+
+            logging.info(f'b64_page_screenshot: captured {len(screenshot_bytes) if screenshot_bytes else 0} bytes, file_path={file_path_str}, relative_path={relative_path}')
 
             # Convert to Base64 for LLM requests
             screenshot_base64 = base64.b64encode(screenshot_bytes).decode('utf-8')

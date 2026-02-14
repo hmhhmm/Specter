@@ -29,6 +29,7 @@ venv_google/
 
 # testing
 /coverage
+/reports/
 
 # next.js
 /.next/
@@ -49,6 +50,28 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+.env/
+build/
+dist/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.tox/
+.nox/
+.coverage
+htmlcov/
+nosetests.xml
+coverage.xml
+*.cover
+*.log
 
 # vercel
 .vercel

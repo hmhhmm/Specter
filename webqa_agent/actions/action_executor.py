@@ -24,9 +24,74 @@ class ActionExecutor:
             'GoBack': self._execute_go_back,  # Added browser back navigation
             'Mouse': self._execute_mouse, # Added mouse action
         }
+        self._retry_enabled_actions = {'Tap', 'Input', 'Clear', 'Hover', 'Scroll', 'SelectDropdown'}
 
     async def initialize(self):
         return self
+
+    async def _smart_retry_action(self, execute_func, action):
+        """Smart retry wrapper with bug classification.
+        
+        Implements retry logic to distinguish between intermittent and consistent bugs:
+        - Try 1: Execute action normally
+        - If fails: Wait 2s (self-healing pause)
+        - Try 2: Execute same action again
+        - Success on retry = INTERMITTENT bug (race condition/network flakiness)
+        - Fail on retry = CONSISTENT bug (actual broken functionality)
+        
+        Args:
+            execute_func: The action execution function to retry
+            action: The action dictionary
+            
+        Returns:
+            dict with 'success', 'message', 'bug_type', and optional 'error_details'
+        """
+        action_type = action.get('type', 'Unknown')
+        
+        # Try 1: Standard execution
+        logging.info(f'[SmartRetry] Executing {action_type} (Attempt 1/2)')
+        result = await execute_func(action)
+        
+        # If successful on first try, return with bug_type='none'
+        if result.get('success', False):
+            result['bug_type'] = 'none'
+            return result
+        
+        # First attempt failed - prepare for retry
+        logging.warning(f'⚠️  {action_type} failed on first attempt. Attempting self-healing retry...')
+        logging.debug(f'    First failure: {result.get("message", "Unknown error")}')
+        
+        # Self-healing pause: wait 2 seconds for page to stabilize
+        await asyncio.sleep(2.0)
+        
+        # Try 2: The diagnosis attempt
+        logging.info(f'[SmartRetry] Executing {action_type} (Attempt 2/2 - Diagnosis)')
+        retry_result = await execute_func(action)
+        
+        # Case A: Success on retry = INTERMITTENT BUG
+        if retry_result.get('success', False):
+            logging.warning(f'🟠 INTERMITTENT BUG DETECTED: {action_type} failed once but succeeded on retry.')
+            logging.warning(f'   Possible causes: Race condition, network latency, lazy loading, or animation timing.')
+            
+            retry_result['bug_type'] = 'intermittent'
+            retry_result['message'] = (
+                f'{retry_result.get("message", "Action successful")} '
+                f'[WARNING: Succeeded only after retry - possible intermittent issue]'
+            )
+            retry_result['first_attempt_error'] = result.get('message', 'Unknown error')
+            return retry_result
+        
+        # Case B: Fail on retry = CONSISTENT BUG
+        logging.error(f'🔴 CONSISTENT BUG DETECTED: {action_type} failed consistently across 2 attempts.')
+        logging.error(f'   This indicates a reproducible failure, not a timing issue.')
+        
+        retry_result['bug_type'] = 'consistent'
+        retry_result['message'] = (
+            f'{retry_result.get("message", "Action failed")} '
+            f'[ERROR: Failed consistently across retries]'
+        )
+        retry_result['retry_attempts'] = 2
+        return retry_result
 
     async def execute(self, action):
         try:
@@ -34,13 +99,13 @@ class ActionExecutor:
             action_type = action.get('type')
             if not action_type:
                 logging.error('Action type is required')
-                return False
+                return {'success': False, 'message': 'Action type is required', 'bug_type': 'none'}
 
             # Get the corresponding execution function
             execute_func = self._action_map.get(action_type)
             if not execute_func:
                 logging.error(f'Unknown action type: {action_type}')
-                return False
+                return {'success': False, 'message': f'Unknown action type: {action_type}', 'bug_type': 'none'}
 
             # Execute the action with introspection to handle different method signatures
             logging.debug(f'Executing action: {action_type}')
@@ -49,17 +114,39 @@ class ActionExecutor:
             sig = inspect.signature(execute_func)
             params = list(sig.parameters.keys())
 
+            # Determine if we should use smart retry for this action type
+            use_smart_retry = action_type in self._retry_enabled_actions
+
             # If method only has 'self' parameter (no additional params), call without action
             # Note: bound methods don't show 'self' in signature, so empty params means no action param
             if len(params) == 0:
                 logging.debug(f'Calling {action_type} without action parameter (method signature has no parameters)')
-                return await execute_func()
+                if use_smart_retry:
+                    # Wrap in lambda to pass action for retry logic
+                    result = await self._smart_retry_action(lambda a: execute_func(), action)
+                else:
+                    result = await execute_func()
+                    if isinstance(result, dict):
+                        result['bug_type'] = result.get('bug_type', 'none')
+                    else:
+                        result = {'success': bool(result), 'message': str(result), 'bug_type': 'none'}
+                return result
             else:
-                return await execute_func(action)
+                if use_smart_retry:
+                    # Use smart retry wrapper for retry-enabled actions
+                    return await self._smart_retry_action(execute_func, action)
+                else:
+                    # Execute without retry for non-retry actions
+                    result = await execute_func(action)
+                    if isinstance(result, dict):
+                        result['bug_type'] = result.get('bug_type', 'none')
+                    else:
+                        result = {'success': bool(result), 'message': str(result), 'bug_type': 'none'}
+                    return result
 
         except Exception as e:
             logging.error(f'Action execution failed: {str(e)}')
-            return {'success': False, 'message': f'Action execution failed with an exception: {e}'}
+            return {'success': False, 'message': f'Action execution failed with an exception: {e}', 'bug_type': 'consistent'}
 
     def _validate_params(self, action, required_params):
         for param in required_params:
@@ -76,7 +163,7 @@ class ActionExecutor:
     async def _execute_clear(self, action):
         """Execute clear action on an input field."""
         if not self._validate_params(action, ['locate.id']):
-            return {'success': False, 'message': 'Missing locate.id for clear action'}
+            return {'success': False, 'message': 'Missing locate.id for clear action', 'bug_type': 'none'}
 
         success = await self._actions.clear(action.get('locate').get('id'))
 
@@ -84,7 +171,7 @@ class ActionExecutor:
         ctx = action_context_var.get()
 
         if success:
-            return {'success': True, 'message': 'Clear action successful.'}
+            return {'success': True, 'message': 'Clear action successful.', 'bug_type': 'none'}
         else:
             # Enrich error message with context
             base_message = 'Clear action failed.'
@@ -118,7 +205,7 @@ class ActionExecutor:
     async def _execute_tap(self, action):
         """Execute tap/click action."""
         if not self._validate_params(action, ['locate.id']):
-            return {'success': False, 'message': 'Missing locate.id for tap action'}
+            return {'success': False, 'message': 'Missing locate.id for tap action', 'bug_type': 'none'}
 
         success = await self._actions.click(action.get('locate').get('id'))
 
@@ -126,7 +213,7 @@ class ActionExecutor:
         ctx = action_context_var.get()
 
         if success:
-            return {'success': True, 'message': 'Tap action successful.'}
+            return {'success': True, 'message': 'Tap action successful.', 'bug_type': 'none'}
         else:
             # Enrich error message with context
             base_message = 'Tap action failed.'
@@ -164,7 +251,7 @@ class ActionExecutor:
     async def _execute_hover(self, action):
         """Execute hover action."""
         if not self._validate_params(action, ['locate.id']):
-            return {'success': False, 'message': 'Missing locate.id for hover action'}
+            return {'success': False, 'message': 'Missing locate.id for hover action', 'bug_type': 'none'}
 
         success = await self._actions.hover(action.get('locate').get('id'))
 
@@ -172,7 +259,7 @@ class ActionExecutor:
         ctx = action_context_var.get()
 
         if success:
-            return {'success': True, 'message': 'Hover action successful.'}
+            return {'success': True, 'message': 'Hover action successful.', 'bug_type': 'none'}
         else:
             # Enrich error message with context
             base_message = 'Hover action failed.'
@@ -206,15 +293,15 @@ class ActionExecutor:
     async def _execute_sleep(self, action):
         """Execute sleep/wait action."""
         if not self._validate_params(action, ['param.timeMs']):
-            return {'success': False, 'message': 'Missing param.timeMs for sleep action'}
+            return {'success': False, 'message': 'Missing param.timeMs for sleep action', 'bug_type': 'none'}
         time_ms = action.get('param').get('timeMs')
         await asyncio.sleep(time_ms / 1000)
-        return {'success': True, 'message': f'Slept for {time_ms}ms.'}
+        return {'success': True, 'message': f'Slept for {time_ms}ms.', 'bug_type': 'none'}
 
     async def _execute_input(self, action):
         """Execute input/type action."""
         if not self._validate_params(action, ['locate.id', 'param.value']):
-            return {'success': False, 'message': 'Missing locate.id or param.value for input action'}
+            return {'success': False, 'message': 'Missing locate.id or param.value for input action', 'bug_type': 'none'}
         try:
             value = action.get('param').get('value')
             clear_before_type = action.get('param').get('clear_before_type', False)  # Default is False
@@ -226,7 +313,7 @@ class ActionExecutor:
             ctx = action_context_var.get()
 
             if success:
-                return {'success': True, 'message': 'Input action successful.'}
+                return {'success': True, 'message': 'Input action successful.', 'bug_type': 'none'}
             else:
                 # Enrich error message with context
                 base_message = 'Input action failed.'
@@ -262,12 +349,12 @@ class ActionExecutor:
                 }
         except Exception as e:
             logging.error(f"Action '_execute_input' execution failed: {str(e)}")
-            return {'success': False, 'message': f'Input action failed with an exception: {e}'}
+            return {'success': False, 'message': f'Input action failed with an exception: {e}', 'bug_type': 'consistent'}
 
     async def _execute_scroll(self, action):
         """Execute scroll action - scroll to a specific element."""
         if not self._validate_params(action, ['locate.id']):
-            return {'success': False, 'message': 'Missing locate.id for scroll action. Scroll requires an element ID to scroll to.'}
+            return {'success': False, 'message': 'Missing locate.id for scroll action. Scroll requires an element ID to scroll to.', 'bug_type': 'none'}
 
         element_id = action.get('locate', {}).get('id')
 
@@ -277,7 +364,7 @@ class ActionExecutor:
         ctx = action_context_var.get()
 
         if success:
-            return {'success': True, 'message': f'Scrolled to element {element_id} successfully.'}
+            return {'success': True, 'message': f'Scrolled to element {element_id} successfully.', 'bug_type': 'none'}
         else:
             # Enrich error message with context
             base_message = f'Scroll to element {element_id} failed.'
@@ -301,7 +388,7 @@ class ActionExecutor:
     async def _execute_keyboard_press(self, action):
         """Execute keyboard press action."""
         if not self._validate_params(action, ['param.value']):
-            return {'success': False, 'message': 'Missing param.value for keyboard press action'}
+            return {'success': False, 'message': 'Missing param.value for keyboard press action', 'bug_type': 'none'}
 
         success = await self._actions.keyboard_press(action.get('param').get('value'))
 
@@ -309,7 +396,7 @@ class ActionExecutor:
         ctx = action_context_var.get()
 
         if success:
-            return {'success': True, 'message': 'Keyboard press successful.'}
+            return {'success': True, 'message': 'Keyboard press successful.', 'bug_type': 'none'}
         else:
             # Enrich error message with context
             base_message = 'Keyboard press failed.'
@@ -340,7 +427,7 @@ class ActionExecutor:
     async def _execute_upload(self, action, file_path):
         """Execute upload action."""
         if not self._validate_params(action, ['locate.id']):
-            return {'success': False, 'message': 'Missing locate.id for upload action'}
+            return {'success': False, 'message': 'Missing locate.id for upload action', 'bug_type': 'none'}
 
         success = await self._actions.upload_file(action.get('locate').get('id'), file_path)
 
@@ -348,7 +435,7 @@ class ActionExecutor:
         ctx = action_context_var.get()
 
         if success:
-            return {'success': True, 'message': 'File upload successful.'}
+            return {'success': True, 'message': 'File upload successful.', 'bug_type': 'none'}
         else:
             # Enrich error message with context
             base_message = 'File upload failed.'
@@ -388,7 +475,7 @@ class ActionExecutor:
 
         if dropdown_id is None or selection_path_param is None:
             logging.error('dropdown_id and selection_path are required for SelectDropdown')
-            return {'success': False, 'message': 'dropdown_id and selection_path are required for SelectDropdown'}
+            return {'success': False, 'message': 'dropdown_id and selection_path are required for SelectDropdown', 'bug_type': 'none'}
 
         if isinstance(selection_path_param, str):
             selection_path = [selection_path_param]
@@ -396,7 +483,7 @@ class ActionExecutor:
             selection_path = selection_path_param
         else:
             logging.error('selection_path must be a non-empty string or list')
-            return {'success': False, 'message': 'selection_path must be a non-empty string or list'}
+            return {'success': False, 'message': 'selection_path must be a non-empty string or list', 'bug_type': 'none'}
 
         try:
             # choose option_id directly
@@ -420,11 +507,11 @@ class ActionExecutor:
                     if level < len(selection_path) - 1:
                         await asyncio.sleep(0.5)
                 logging.debug(f"Successfully completed cascade selection: {' -> '.join(selection_path)}")
-                return {'success': True, 'message': 'Cascade selection completed successfully'}
+                return {'success': True, 'message': 'Cascade selection completed successfully', 'bug_type': 'none'}
 
         except Exception as e:
             logging.error(f'Error in dropdown selection: {str(e)}')
-            return {'success': False, 'message': f'An exception occurred during dropdown selection: {str(e)}'}
+            return {'success': False, 'message': f'An exception occurred during dropdown selection: {str(e)}', 'bug_type': 'consistent'}
 
     async def _execute_simple_selection(self, element_id, option_text):
         """Execute simple single-level dropdown selection."""
@@ -435,12 +522,12 @@ class ActionExecutor:
 
             if not options_result.get('success'):
                 logging.error(f"Failed to get dropdown options: {options_result.get('message')}")
-                return {'success': False, 'message': f"Failed to get dropdown options: {options_result.get('message')}"}
+                return {'success': False, 'message': f"Failed to get dropdown options: {options_result.get('message')}", 'bug_type': 'none'}
 
             options = options_result.get('options', [])
             if not options:
                 logging.error('No options found in dropdown')
-                return {'success': False, 'message': 'No options found in dropdown'}
+                return {'success': False, 'message': 'No options found in dropdown', 'bug_type': 'none'}
 
             logging.debug(f'Found {len(options)} options in dropdown')
 
@@ -473,7 +560,7 @@ class ActionExecutor:
                 logging.error(f'Could not decide which option to select based on criteria: {option_text}')
                 available_options = [opt['text'] for opt in options]
                 logging.debug(f'Available options: {available_options}')
-                return {'success': False, 'message': 'No matching option found', 'available_options': available_options}
+                return {'success': False, 'message': 'No matching option found', 'available_options': available_options, 'bug_type': 'none'}
 
             logging.debug(f'Selected option: {selected_option}')
 
@@ -482,32 +569,32 @@ class ActionExecutor:
 
             if select_result.get('success'):
                 logging.debug(f'Successfully completed dropdown selection: {selected_option}')
-                return {'success': True, 'message': 'Option selected successfully'}
+                return {'success': True, 'message': 'Option selected successfully', 'bug_type': 'none'}
             else:
                 logging.error(f'Failed to select option: {selected_option}')
-                return {'success': False, 'message': f"Failed to select option: {select_result.get('message')}"}
+                return {'success': False, 'message': f"Failed to select option: {select_result.get('message')}", 'bug_type': 'none'}
 
         except Exception as e:
             logging.error(f'Error in simple dropdown selection: {str(e)}')
-            return {'success': False, 'message': f'An exception occurred: {str(e)}'}
+            return {'success': False, 'message': f'An exception occurred: {str(e)}', 'bug_type': 'consistent'}
 
     async def _execute_drag(self, action):
         """Execute drag action."""
         if not self._validate_params(action, ['param.sourceCoordinates', 'param.targetCoordinates']):
-            return {'success': False, 'message': 'Missing coordinates for drag action'}
+            return {'success': False, 'message': 'Missing coordinates for drag action', 'bug_type': 'none'}
         success = await self._actions.drag(
             action.get('param').get('sourceCoordinates'), action.get('param').get('targetCoordinates')
         )
         if success:
-            return {'success': True, 'message': 'Drag action successful.'}
+            return {'success': True, 'message': 'Drag action successful.', 'bug_type': 'none'}
         else:
-            return {'success': False, 'message': 'Drag action failed.'}
+            return {'success': False, 'message': 'Drag action failed.', 'bug_type': 'none'}
 
     async def _execute_go_to_page(self, action):
         """Execute go to page action - the missing navigation action."""
         url = action.get('param', {}).get('url')
         if not url:
-            return {'success': False, 'message': 'Missing URL parameter for go to page action'}
+            return {'success': False, 'message': 'Missing URL parameter for go to page action', 'bug_type': 'none'}
 
         try:
             # Use smart navigation if available
@@ -521,7 +608,7 @@ class ActionExecutor:
 
                     if navigation_performed or navigation_performed is None:
                         message = 'Navigated to page' if navigation_performed else 'Already on target page'
-                        return {'success': True, 'message': message}
+                        return {'success': True, 'message': message, 'bug_type': 'none'}
                     else:
                         # Navigation failed, enrich error message with context
                         base_message = 'Navigation to page failed.'
@@ -545,7 +632,8 @@ class ActionExecutor:
                         return {
                             'success': False,
                             'message': base_message,
-                            'error_details': error_details
+                            'error_details': error_details,
+                            'bug_type': 'none'
                         }
 
             # Fallback to regular navigation
@@ -557,7 +645,7 @@ class ActionExecutor:
 
                 # Check if navigation succeeded by checking context
                 if not ctx or not ctx.error_type:
-                    return {'success': True, 'message': 'Successfully navigated to page'}
+                    return {'success': True, 'message': 'Successfully navigated to page', 'bug_type': 'none'}
                 else:
                     # Navigation failed, enrich error message with context
                     base_message = 'Navigation to page failed.'
@@ -577,10 +665,11 @@ class ActionExecutor:
                     return {
                         'success': False,
                         'message': base_message,
-                        'error_details': error_details
+                        'error_details': error_details,
+                        'bug_type': 'none'
                     }
 
-            return {'success': False, 'message': 'Navigation method not available'}
+            return {'success': False, 'message': 'Navigation method not available', 'bug_type': 'none'}
 
         except Exception as e:
             logging.error(f'Go to page action failed: {str(e)}')
@@ -609,7 +698,8 @@ class ActionExecutor:
             return {
                 'success': False,
                 'message': f'Navigation failed: {str(e)}',
-                'error_details': error_details
+                'error_details': error_details,
+                'bug_type': 'consistent'
             }
 
     async def _execute_go_back(self):
@@ -622,7 +712,7 @@ class ActionExecutor:
                 ctx = action_context_var.get()
 
                 if success:
-                    return {'success': True, 'message': 'Successfully navigated back to previous page'}
+                    return {'success': True, 'message': 'Successfully navigated back to previous page', 'bug_type': 'none'}
                 else:
                     # Navigation failed, enrich error message with context
                     base_message = 'Go back navigation failed.'
@@ -648,10 +738,11 @@ class ActionExecutor:
                     return {
                         'success': False,
                         'message': base_message,
-                        'error_details': error_details
+                        'error_details': error_details,
+                        'bug_type': 'none'
                     }
             else:
-                return {'success': False, 'message': 'Go back action not supported by action handler'}
+                return {'success': False, 'message': 'Go back action not supported by action handler', 'bug_type': 'none'}
         except Exception as e:
             logging.error(f'Go back action failed: {str(e)}')
 
@@ -679,7 +770,8 @@ class ActionExecutor:
             return {
                 'success': False,
                 'message': f'Go back failed: {str(e)}',
-                'error_details': error_details
+                'error_details': error_details,
+                'bug_type': 'consistent'
             }
 
     async def _execute_mouse(self, action):
@@ -693,7 +785,7 @@ class ActionExecutor:
         try:
             param = action.get('param')
             if not param or not isinstance(param, dict):
-                return {'success': False, 'message': 'Missing or invalid param for mouse action'}
+                return {'success': False, 'message': 'Missing or invalid param for mouse action', 'bug_type': 'none'}
 
             op = param.get('op')
 
@@ -704,18 +796,18 @@ class ActionExecutor:
                 elif 'deltaX' in param or 'deltaY' in param:
                     op = 'wheel'
                 else:
-                    return {'success': False, 'message': 'Missing mouse operation parameters (x/y or deltaX/deltaY)'}
+                    return {'success': False, 'message': 'Missing mouse operation parameters (x/y or deltaX/deltaY)', 'bug_type': 'none'}
 
             if op == 'move':
                 if not self._validate_params(action, ['param.x', 'param.y']):
-                    return {'success': False, 'message': 'Missing x or y coordinates for mouse move'}
+                    return {'success': False, 'message': 'Missing x or y coordinates for mouse move', 'bug_type': 'none'}
 
                 x = param.get('x')
                 y = param.get('y')
 
                 # Validate coordinates are numbers
                 if not isinstance(x, (int, float)) or not isinstance(y, (int, float)):
-                    return {'success': False, 'message': 'x and y coordinates must be numbers'}
+                    return {'success': False, 'message': 'x and y coordinates must be numbers', 'bug_type': 'none'}
 
                 success = await self._actions.mouse_move(x, y)
 
@@ -723,7 +815,7 @@ class ActionExecutor:
                 ctx = action_context_var.get()
 
                 if success:
-                    return {'success': True, 'message': f'Mouse moved to ({x}, {y})'}
+                    return {'success': True, 'message': f'Mouse moved to ({x}, {y})', 'bug_type': 'none'}
                 else:
                     # Mouse move failed, enrich error message with context
                     base_message = 'Mouse move action failed.'
@@ -749,7 +841,8 @@ class ActionExecutor:
                     return {
                         'success': False,
                         'message': base_message,
-                        'error_details': error_details
+                        'error_details': error_details,
+                        'bug_type': 'none'
                     }
 
             elif op == 'wheel':
@@ -759,7 +852,7 @@ class ActionExecutor:
 
                 # Validate deltas are numbers
                 if not isinstance(dx, (int, float)) or not isinstance(dy, (int, float)):
-                    return {'success': False, 'message': 'deltaX and deltaY must be numbers'}
+                    return {'success': False, 'message': 'deltaX and deltaY must be numbers', 'bug_type': 'none'}
 
                 success = await self._actions.mouse_wheel(dx, dy)
 
@@ -767,7 +860,7 @@ class ActionExecutor:
                 ctx = action_context_var.get()
 
                 if success:
-                    return {'success': True, 'message': f'Mouse wheel scrolled (deltaX: {dx}, deltaY: {dy})'}
+                    return {'success': True, 'message': f'Mouse wheel scrolled (deltaX: {dx}, deltaY: {dy})', 'bug_type': 'none'}
                 else:
                     # Mouse wheel failed, enrich error message with context
                     base_message = 'Mouse wheel action failed.'
@@ -793,12 +886,13 @@ class ActionExecutor:
                     return {
                         'success': False,
                         'message': base_message,
-                        'error_details': error_details
+                        'error_details': error_details,
+                        'bug_type': 'none'
                     }
 
             else:
                 logging.error(f"Unknown mouse op: {op}. Expected 'move' or 'wheel'.")
-                return {'success': False, 'message': f"Unknown mouse operation: {op}. Expected 'move' or 'wheel'"}
+                return {'success': False, 'message': f"Unknown mouse operation: {op}. Expected 'move' or 'wheel'", 'bug_type': 'none'}
 
         except Exception as e:
             logging.error(f'Mouse action execution failed: {str(e)}')
@@ -827,5 +921,6 @@ class ActionExecutor:
             return {
                 'success': False,
                 'message': f'Mouse action failed with an exception: {e}',
-                'error_details': error_details
+                'error_details': error_details,
+                'bug_type': 'consistent'
             }

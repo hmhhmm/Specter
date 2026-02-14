@@ -1,28 +1,70 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { toast } from "sonner";
 import { MissionHeader } from "@/components/lab/mission-header";
 import { ControlDeck } from "@/components/lab/control-deck";
 import { DeviceEmulator } from "@/components/lab/device-emulator";
 import { NeuralMonologue } from "@/components/lab/neural-monologue";
 import { StatusBar } from "@/components/lab/status-bar";
-import { motion, AnimatePresence } from "framer-motion";
 
 export type SimulationState = "idle" | "scanning" | "analyzing" | "complete";
+
+// Define the new Personas Data
+const PERSONAS = [
+  {
+    id: 'zoomer',
+    name: 'Zoomer (Speedster)',
+    icon: '⚡',
+    description: 'Tech-savvy Gen Z. Impatient. Skips instructions. Checks for lag.',
+    color: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20 hover:bg-yellow-500/20'
+  },
+  {
+    id: 'boomer',
+    name: 'Boomer (The Critic)',
+    icon: '👵',
+    description: 'Anxious first-timer. Reads everything. Flags small text & confusion.',
+    color: 'bg-blue-500/10 text-blue-400 border-blue-500/20 hover:bg-blue-500/20'
+  },
+  {
+    id: 'skeptic',
+    name: 'The Skeptic',
+    icon: '🕵️',
+    description: 'Privacy advocate. Checks Terms of Service. Avoids social logins.',
+    color: 'bg-purple-500/10 text-purple-400 border-purple-500/20 hover:bg-purple-500/20'
+  },
+  {
+    id: 'chaos',
+    name: 'Chaos Monkey',
+    icon: '💥',
+    description: 'Clumsy user. Enters invalid data. Tries to break validation.',
+    color: 'bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20'
+  },
+  {
+    id: 'mobile',
+    name: 'Mobile Native',
+    icon: '📱',
+    description: 'Small screen user. Tests touch targets & accessibility constraints.',
+    color: 'bg-green-500/10 text-green-400 border-green-500/20 hover:bg-green-500/20'
+  }
+];
 
 export default function LabPage() {
   const [simulationState, setSimulationState] = useState<SimulationState>("idle");
   const [simulationStep, setSimulationStep] = useState(0);
-  const [url, setUrl] = useState("https://deriv.com/signup");
-  const [persona, setPersona] = useState("normal");
+  const [url, setUrl] = useState("https://mocked-website-wv7p.vercel.app/");
+  const [persona, setPersona] = useState("zoomer");
   const [device, setDevice] = useState("iphone-15");
   const [network, setNetwork] = useState("wifi");
+  const [locale, setLocale] = useState("en-US");
   const [isVoiceEnabled, setIsVoiceEnabled] = useState(true);
   const [currentScreenshot, setCurrentScreenshot] = useState<string | null>(null);
   const [testResults, setTestResults] = useState<any>(null);
   const [logs, setLogs] = useState<string[]>([]);
   const [currentStepData, setCurrentStepData] = useState<any>(null);
   const [currentTestId, setCurrentTestId] = useState<string | null>(null);
+  const [currentAction, setCurrentAction] = useState<string>("");
+  const [nextTestCountdown, setNextTestCountdown] = useState<number>(0);
   
   // Live browser streaming state — live mode ON by default
   const [isLiveMode, setIsLiveMode] = useState(true);
@@ -50,11 +92,11 @@ export default function LabPage() {
     liveStreamRef.current = null;
 
     addLog("🎥 Connecting to live browser stream...");
-    const ws = new WebSocket(`ws://localhost:8002/ws/live-stream/${testId}`);
+    const ws = new WebSocket(`ws://localhost:8000/ws/live-stream/${testId}`);
 
     ws.onopen = () => {
       console.log("Live stream connected");
-      addLog("✓ Live stream active");
+      addLog("Live stream active");
     };
 
     ws.onmessage = (event) => {
@@ -71,6 +113,7 @@ export default function LabPage() {
 
     ws.onerror = (error) => {
       console.error("Live stream WS error", error);
+      addLog("⚠️ Live stream connection failed");
       // Do NOT flip isLiveMode off — user controls the toggle
     };
 
@@ -120,7 +163,7 @@ export default function LabPage() {
 
   // WebSocket connection (runs once; uses ref to avoid stale closure)
   useEffect(() => {
-    const ws = new WebSocket("ws://localhost:8002/ws");
+    const ws = new WebSocket("ws://localhost:8000/ws");
 
     ws.onopen = () => {
       console.log("WebSocket connected");
@@ -132,8 +175,14 @@ export default function LabPage() {
       handleWSMessageRef.current(data);  // always calls latest handler
     };
 
-    ws.onerror = (error) => console.error("WebSocket error:", error);
-    ws.onclose = () => console.log("WebSocket disconnected");
+    ws.onerror = (error) => {
+      console.error("WebSocket error:", error);
+      addLog("⚠️ Backend connection issue - Make sure api_server.py is running on port 8000");
+    };
+    ws.onclose = () => {
+      console.log("WebSocket disconnected");
+      addLog("⚠️ Disconnected from backend");
+    };
 
     wsRef.current = ws;
 
@@ -152,6 +201,9 @@ export default function LabPage() {
         setSimulationState("scanning");
         setCurrentTestId(data.test_id);
         addLog(`Test started: ${data.test_id}`);
+        toast.info("🤖 Test started", {
+          description: "AI agent is now analyzing your application..."
+        });
 
         // Start the live stream only when the user wants live mode
         if (isLiveModeRef.current) {
@@ -162,7 +214,9 @@ export default function LabPage() {
     } else if (data.type === "step_update") {
       setSimulationState("analyzing");
       setSimulationStep(prev => prev + 1);
-      addLog(`Step ${data.step || simulationStep + 1}: ${data.action || "Processing..."}`);
+      const actionText = data.action || "Processing...";
+      setCurrentAction(actionText);
+      addLog(`Step ${data.step || simulationStep + 1}: ${actionText}`);
       
       // Update current step diagnostic data (if available immediately)
       if (data.stepData) {
@@ -204,41 +258,72 @@ export default function LabPage() {
         // Add detailed diagnostic summary to terminal
         if (data.diagnosticData.diagnosis) {
           const severityBadge = data.diagnosticData.severity?.split(' - ')[0] || 'Issue';
-          addLog(`🔍 ${severityBadge} - ${data.diagnosticData.responsible_team}`);
-          addLog(`   📋 ${data.diagnosticData.diagnosis}`);
+          addLog(` ${severityBadge} - ${data.diagnosticData.responsible_team}`);
+          addLog(`    ${data.diagnosticData.diagnosis}`);
+          
+          // Show toast for critical issues
+          if (severityBadge.includes('P0') || severityBadge.includes('Critical')) {
+            toast.error("🚨 Critical Issue Detected", {
+              description: data.diagnosticData.diagnosis?.substring(0, 100) + "..."
+            });
+          } else if (severityBadge.includes('P1')) {
+            toast.warning("⚠️ High Priority Issue", {
+              description: data.diagnosticData.diagnosis?.substring(0, 100) + "..."
+            });
+          }
+          
           if (data.diagnosticData.alert_sent) {
-            addLog(`   🚨 Alert sent to ${data.diagnosticData.responsible_team} team`);
+            addLog(`   Alert sent to ${data.diagnosticData.responsible_team} team`);
           }
         } else if (data.diagnosticData.ux_issues && data.diagnosticData.ux_issues.length > 0) {
           // UX issues detected - show what they are!
-          addLog(`⚠️  UX Issues detected (${data.diagnosticData.ux_issues.length}):`);
+          addLog(`  UX Issues detected (${data.diagnosticData.ux_issues.length}):`);
           data.diagnosticData.ux_issues.forEach((issue: string, i: number) => {
             addLog(`   ${i + 1}. ${issue}`);
           });
           
           // Check if alert was sent for these UX issues
           if (data.diagnosticData.alert_sent) {
-            addLog(`   🚨 Alert sent to ${data.diagnosticData.responsible_team || 'Design'} team`);
+            addLog(`   Alert sent to ${data.diagnosticData.responsible_team || 'Design'} team`);
           } else {
-            addLog(`   📋 Review recommended - Alert will be sent`);
+            addLog(`   Review recommended - Alert will be sent`);
           }
         } else if (data.diagnosticData.confusion_score > 3) {
           // High confusion but no specific diagnosis
-          addLog(`⚠️  Elevated confusion detected (${data.diagnosticData.confusion_score}/10)`);
+          addLog(` Elevated confusion detected (${data.diagnosticData.confusion_score}/10)`);
         } else {
-          addLog(`✓ Analysis complete - No critical issues`);
+          addLog(`Analysis complete - No critical issues`);
         }
       }
     } else if (data.type === "test_complete") {
       setSimulationState("complete");
       setTestResults(data.results);
+      setCurrentAction("");
       addLog("Test completed");
       addLog(`Final Results: ${data.results?.passed || 0} passed, ${data.results?.failed || 0} failed`);
+      
+      // Start countdown for next test (5 minutes = 300 seconds)
+      setNextTestCountdown(300);
+      
+      const failedCount = data.results?.failed || 0;
+      if (failedCount > 0) {
+        toast.success("✅ Test Complete", {
+          description: `Found ${failedCount} issue${failedCount > 1 ? 's' : ''} that need attention`
+        });
+      } else {
+        toast.success("✅ Test Complete", {
+          description: "No critical issues detected"
+        });
+      }
+
+      // Clear test ID to prevent reconnection attempts
+      setCurrentTestId(null);
 
       // Keep the last live frame visible for 3 s, then tear down
       setTimeout(() => stopLiveStream(), 3000);
     } else if (data.type === "test_error") {
       setSimulationState("idle");
+      setCurrentTestId(null);
       addLog(`Error: ${data.error}`);
       stopLiveStream();
     }
@@ -268,12 +353,13 @@ export default function LabPage() {
         device: deviceMap[device] || "desktop",
         network: network || "wifi",
         persona: persona || "normal",
+        locale: locale || "en-US",
         max_steps: 5
       };
 
       console.log("Starting test with config:", requestBody);
 
-      const response = await fetch("http://localhost:8002/api/test/start", {
+      const response = await fetch("http://localhost:8000/api/test/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(requestBody)
@@ -299,6 +385,7 @@ export default function LabPage() {
     setCurrentScreenshot(null);
     setCurrentStepData(null);
     setCurrentTestId(null);
+    setCurrentAction("");
     
     // Clean up live stream (keep isLiveMode true so next test streams too)
     stopLiveStream();
@@ -308,9 +395,13 @@ export default function LabPage() {
   return (
     <main className="relative min-h-screen bg-[#050505] text-white overflow-hidden selection:bg-emerald-500/30">
       <div className="relative z-10 flex flex-col h-screen">
-        <MissionHeader />
+        <MissionHeader 
+          activePersona={persona}
+          networkCondition={network}
+          nextTestIn={nextTestCountdown}
+        />
         
-        <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-8 px-8 py-6 overflow-hidden mb-32">
+        <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-6 px-6 py-6 overflow-hidden pb-40">
           <DeviceEmulator 
             state={simulationState} 
             step={simulationStep} 
@@ -327,6 +418,8 @@ export default function LabPage() {
             logs={logs}
             currentStepData={currentStepData}
             results={testResults}
+            currentAction={currentAction}
+            maxSteps={5}
           />
         </div>
 
@@ -344,6 +437,8 @@ export default function LabPage() {
           setNetwork={setNetwork}
           isVoiceEnabled={isVoiceEnabled}
           setIsVoiceEnabled={setIsVoiceEnabled}
+          locale={locale}
+          setLocale={setLocale}
         />
 
         <StatusBar 

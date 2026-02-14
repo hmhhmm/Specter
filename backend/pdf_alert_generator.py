@@ -508,7 +508,7 @@ def send_pdf_to_team_slack(pdf_path, team_name, severity, diagnosis):
             "P1": "⚠️",
             "P2": "⚡",
             "P3": "ℹ️"
-        }.get(severity, "🔍")
+        }.get(severity, "")
         
         # Upload PDF to team channel
         response = client.files_upload_v2(
