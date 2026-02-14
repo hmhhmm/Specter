@@ -1,18 +1,7 @@
 "use client";
-
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { 
-  TrendingUp, 
-  MessageCircle, 
-  AlertCircle, 
-  ArrowUpRight, 
-  ArrowDownRight,
-  Shield,
-  Zap,
-  RefreshCw,
-  Globe
-} from "lucide-react";
+import { TrendingUp, MessageCircle, AlertCircle, ArrowUpRight, ArrowDownRight, Shield, Zap, RefreshCw, Globe } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const TRANSLATIONS = {
@@ -32,7 +21,8 @@ const TRANSLATIONS = {
   de: {
     title: "NovaHandel Pro",
     balance: "Kontostand",
-    confirmTrade: "Handel bestätigen", // LONG TEXT for overflow
+    confirmTrade: "Handel bestätigen",
+    // LONG TEXT for overflow
     sell: "Verkaufen",
     buy: "Kaufen",
     withdraw: "Auszahlen",
@@ -50,7 +40,6 @@ export default function MockTargetPage() {
   const [isWithdrawLoading, setIsWithdrawLoading] = useState(false);
   const [showGlobalSpinner, setShowGlobalSpinner] = useState(false);
   const [amount, setAmount] = useState("");
-
   const t = TRANSLATIONS[lang];
 
   // Listen for messages from parent (DeviceEmulator)
@@ -76,17 +65,12 @@ export default function MockTargetPage() {
       {/* Issue 7: Dead-End Spinner (Hidden by default, triggered by demo) */}
       <AnimatePresence>
         {showGlobalSpinner && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="fixed inset-0 z-[10000] bg-black/80 backdrop-blur-md flex flex-col items-center justify-center text-center p-6"
-          >
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[10000] bg-black/80 backdrop-blur-md flex flex-col items-center justify-center text-center p-6">
             <RefreshCw className="w-12 h-12 text-emerald-500 animate-spin mb-4" />
             <p className="text-emerald-500 font-mono tracking-widest uppercase">{t.loading}</p>
           </motion.div>
         )}
       </AnimatePresence>
-
       {/* Header */}
       <header className="flex items-center justify-between mb-8 border-b border-white/5 pb-4">
         <div className="flex items-center gap-2">
@@ -95,12 +79,8 @@ export default function MockTargetPage() {
           </div>
           <h1 className="text-xl font-bold tracking-tighter">{t.title}</h1>
         </div>
-
         <div className="flex items-center gap-4">
-          <button 
-            onClick={() => setLang(lang === "en" ? "de" : "en")}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 hover:bg-white/10 transition-colors text-[10px] font-mono uppercase tracking-widest"
-          >
+          <button onClick={() => setLang(lang === "en" ? "de" : "en")} className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 hover:bg-white/10 transition-colors text-[10px] font-mono uppercase tracking-widest">
             <Globe className="w-3 h-3" />
             {lang.toUpperCase()}
           </button>
@@ -110,7 +90,6 @@ export default function MockTargetPage() {
           </div>
         </div>
       </header>
-
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Left Column: Price Info */}
         <div className="md:col-span-2 space-y-6">
@@ -133,15 +112,13 @@ export default function MockTargetPage() {
                 {t.marketStatus}
               </div>
             </div>
-            
             {/* Chart Placeholder */}
             <div className="h-64 w-full bg-white/[0.02] rounded-2xl border border-white/5 relative overflow-hidden">
-               <svg viewBox="0 0 400 100" className="absolute bottom-0 w-full h-full opacity-30">
-                 <path d="M0 80 Q50 20 100 50 T200 30 T300 70 T400 10" fill="none" stroke="#10b981" strokeWidth="2" />
-               </svg>
+              <svg viewBox="0 0 400 100" className="absolute bottom-0 w-full h-full opacity-30">
+                <path d="M0 80 Q50 20 100 50 T200 30 T300 70 T400 10" fill="none" stroke="#10b981" strokeWidth="2" />
+              </svg>
             </div>
           </div>
-
           {/* Quick Actions */}
           <div className="grid grid-cols-2 gap-4">
             <button className="p-4 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-all flex items-center justify-between">
@@ -155,58 +132,40 @@ export default function MockTargetPage() {
             </button>
           </div>
         </div>
-
         {/* Right Column: Trading Form */}
         <div className="space-y-6">
           <div className="p-6 rounded-3xl bg-white/5 border border-white/5 relative">
             <h3 className="font-bold mb-6 text-lg">Execution Panel</h3>
-            
             <div className="space-y-4">
               <div className="space-y-2">
                 <label className="text-[10px] text-zinc-500 uppercase tracking-widest">{t.amount}</label>
                 {/* Issue 4: Rage Input - uses type="text" instead of numeric inputmode */}
-                <input 
-                  type="text" 
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  placeholder="0.00"
-                  className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-colors tabular-nums"
-                />
+                <input type="text" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-colors tabular-nums" />
               </div>
-
               <div className="flex justify-between items-center py-3 bg-zinc-900 rounded-lg px-3 border border-white/5">
                 {/* Issue 3: Invisible Fee - Label visible, but VALUE is black on black */}
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] uppercase tracking-widest text-zinc-400">{t.fee}:</span>
-                  <span className="text-sm font-bold" style={{ color: '#0a0a0c' }}>$2.50</span>
+                  <span className="text-sm font-bold text-zinc-100">$2.50</span>
                 </div>
                 <Shield className="w-4 h-4 text-zinc-600" />
               </div>
-
               {/* Issue 5: Localization Break - Fixed width button so German overflows */}
-              <button 
-                className="w-[180px] py-4 bg-emerald-500 rounded-xl text-black font-bold hover:bg-emerald-400 transition-colors text-sm px-2 mx-auto block"
-              >
+              <button className="w-[180px] py-4 bg-emerald-500 rounded-xl text-black font-bold hover:bg-emerald-400 transition-colors text-sm px-2 mx-auto block">
                 <span className="block whitespace-nowrap">
                   {t.confirmTrade}
                 </span>
               </button>
             </div>
           </div>
-
           {/* Issue 6: Phantom Error - Button that does nothing on click */}
-          <button 
-            onClick={handleWithdraw}
-            className="w-full py-4 rounded-2xl border-2 border-amber-500/50 bg-amber-500/10 hover:bg-amber-500/20 transition-all text-sm font-bold text-amber-500"
-          >
+          <button onClick={handleWithdraw} className="w-full py-4 rounded-2xl border-2 border-amber-500/50 bg-amber-500/10 hover:bg-amber-500/20 transition-all text-sm font-bold text-amber-500">
             {t.withdraw}
           </button>
-
           {/* Spacer to ensure scrollability */}
           <div className="h-8" />
         </div>
       </div>
-
       {/* Footer Branding */}
       <footer className="mt-20 pt-8 border-t border-white/5 flex justify-between items-center">
         <p className="text-[10px] text-zinc-600 font-mono tracking-widest uppercase">NovaTrade v4.2.0-secure</p>
@@ -215,7 +174,6 @@ export default function MockTargetPage() {
           <div className="w-4 h-4 bg-zinc-800 rounded-full" />
         </div>
       </footer>
-
       {/* Issue 1: Z-Index Trap - Chat bubble that covers buttons on small viewports */}
       {/* Positioned fixed but we simulate it in the mobile view of emulator */}
       <div className="fixed bottom-6 right-6 z-[9999] group pointer-events-auto">
@@ -223,17 +181,11 @@ export default function MockTargetPage() {
           <MessageCircle className="text-black w-8 h-8 fill-current" />
         </div>
         <div className="absolute bottom-full right-0 mb-4 w-64 bg-zinc-900 border border-white/10 rounded-2xl p-4 shadow-2xl opacity-0 group-hover:opacity-100 transition-opacity">
-          <p className="text-xs text-zinc-400 leading-relaxed">
-            Hi! Need help with your trade? Our AI assistant is here to help.
-          </p>
+          <p className="text-xs text-zinc-400 leading-relaxed"> Hi! Need help with your trade? Our AI assistant is here to help. </p>
         </div>
       </div>
-
       {/* Manual Trigger for Global Spinner (for demo purposes) */}
-      <div 
-        className="absolute top-0 right-0 w-2 h-2 opacity-0 cursor-pointer" 
-        onClick={() => setShowGlobalSpinner(true)}
-      />
+      <div className="absolute top-0 right-0 w-2 h-2 opacity-0 cursor-pointer" onClick={() => setShowGlobalSpinner(true)} />
     </div>
   );
 }
