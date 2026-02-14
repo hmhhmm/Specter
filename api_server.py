@@ -5,6 +5,10 @@ import sys
 import asyncio
 if sys.platform == 'win32':
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    # Fix Windows console encoding — emoji/unicode chars crash with charmap codec
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
@@ -50,8 +54,9 @@ class TestConfig(BaseModel):
     persona: str = "normal"  # Always fast normal user
     max_steps: int = 5
     captcha_strategy: str = "auto"      # "auto" | "detect_only" | "skip"
-    captcha_provider: str = "openai"    # "claude" | "openai" | "gemini" - recommend openai for cost savings
+    captcha_provider: str = "claude"    # "claude" | "openai" | "gemini"
     otp_sender_filter: str = ""          # e.g., "Deriv" to filter emails
+    headless: bool = False               # False = show browser, dramatically reduces reCAPTCHA "automated" detection
 
 class TestResult(BaseModel):
     step_id: str
@@ -249,8 +254,9 @@ async def run_test_background(test_id: str, config: TestConfig):
             screenshot_callback=screenshot_callback,
             diagnostic_callback=diagnostic_callback,
             page_callback=page_callback,
-            headless=True,
+            headless=config.headless,
             test_id=test_id,
+            captcha_provider=config.captcha_provider,
         )
         
         # Update test status

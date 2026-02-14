@@ -1,4 +1,4 @@
-"""
+""""
 AI utility functions for CAPTCHA solving.
 Adapted from: https://github.com/aydinnyunus/ai-captcha-bypass
 
@@ -33,7 +33,7 @@ async def solve_with_claude(client, image_b64: str, captcha_type: str, prompt_co
     Args:
         client: The anthropic.AsyncAnthropic client from main.py
         image_b64: Base64-encoded screenshot of the CAPTCHA
-        captcha_type: One of "text", "complicated_text", "grid", "recaptcha_v2", "puzzle"
+        captcha_type: One of "text", "complicated_text", "grid", "recaptcha_v2", "puzzle", "tile_check"
         prompt_context: Additional context (e.g., "Select all images with traffic lights")
     
     Returns:
@@ -99,15 +99,33 @@ Return ONLY a JSON object:
 Do not include any other text."""
         user_prompt = "Find the puzzle slot position."
     
+    # ── FIX #1: Added tile_check type — was missing, fell through to generic "Analyze this CAPTCHA" ──
+    elif captcha_type == "tile_check":
+        system_prompt = f"""You are checking a single tile from a reCAPTCHA grid challenge.
+Determine if this tile image contains: '{prompt_context}'
+
+Rules:
+- Even a PARTIAL appearance counts (e.g., part of a traffic light at the edge)
+- Look carefully at the ENTIRE tile including edges and corners
+- If you can see any recognizable part of the object, answer true
+
+Respond with ONLY 'true' or 'false'. Nothing else."""
+        user_prompt = f"Does this tile contain '{prompt_context}'?"
+    # ── END FIX #1 ──
+    
     else:
         # Fallback for unknown types
         system_prompt = "Analyze this CAPTCHA image and describe what you see."
         user_prompt = "What CAPTCHA challenge is shown?"
     
     try:
+        # Use faster Haiku model for tile_check (just needs "true"/"false"), Sonnet for complex tasks
+        max_tokens = 10 if captcha_type == "tile_check" else 1024
+        model = "claude-3-5-haiku-20241022" if captcha_type == "tile_check" else "claude-sonnet-4-20250514"
+        
         response = await client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=1024,
+            model=model,
+            max_tokens=max_tokens,
             system=system_prompt,
             messages=[{
                 "role": "user",
@@ -129,6 +147,17 @@ Do not include any other text."""
         )
         
         response_text = response.content[0].text.strip()
+        
+        # ── FIX #1 continued: Handle tile_check response before JSON parsing ──
+        if captcha_type == "tile_check":
+            answer = response_text.lower()
+            contains = "true" in answer
+            return {
+                "solution": "true" if contains else "false",
+                "confidence": 0.85 if contains else 0.8,
+                "target_object": prompt_context
+            }
+        # ── END FIX #1 ──
         
         # Try to parse JSON response
         try:
@@ -217,6 +246,11 @@ Only select tiles where the target object clearly appears. Be conservative."""
             prompt = """Find the puzzle slot position. The image shows a slider puzzle with a missing slot.
 Return JSON: {"x_percent": <horizontal position of slot center as % of image width>, "confidence": <0.0-1.0>}"""
         
+        # ── FIX #2: Added tile_check type for OpenAI — was missing ──
+        elif captcha_type == "tile_check":
+            prompt = f"Does this image clearly contain a '{prompt_context}' or a recognizable part of a '{prompt_context}'? Respond only with 'true' if you are certain. If you are unsure or cannot tell confidently, respond only with 'false'."
+        # ── END FIX #2 ──
+        
         else:
             prompt = "Analyze this CAPTCHA and describe what you see."
         
@@ -234,10 +268,22 @@ Return JSON: {"x_percent": <horizontal position of slot center as % of image wid
                     ]
                 }
             ],
-            max_tokens=512
+            # ── FIX #2 continued: Lower tokens + temperature=0 for tile_check ──
+            temperature=0 if captcha_type == "tile_check" else 1,
+            max_tokens=10 if captcha_type == "tile_check" else 512
         )
         
         response_text = response.choices[0].message.content.strip()
+        
+        # ── FIX #2 continued: Handle tile_check response ──
+        if captcha_type == "tile_check":
+            contains = "true" in response_text.lower()
+            return {
+                "solution": "true" if contains else "false",
+                "confidence": 0.85 if contains else 0.8,
+                "target_object": prompt_context
+            }
+        # ── END FIX #2 ──
         
         # Parse JSON
         try:
@@ -285,25 +331,29 @@ Return JSON: {"x_percent": <horizontal position of slot center as % of image wid
 
 # ──────────────────────────────────────────────────────────────────
 # Provider: Google Gemini (optional secondary provider)
+# ── FIX #3: Now uses NEW google.genai API consistently ──
+# ── WAS: importing OLD google.generativeai inside this function ──
+# ── which CONFLICTS with module-level NEW google.genai client ──
 # ──────────────────────────────────────────────────────────────────
-async def solve_with_gemini(image_b64: str, captcha_type: str, prompt_context: str = "", model: str = "gemini-2.0-flash-exp") -> Dict[str, Any]:
+async def solve_with_gemini(image_b64: str, captcha_type: str, prompt_context: str = "", model: str = "models/gemini-2.5-flash") -> Dict[str, Any]:
     """
     Uses Google Gemini API (requires GOOGLE_API_KEY in .env).
+    FIX #3: Now uses NEW google.genai SDK consistently (was mixing old google.generativeai with new google.genai).
     """
     
-    api_key = os.getenv("GOOGLE_API_KEY")
-    if not api_key:
+    # ── FIX #3: Check gemini_client instead of raw api_key ──
+    if not gemini_client:
         return {
             "solution": None,
             "confidence": 0.0,
             "target_object": None,
-            "error": "GOOGLE_API_KEY not set in .env"
+            "error": "Gemini not available (GOOGLE_API_KEY not set or google-genai not installed)"
         }
     
     try:
-        # Lazy import
-        import google.generativeai as genai
-        genai.configure(api_key=api_key)
+        # ── FIX #3: REMOVED old import of google.generativeai ──
+        # ── Was: import google.generativeai as genai; genai.configure(api_key=api_key) ──
+        # ── Now uses module-level gemini_client (NEW API) ──
         
         # Build prompt (same as Claude/OpenAI)
         if captcha_type in ("text", "complicated_text"):
@@ -326,20 +376,37 @@ Return JSON: {{"target_object": "<object>", "selected_tiles": [<numbers>], "conf
         elif captcha_type == "puzzle":
             prompt = """Find puzzle slot X position (% of image width). Return JSON: {"x_percent": <number>, "confidence": <0.0-1.0>}"""
         
+        # ── FIX #3: Added tile_check for Gemini ──
+        elif captcha_type == "tile_check":
+            prompt = f"Does this image clearly contain a '{prompt_context}' or a recognizable part of a '{prompt_context}'? Respond only with 'true' if you are certain. If you are unsure or cannot tell confidently, respond only with 'false'."
+        # ── END tile_check ──
+        
         else:
             prompt = "Analyze this CAPTCHA."
         
         # Decode base64 to bytes
         image_bytes = base64.b64decode(image_b64)
         
-        # Create model and generate
-        model_instance = genai.GenerativeModel(model)
-        response = await model_instance.generate_content_async([
-            prompt,
-            {"mime_type": "image/png", "data": image_bytes}
-        ])
+        # ── FIX #3: Use NEW API (gemini_client + types.Part) instead of old genai.GenerativeModel ──
+        # ── Was: model_instance = genai.GenerativeModel(model) ──
+        # ── Was: response = await model_instance.generate_content_async([...]) ──
+        response = gemini_client.models.generate_content(
+            model=model,
+            contents=[types.Part.from_bytes(data=image_bytes, mime_type='image/png'), prompt]
+        )
+        # ── END FIX #3 ──
         
         response_text = response.text.strip()
+        
+        # ── FIX #3: Handle tile_check response ──
+        if captcha_type == "tile_check":
+            contains = "true" in response_text.lower()
+            return {
+                "solution": "true" if contains else "false",
+                "confidence": 0.85 if contains else 0.8,
+                "target_object": prompt_context
+            }
+        # ── END tile_check ──
         
         # Parse JSON
         try:
@@ -369,13 +436,7 @@ Return JSON: {{"target_object": "<object>", "selected_tiles": [<numbers>], "conf
                 "target_object": None
             }
     
-    except ImportError:
-        return {
-            "solution": None,
-            "confidence": 0.0,
-            "target_object": None,
-            "error": "google-generativeai package not installed (pip install google-generativeai)"
-        }
+    # ── FIX #3: Removed separate ImportError for old google.generativeai ──
     except Exception as e:
         return {
             "solution": None,
@@ -450,6 +511,8 @@ async def solve_captcha_with_ai(
     2. OpenAI GPT-4o (if OPENAI_API_KEY available)
     3. Gemini (if GOOGLE_API_KEY available)
     
+    Now supports all captcha types including tile_check.
+    
     Returns: {"solution": ..., "confidence": ..., "provider_used": str, "target_object": str or None}
     """
     
@@ -475,7 +538,8 @@ async def solve_captcha_with_ai(
             elif prov == "openai":
                 result = await solve_with_openai(image_b64, captcha_type, prompt_context, model or "gpt-4o")
             elif prov == "gemini":
-                result = await solve_with_gemini(image_b64, captcha_type, prompt_context, model or "gemini-2.0-flash-exp")
+                # ── FIX #3: Default model uses "models/" prefix for new API ──
+                result = await solve_with_gemini(image_b64, captcha_type, prompt_context, model or "models/gemini-2.5-flash")
             else:
                 continue
             
@@ -557,18 +621,21 @@ async def check_tile_contains_object(image_b64: str, object_name: str, provider:
             return "true" in answer
         
         elif provider == "gemini":
-            import google.generativeai as genai
-            genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
-            model = genai.GenerativeModel('gemini-2.0-flash-exp')
+            # ── FIX #3: Use NEW API (gemini_client) instead of old google.generativeai ──
+            # ── Was: import google.generativeai as genai; genai.configure(...); model = genai.GenerativeModel(...) ──
+            # ── Was: from PIL import Image; img = Image.open(...); response = model.generate_content([prompt, img]) ──
+            if not gemini_client:
+                print("Error: Gemini not available")
+                return False
             
-            import io
-            from PIL import Image
             image_data = base64.b64decode(image_b64)
-            img = Image.open(io.BytesIO(image_data))
-            
-            response = model.generate_content([prompt, img])
+            response = gemini_client.models.generate_content(
+                model="models/gemini-2.5-flash",
+                contents=[types.Part.from_bytes(data=image_data, mime_type='image/png'), prompt]
+            )
             answer = response.text.strip().lower()
             return "true" in answer
+            # ── END FIX #3 ──
         
         else:
             return False

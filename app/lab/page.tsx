@@ -92,7 +92,7 @@ export default function LabPage() {
     liveStreamRef.current = null;
 
     addLog("🎥 Connecting to live browser stream...");
-    const ws = new WebSocket(`ws://localhost:8000/ws/live-stream/${testId}`);
+    const ws = new WebSocket(`ws://localhost:8000/ws/live/${testId}`);
 
     ws.onopen = () => {
       console.log("Live stream connected");

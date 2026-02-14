@@ -112,6 +112,7 @@ class _BrowserSession:
                 '--disable-gpu',
                 '--force-device-scale-factor=1',
                 f'--window-size={cfg["viewport"]["width"]},{cfg["viewport"]["height"]}',
+                '--disable-blink-features=AutomationControlled',  # Reduces automation detection (e.g. reCAPTCHA)
             ]
             if not self.disable_tab_interception:
                 browser_args.append('--block-new-web-contents')
@@ -120,11 +121,18 @@ class _BrowserSession:
                 headless=cfg['headless'],
                 args=browser_args,
             )
+            # Realistic UA to reduce "automated queries" / bot detection
+            user_agent = cfg.get('user_agent') or (
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            )
             self._context = await self._browser.new_context(
                 viewport=cfg['viewport'],
                 device_scale_factor=cfg.get('device_scale_factor', 1.0),
                 locale=cfg.get('language', 'en-US'),
+                user_agent=user_agent,
             )
+            # Stealth: mask automation signals before any page runs (helps with reCAPTCHA etc.)
+            await self._add_stealth_init_script()
 
             # Single-Tab Architecture (Layered Defense with Coordination)
             #
@@ -241,6 +249,19 @@ class _BrowserSession:
     async def get_url(self) -> tuple[str, str]:
         self._check_state()
         return self._page.url, await self._page.title()
+
+    async def _add_stealth_init_script(self):
+        """Reduce automation detection (e.g. reCAPTCHA 'automated queries') by masking common signals."""
+        await self._context.add_init_script("""
+            (() => {
+                try {
+                    Object.defineProperty(navigator, 'webdriver', { get: () => undefined, configurable: true });
+                } catch (e) {}
+                try {
+                    if (window.chrome && !window.chrome.runtime) window.chrome = { runtime: {} };
+                } catch (e) {}
+            })();
+        """)
 
     async def _enforce_single_tab_dom_preprocessing(self):
         """

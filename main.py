@@ -250,10 +250,11 @@ RULES:
 - If you need to scroll to find more elements, use Scroll.
 - DO NOT click social login buttons (Google, Apple, Facebook) - use email signup.
 
-CAPTCHA HANDLING:
-- If you see a CAPTCHA (reCAPTCHA, hCaptcha, image puzzle, distorted text), respond with:
+CAPTCHA HANDLING (CRITICAL):
+- If you see a CAPTCHA (reCAPTCHA, hCaptcha, image puzzle, distorted text), respond ONLY with:
   {"action": {"type": "SolveCaptcha"}, "observation": "CAPTCHA detected - [type]", ...}
-- Do NOT try to manually click CAPTCHA elements yourself. The SolveCaptcha action handles it.
+- Do NOT Tap the "Verify" button, "Submit" button, or "Skip" inside the CAPTCHA challenge. The SolveCaptcha action will screenshot the 9 tiles, run AI, and click Verify itself. Tapping Verify/Submit yourself will trigger "automated queries" and fail.
+- If the page shows a 9-grid image challenge ("Select all images with..."), you MUST use SolveCaptcha again (do not Tap any button).
 
 OTP HANDLING:
 - If the page says "Enter the code sent to your email" or "Verify your email":
@@ -493,6 +494,7 @@ async def autonomous_signup_test(
     page_callback = None,
     headless: bool = False,
     test_id: Optional[str] = None,
+    captcha_provider: str = 'claude',
 ) -> Dict[str, Any]:
     """
     Autonomous signup testing -- AI decides every step.
@@ -786,9 +788,16 @@ async def autonomous_signup_test(
                     detection = await detector.detect(page, elements_json, screenshot_b64, client)
                     
                     if detection['has_captcha']:
-                        # Get AI provider from env (default: openai for cost savings)
-                        ai_provider = os.getenv('CAPTCHA_AI_PROVIDER', 'openai')
-                        solver = CaptchaSolver(page, claude_client=client, ai_provider=ai_provider)
+                        # Use captcha_provider param (falls back to env var, then 'claude')
+                        ai_provider = captcha_provider or os.getenv('CAPTCHA_AI_PROVIDER', 'claude')
+                        tile_dir = str(screenshot_dir) if screenshot_dir else None
+                        has_claude = client is not None
+                        has_openai = bool(os.getenv('OPENAI_API_KEY'))
+                        has_google = bool(os.getenv('GOOGLE_API_KEY'))
+                        print(f"CAPTCHA: provider={ai_provider}, claude={'yes' if has_claude else 'no'}, OPENAI_API_KEY={'set' if has_openai else 'not set'}, GOOGLE_API_KEY={'set' if has_google else 'not set'}")
+                        if ai_provider == 'openai' and not has_openai:
+                            print("  ⚠️ CAPTCHA_AI_PROVIDER=openai but OPENAI_API_KEY not set — tile analysis may fail. Set OPENAI_API_KEY or use CAPTCHA_AI_PROVIDER=claude")
+                        solver = CaptchaSolver(page, claude_client=client, ai_provider=ai_provider, tile_screenshot_dir=tile_dir)
                         solve_result = await solver.solve(
                             detection['captcha_type'], 
                             detection['captcha_selector'],
