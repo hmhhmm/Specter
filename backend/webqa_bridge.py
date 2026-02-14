@@ -11,7 +11,9 @@ from datetime import datetime
 import os
 import glob
 from pathlib import Path
+import logging
 
+logger = logging.getLogger(__name__)
 
 def _resolve_screenshot_path(screenshot_path: str) -> str:
     """
@@ -46,7 +48,7 @@ def _resolve_screenshot_path(screenshot_path: str) -> str:
                         if os.path.exists(candidate):
                             return os.path.abspath(candidate)
         except Exception:
-            pass
+            logger.warning(f"Failed to resolve screenshot path: {screenshot_path} in webqa_bridge")
         return screenshot_path
     
     # If path exists relative to current directory, return absolute path
@@ -64,7 +66,7 @@ def _resolve_screenshot_path(screenshot_path: str) -> str:
                     if 'screenshots' in root.replace('\\', '/') and base in files:
                         return os.path.abspath(os.path.join(root, base))
     except Exception:
-        pass
+        logger.warning(f"Failed to resolve screenshot path: {screenshot_path}")
     
     # Handle webqa_agent relative paths (screenshots/filename.png)
     # These are relative to the reports directory
@@ -255,8 +257,10 @@ def convert_click_result_to_handoff(
     # Fallback to mock images if screenshots are still missing
     if not screenshot_before_path or not os.path.exists(screenshot_before_path):
         screenshot_before_path = "backend/assets/mock_before.jpg"
+        logger.debug(f"Using mock before screenshot for step {step_id} because path is missing: {screenshot_before_path}")
     if not screenshot_after_path or not os.path.exists(screenshot_after_path):
         screenshot_after_path = "backend/assets/mock_after.jpg"
+        logger.debug(f"Using mock after screenshot for step {step_id} because path is missing: {screenshot_after_path}")
     
     # Build the Specter handoff packet
     handoff_packet = {

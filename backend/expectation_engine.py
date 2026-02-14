@@ -74,6 +74,8 @@ import os
 import json
 from datetime import datetime
 from typing import Any, Dict, Optional, List
+import logging
+logger = logging.getLogger(__name__)
 
 from backend.friction import FrictionMathematician
 from backend.recorder import (
@@ -119,6 +121,8 @@ def extract_uncertainty_from_elements(
     img = cv2.imread(screenshot_path)
     if img is None:
         return {'global_uncertainty': 0.5, 'regions': []}
+        logger.debug("Failed to fetch screenshot for uncertainty extraction, defaulting to 0.5 global uncertainty.")
+
     
     rows, cols, _ = img.shape
     uncertainty_regions = []
@@ -174,6 +178,14 @@ def extract_uncertainty_from_elements(
             combined_conf = (float(confidence) * 0.6) + (vlm_conf * 0.4)
         else:
             combined_conf = float(confidence)
+
+        # Heuristic boost: if element has readable text, trust it more (reduces false high-uncertainty on labels)
+        try:
+            if elem_text and isinstance(elem_text, str) and elem_text.strip():
+                # small boost for text-bearing elements; tune as needed
+                combined_conf = min(0.95, combined_conf + 0.20)
+        except Exception:
+            pass
 
         uncertainty = 1.0 - combined_conf
         
@@ -274,7 +286,8 @@ def generate_uncertainty_heatmap(
     color_scheme: str = 'uncertainty',
     show_legend: bool = True,
     show_bboxes: bool = True,  # NEW: Draw element bounding boxes
-    blur_strength: int = 15
+    blur_strength: int = 21,
+    debug: bool = False
 ) -> Optional[str]:
     """
     Generate heatmap based on AI uncertainty metrics from Felicia's element detection.
@@ -293,53 +306,98 @@ def generate_uncertainty_heatmap(
         return None
     
     rows, cols, _ = img.shape
-    
+
     # Create empty heatmap overlay
     heatmap = np.zeros((rows, cols), dtype=np.float32)
-    
+
+    # Normalize global uncertainty (0..1)
+    global_unc = float(uncertainty_data.get('global_uncertainty', 0.0))
+    global_unc = max(0.0, min(1.0, global_unc))
+
+    regions = uncertainty_data.get('regions', []) or []
+
+    # Ensure at least one region so heatmap is not uniformly empty
+    if not regions:
+        touch_x = None
+        touch_y = None
+        # try common locations in the payload
+        touch_x = uncertainty_data.get('touch_x') or uncertainty_data.get('meta', {}).get('touch_x') or uncertainty_data.get('agent_decision', {}).get('touch_x')
+        touch_y = uncertainty_data.get('touch_y') or uncertainty_data.get('meta', {}).get('touch_y') or uncertainty_data.get('agent_decision', {}).get('touch_y')
+        try:
+            tx = float(touch_x) if touch_x is not None else 0.5
+            ty = float(touch_y) if touch_y is not None else 0.5
+        except Exception:
+            tx, ty = 0.5, 0.5
+        regions = [{
+            'x': max(0.0, min(1.0, tx)),
+            'y': max(0.0, min(1.0, ty)),
+            'uncertainty': global_unc,
+            'reason': 'fallback_confusion'
+        }]
+
+    agent_conf = float(uncertainty_data.get('agent_confidence', uncertainty_data.get('agent_confidence', 0.5)))
+
     # Generate heatmap from detected element regions
-    if 'regions' in uncertainty_data and uncertainty_data['regions']:
-        for region in uncertainty_data['regions']:
-            x_ratio = region.get('x', 0.5)
-            y_ratio = region.get('y', 0.5)
-            uncertainty = region.get('uncertainty', 0.5)
-            bbox = region.get('bbox', None)
-            
-            # Convert to pixels
-            center_x = int(cols * x_ratio)
-            center_y = int(rows * y_ratio)
-            
-            # Use bbox size to determine radius if available
-            if bbox and len(bbox) == 4:
+    for region in regions:
+        x_ratio = float(region.get('x', 0.5))
+        y_ratio = float(region.get('y', 0.5))
+        elem_unc = float(region.get('uncertainty', global_unc))
+        bbox = region.get('bbox', None)
+
+        # Combine global and element uncertainties and agent confidence
+        combined_unc = (0.5 * global_unc) + (0.4 * elem_unc) + (0.1 * (1.0 - agent_conf))
+        combined_unc = max(0.0, min(1.0, combined_unc))
+
+        # Convert to pixels
+        center_x = int(cols * x_ratio)
+        center_y = int(rows * y_ratio)
+
+        # Use bbox size to determine radius if available, else base on uncertainty
+        if bbox and len(bbox) == 4:
+            try:
                 _, _, w, h = bbox
-                radius = int(max(w, h) * 0.8)  # Slightly larger than element
-            else:
-                radius = int(50 + (uncertainty * 100))
-            
-            # Draw Gaussian-like blob
-            Y, X = np.ogrid[:rows, :cols]
-            dist_from_center = np.sqrt((X - center_x)**2 + (Y - center_y)**2)
-            
-            # Gaussian falloff
-            gaussian_mask = np.exp(-(dist_from_center**2) / (2 * (radius/2)**2))
-            heatmap += gaussian_mask * uncertainty
+                radius_bbox = int(max(1, max(w, h) * 1.2))
+            except Exception:
+                radius_bbox = None
+        else:
+            radius_bbox = None
+
+        radius_default = int(50 + (combined_unc * 120))
+        radius = radius_bbox if radius_bbox else radius_default
+
+        # Draw Gaussian-like blob
+        Y, X = np.ogrid[:rows, :cols]
+        dist_from_center = np.sqrt((X - center_x)**2 + (Y - center_y)**2)
+        gaussian_mask = np.exp(-(dist_from_center**2) / (2 * max(1.0, (radius / 2.0))**2))
+        heatmap += gaussian_mask * combined_unc
     
-    # Normalize heatmap to 0-1
-    if heatmap.max() > 0:
-        heatmap = heatmap / heatmap.max()
-    
+    # Add a small baseline so colormap has dynamic range even when values are low
+    heatmap += (1e-3 + (global_unc * 0.1))
+
     # Apply Gaussian blur for smooth gradients - ensure kernel is odd and valid
     if blur_strength and isinstance(blur_strength, int) and blur_strength > 0:
         k = blur_strength
         if k % 2 == 0:
             k += 1
-        # Clamp kernel to image size
         k = max(1, min(k, max(1, min(rows | cols, k))))
         try:
             heatmap = cv2.GaussianBlur(heatmap, (k, k), 0)
         except Exception:
-            # Fallback: skip blur if OpenCV fails for some kernel sizes
             pass
+
+    # Percentile clipping to avoid outlier domination, then normalize to 0..1
+    try:
+        p1 = float(np.percentile(heatmap, 1))
+        p99 = float(np.percentile(heatmap, 99))
+        if p99 - p1 > 1e-6:
+            heatmap = np.clip(heatmap, p1, p99)
+            heatmap = (heatmap - p1) / (p99 - p1)
+        else:
+            if heatmap.max() > 0:
+                heatmap = heatmap / heatmap.max()
+    except Exception:
+        if heatmap.max() > 0:
+            heatmap = heatmap / heatmap.max()
     
     # Apply color scheme
     # Robust colormap selection: provide fallbacks for OpenCV variants
@@ -354,11 +412,19 @@ def generate_uncertainty_heatmap(
     colormap = color_schemes.get(color_scheme, getattr(cv2, 'COLORMAP_JET', 2))
     
     # Convert to 0-255 and apply colormap
-    heatmap_uint8 = (heatmap * 255).astype(np.uint8)
+    heatmap_uint8 = np.clip((heatmap * 255.0), 0, 255).astype(np.uint8)
+    if debug:
+        try:
+            print(f"[debug] regions={len(regions)}, global_unc={global_unc:.3f}, agent_conf={agent_conf:.3f}")
+            for idx, r in enumerate(regions[:10]):
+                print(f"[debug] r{idx}: x={r.get('x')}, y={r.get('y')}, unc_in={r.get('uncertainty')}, bbox={r.get('bbox')}")
+            print(f"[debug] heatmap min/max before colormap: {heatmap.min():.6f}/{heatmap.max():.6f}")
+        except Exception:
+            pass
     heatmap_colored = cv2.applyColorMap(heatmap_uint8, colormap)
     
-    # Blend with original image
-    alpha = 0.5
+    # Blend with original image (tune alpha for visibility)
+    alpha = 0.4
     result = cv2.addWeighted(img, 1 - alpha, heatmap_colored, alpha, 0)
     
     # Draw bounding boxes around detected elements
@@ -467,7 +533,14 @@ def generate_uncertainty_heatmap(
                    cv2.FONT_HERSHEY_SIMPLEX, 0.35, (200, 200, 200), 1)
 
         result = np.vstack([result, legend])
-    
+        
+    # Debug: inspect final uint8 ranges
+    if debug:
+        try:
+            print(f"[debug] heatmap_uint8 min/max: {heatmap_uint8.min()}/{heatmap_uint8.max()}")
+        except Exception:
+            pass
+
     # Save output
     try:
         out_dir = os.path.dirname(output_path)
