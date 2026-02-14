@@ -1,52 +1,242 @@
+"use client";
+
+import { motion, AnimatePresence } from "framer-motion";
+import { useEffect, useState } from "react";
+import { Cpu, Github, Terminal, ChevronRight, ExternalLink, Loader2 } from "lucide-react";
+import { GlowButton } from "@/components/ui/glow-button";
+
+interface HealingSuggestion {
+  id: string;
+  file: string;
+  type: string;
+  description: string;
+  code_before: string;
+  code_after: string;
+  impact: string;
+}
+
 export function HealingHub() {
+  const [suggestion, setSuggestion] = useState<HealingSuggestion | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [healingInProgress, setHealingInProgress] = useState(false);
+  const [prUrl, setPrUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function fetchSuggestions() {
+      try {
+        const response = await fetch("http://localhost:8000/api/healing/suggestions");
+        if (response.ok) {
+          const data = await response.json();
+          if (data.suggestions && data.suggestions.length > 0) {
+            setSuggestion(data.suggestions[0]);
+          } else {
+            // Fallback for demo if no suggestions found
+            setSuggestion({
+              id: "contrast-1",
+              file: "app/mock-target/page.tsx",
+              type: "style",
+              description: "Improve fee visibility contrast",
+              code_before: ".checkout-fee { color: #0a0a0c; }",
+              code_after: ".checkout-fee { color: #f4f4f5; }",
+              impact: "High friction: Fee value is invisible on dark background."
+            });
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching healing suggestions:", err);
+        // Fallback for demo if backend is down
+        setSuggestion({
+          id: "contrast-1",
+          file: "app/mock-target/page.tsx",
+          type: "style",
+          description: "Improve fee visibility contrast",
+          code_before: ".checkout-fee { color: #0a0a0c; }",
+          code_after: ".checkout-fee { color: #f4f4f5; }",
+          impact: "High friction: Fee value is invisible on dark background."
+        });
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchSuggestions();
+  }, []);
+
+  const handleOpenPR = async () => {
+    if (!suggestion) return;
+    
+    setHealingInProgress(true);
+    try {
+      const response = await fetch("/api/specter-healer", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          bugId: suggestion.id,
+          bugTitle: suggestion.description,
+          bugDescription: suggestion.impact,
+          filePath: suggestion.file,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setPrUrl(data.prUrl);
+        // Update suggestion with REAL AI code if available
+        if (data.codeBefore && data.codeAfter) {
+          setSuggestion({
+            ...suggestion,
+            code_before: data.codeBefore,
+            code_after: data.codeAfter,
+          });
+        }
+      } else {
+        console.error("Failed to trigger healer");
+      }
+    } catch (err) {
+      console.error("Error triggering healer:", err);
+    } finally {
+      setHealingInProgress(false);
+    }
+  };
+
+  const displayFile = suggestion?.file || "globals.css";
+  const codeBefore = suggestion?.code_before || ".checkout-button {\n  color: var(--gray-mute);\n}";
+  const codeAfter = suggestion?.code_after || ".checkout-button {\n  color: var(--emerald-glow);\n  box-shadow: 0 0 20px rgba(16,185,129,0.2);\n}";
+
+  // Parse code lines for display
+  const beforeLines = codeBefore.split("\n");
+  const afterLines = codeAfter.split("\n");
+
   return (
-    <div className="rounded-2xl border-2 border-white/10 bg-gradient-to-br from-zinc-900/80 to-zinc-900/40 backdrop-blur-sm p-6 h-full">
-      <h3 className="text-lg font-bold mb-6">Auto-Remediation</h3>
-      
-      <div className="space-y-4">
-        <div className="group relative rounded-xl border-2 border-emerald-500/30 bg-gradient-to-br from-emerald-500/10 to-emerald-600/10 p-4 hover:border-emerald-500/50 transition-all">
-          <div className="flex items-start gap-3">
-            <div className="mt-1">
-              <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+    <div className="flex flex-col h-full min-h-0">
+      {/* Autonomous Remediation Card - fixed height container */}
+      <div className="rounded-[2.5rem] bg-zinc-900/40 border border-emerald-500/10 p-6 flex flex-col flex-1 min-h-0 relative overflow-hidden group shadow-lg">
+        {/* Glow Accent */}
+        <div className="absolute top-0 right-0 w-48 h-48 bg-emerald-500/5 blur-3xl pointer-events-none group-hover:bg-emerald-500/10 transition-colors duration-700" />
+        
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center relative">
+              <Cpu className="w-5 h-5 text-emerald-500" />
+              <motion.div 
+                animate={{ opacity: [0, 1, 0] }}
+                transition={{ duration: 2, repeat: Infinity }}
+                className="absolute inset-0 bg-emerald-500/20 blur-md rounded-xl"
+              />
             </div>
-            <div className="flex-1">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider">Ready to Deploy</span>
-              </div>
-              <p className="text-sm text-zinc-200 font-medium mb-1">Reduce z-index to 100</p>
-              <p className="text-xs text-zinc-400">ChatWidget.tsx • Line 47</p>
+            <div>
+              <h3 className="text-sm font-bold text-white tracking-tight">Auto-Remediation</h3>
+              <p className="text-[10px] text-emerald-500/60 font-mono uppercase tracking-widest font-bold">Neural Engine Active</p>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <div className="flex -space-x-2">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="w-6 h-6 rounded-full border border-zinc-950 bg-zinc-900 flex items-center justify-center">
+                  <div className="w-3 h-3 rounded-full bg-emerald-500/20 animate-pulse" />
+                </div>
+              ))}
             </div>
           </div>
         </div>
 
-        <div className="rounded-xl border-2 border-white/5 bg-white/5 p-4 hover:border-white/10 transition-all">
-          <div className="flex items-start gap-3">
-            <div className="mt-1">
-              <div className="w-2 h-2 rounded-full bg-zinc-500" />
+        <div className="mb-6 rounded-2xl bg-emerald-500/5 border border-emerald-500/10 p-4 relative group/suggestion overflow-hidden">
+          <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500/40" />
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[9px] font-mono text-emerald-500/70 uppercase tracking-[0.2em] font-bold">Priority Diagnosis</span>
+            <span className="text-[8px] font-mono text-zinc-600 bg-zinc-900/50 px-2 py-0.5 rounded-full border border-white/5">SHA-256: 8f2a...</span>
+          </div>
+          <p className="text-xs text-zinc-200 leading-relaxed font-medium">
+            {suggestion?.description || "Analyzing codebase for potential fixes..."}
+          </p>
+          <p className="text-[10px] text-zinc-500 mt-2 italic">
+            {suggestion?.impact || "Estimated recovery: $12,400 ARR"}
+          </p>
+        </div>
+
+        {/* Primary Action Button Moved to Top */}
+        <div className="mb-6">
+          {prUrl ? (
+            <GlowButton 
+              onClick={() => prUrl !== "#" && window.open(prUrl, "_blank")}
+              className="w-full py-4 text-[10px] tracking-[0.2em] uppercase flex items-center justify-center gap-3 font-bold group/btn bg-emerald-500 text-black border-none"
+            >
+              <Github className="w-4 h-4" />
+              {prUrl === "#" ? "PR Created (Mocked)" : "View PR on GitHub"}
+              <ExternalLink className="w-3 h-3 ml-1" />
+            </GlowButton>
+          ) : (
+            <GlowButton 
+              onClick={handleOpenPR}
+              disabled={healingInProgress || loading}
+              className="w-full py-4 text-[10px] tracking-[0.2em] uppercase flex items-center justify-center gap-3 font-bold group/btn"
+            >
+              {healingInProgress ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Healing in Progress...
+                </>
+              ) : (
+                <>
+                  <Github className="w-4 h-4 group-hover/btn:scale-110 transition-transform" />
+                  Open GitHub Pull Request
+                </>
+              )}
+            </GlowButton>
+          )}
+        </div>
+
+        <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+          <div className="flex items-center justify-between mb-4 px-1 shrink-0">
+            <div className="flex items-center gap-2">
+              <Terminal className="w-3 h-3 text-zinc-500" />
+              <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest font-bold">Proposed Patch</span>
             </div>
-            <div className="flex-1">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Suggested</span>
+            <span className="text-[8px] font-mono text-zinc-700 uppercase tracking-widest">{displayFile}</span>
+          </div>
+          
+          <div className="flex-1 bg-[#080808] rounded-2xl border border-white/5 font-mono text-[10px] leading-relaxed relative overflow-hidden flex flex-col group/code min-h-0">
+            <div className="absolute inset-0 opacity-[0.03] pointer-events-none bg-[url('https://grainy-gradients.vercel.app/noise.svg')]" />
+            
+            <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-5">
+              <div className="mb-4 pb-2 border-b border-white/5 flex items-center justify-between sticky top-0 bg-[#080808] z-10">
+                <span className="text-red-500/60 uppercase text-[8px] tracking-widest font-bold">Original State</span>
               </div>
-              <p className="text-sm text-zinc-300 font-medium mb-1">Add keyboard escape handler</p>
-              <p className="text-xs text-zinc-500">PaymentModal.tsx • Line 128</p>
+              {beforeLines.map((line, i) => (
+                <div key={`before-${i}`} className="flex gap-4 bg-red-500/5 -mx-5 px-5 py-1 border-l-2 border-red-500/50">
+                  <span className="w-4 shrink-0 text-right text-red-500/40 select-none">{i + 1}</span>
+                  <p className="text-red-400/90 break-all">- {line}</p>
+                </div>
+              ))}
+
+              <div className="mt-8 mb-4 pb-2 border-b border-white/5 flex items-center justify-between sticky top-0 bg-[#080808] z-10">
+                <span className="text-emerald-500/60 uppercase text-[8px] tracking-widest font-bold">Neural Remediation</span>
+              </div>
+              {afterLines.map((line, i) => (
+                <div key={`after-${i}`} className="flex gap-4 bg-emerald-500/10 -mx-5 px-5 py-1 border-l-2 border-emerald-500/50 relative">
+                  <span className="w-4 shrink-0 text-right text-emerald-500/40 select-none">{i + 1}</span>
+                  <p className="text-emerald-500/90 break-all">+ {line}</p>
+                  {i === 0 && (
+                    <motion.div 
+                      initial={{ x: "-100%" }}
+                      animate={{ x: "100%" }}
+                      transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
+                      className="absolute inset-0 bg-emerald-500/5 w-1/4 skew-x-12 pointer-events-none"
+                    />
+                  )}
+                </div>
+              ))}
             </div>
           </div>
         </div>
 
-        <div className="rounded-xl border-2 border-white/5 bg-white/5 p-4 hover:border-white/10 transition-all">
-          <div className="flex items-start gap-3">
-            <div className="mt-1">
-              <div className="w-2 h-2 rounded-full bg-zinc-500" />
-            </div>
-            <div className="flex-1">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Recommended</span>
-              </div>
-              <p className="text-sm text-zinc-300 font-medium mb-1">Increase min font size</p>
-              <p className="text-xs text-zinc-500">globals.css • Line 12</p>
-            </div>
-          </div>
+        <div className="mt-6">
+          <button className="w-full py-3.5 rounded-xl border border-white/5 bg-white/5 text-[9px] font-mono text-zinc-500 uppercase tracking-widest hover:text-white hover:bg-white/10 hover:border-white/10 transition-all flex items-center justify-center gap-2 group/audit">
+            <span>View Full Impact Audit</span>
+            <ChevronRight className="w-3 h-3 group-hover/audit:translate-x-1 transition-transform" />
+          </button>
         </div>
       </div>
     </div>
