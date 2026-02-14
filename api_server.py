@@ -283,8 +283,14 @@ async def run_test_background(test_id: str, config: TestConfig):
 
         # Update test status
         if result is None:
-            result = {"status": "ERROR", "passed": 0, "failed": 0, "steps": [], "reports_dir": ""}
-            
+            result = {
+                "status": "ERROR",
+                "passed": 0,
+                "failed": 0,
+                "steps": [],
+                "reports_dir": "",
+            }
+
         active_tests[test_id]["status"] = "completed"
         active_tests[test_id]["result"] = result
 
@@ -1100,13 +1106,26 @@ async def get_healing_suggestions():
     issue_counts = {}
     for issue in all_issues:
         issue_lower = issue.lower()
-        if "z-index" in issue_lower or "overlap" in issue_lower or "chat bubble" in issue_lower:
+        if (
+            "z-index" in issue_lower
+            or "overlap" in issue_lower
+            or "chat bubble" in issue_lower
+        ):
             key = "z-index-1"
-        elif "font" in issue_lower or "sizing" in issue_lower or "german" in issue_lower or "overflow" in issue_lower:
+        elif (
+            "font" in issue_lower
+            or "sizing" in issue_lower
+            or "german" in issue_lower
+            or "overflow" in issue_lower
+        ):
             key = "layout-1"
         elif "input" in issue_lower or "keyboard" in issue_lower:
             key = "input-1"
-        elif "contrast" in issue_lower or "color" in issue_lower or "invisible" in issue_lower:
+        elif (
+            "contrast" in issue_lower
+            or "color" in issue_lower
+            or "invisible" in issue_lower
+        ):
             key = "contrast-1"
         else:
             key = "other"
@@ -1120,8 +1139,8 @@ async def get_healing_suggestions():
                 "file": "app/mock-target/page.tsx",
                 "type": "style",
                 "description": "Fix z-index collision on mobile viewports",
-                "code_before": "<div className=\"fixed bottom-6 right-6 z-[9999] group pointer-events-auto\">",
-                "code_after": "<div className=\"fixed bottom-6 right-6 z-40 group pointer-events-auto\">",
+                "code_before": '<div className="fixed bottom-6 right-6 z-[9999] group pointer-events-auto">',
+                "code_after": '<div className="fixed bottom-6 right-6 z-40 group pointer-events-auto">',
                 "impact": f"Affects {issue_counts.get('z-index-1', 0)} detected issues",
             }
         )
@@ -1133,8 +1152,8 @@ async def get_healing_suggestions():
                 "file": "app/mock-target/page.tsx",
                 "type": "style",
                 "description": "Improve button responsiveness for localization",
-                "code_before": "<button \n  className=\"w-[180px] py-4 bg-emerald-500 rounded-xl ...\"",
-                "code_after": "<button \n  className=\"min-w-[180px] w-auto px-6 py-4 bg-emerald-500 rounded-xl ...\"",
+                "code_before": '<button \n  className="w-[180px] py-4 bg-emerald-500 rounded-xl ..."',
+                "code_after": '<button \n  className="min-w-[180px] w-auto px-6 py-4 bg-emerald-500 rounded-xl ..."',
                 "impact": f"Affects {issue_counts.get('layout-1', 0)} detected issues",
             }
         )
@@ -1147,7 +1166,7 @@ async def get_healing_suggestions():
                 "type": "style",
                 "description": "Improve fee visibility contrast",
                 "code_before": "<span className=\"text-sm font-bold\" style={{ color: '#0a0a0c' }}>$2.50</span>",
-                "code_after": "<span className=\"text-sm font-bold text-emerald-500\">$2.50</span>",
+                "code_after": '<span className="text-sm font-bold text-emerald-500">$2.50</span>',
                 "impact": f"Affects {issue_counts.get('contrast-1', 0)} detected issues",
             }
         )
@@ -1159,8 +1178,8 @@ async def get_healing_suggestions():
                 "file": "app/mock-target/page.tsx",
                 "type": "component",
                 "description": "Optimize input for mobile numeric keyboard",
-                "code_before": "<input type=\"text\" placeholder=\"0.00\" />",
-                "code_after": "<input type=\"number\" inputMode=\"decimal\" placeholder=\"0.00\" />",
+                "code_before": '<input type="text" placeholder="0.00" />',
+                "code_after": '<input type="number" inputMode="decimal" placeholder="0.00" />',
                 "impact": f"Affects {issue_counts.get('input-1', 0)} detected issues",
             }
         )
