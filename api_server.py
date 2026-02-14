@@ -6,6 +6,7 @@ from fastapi import (
     WebSocket,
     WebSocketDisconnect,
     BackgroundTasks,
+    Response
 )
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -26,6 +27,7 @@ from backend.expectation_engine import check_expectation
 from backend.diagnosis_doctor import diagnose_failure
 from backend.escalation_webhook import send_alert
 from backend.root_cause_intelligence import RootCauseIntelligence
+from backend.tts_service import generate_speech
 
 app = FastAPI(title="Specter API", version="1.0.0")
 
@@ -86,6 +88,15 @@ class ConnectionManager:
 
 
 manager = ConnectionManager()
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Run startup tasks like pre-warming the TTS model."""
+    print("Pre-warming Kokoro TTS model...")
+    # This will trigger initialization
+    generate_speech("System online.")
+    print("Kokoro TTS model pre-warmed.")
 
 
 @app.get("/")
@@ -197,6 +208,8 @@ async def run_test_background(test_id: str, config: TestConfig):
                                     "responsible_team": outcome.get("responsible_team"),
                                     "ux_issues": step_report.get("ux_issues", [])[:3],
                                     "alert_sent": alert_sent,
+                                    "observation": step_report.get("observation", ""),
+                                    "reasoning": step_report.get("reasoning", ""),
                                 }
                 except Exception:
                     step_data = step_data or None
@@ -248,6 +261,8 @@ async def run_test_background(test_id: str, config: TestConfig):
                     "alert_sent": outcome.get("alert_sent", False),
                     "analysis_complete": outcome.get("analysis_complete", False),
                     "dwell_time_ms": step_report.get("dwell_time_ms", 0),
+                    "observation": step_report.get("observation", ""),
+                    "reasoning": step_report.get("reasoning", ""),
                 }
 
                 await manager.broadcast(
@@ -880,6 +895,25 @@ class AlertRequest(BaseModel):
     severity: str
     title: str
     diagnosis: Optional[str] = None
+
+
+class TTSRequest(BaseModel):
+    text: str
+
+
+@app.post("/api/tts")
+async def text_to_speech(request: TTSRequest):
+    """Generate speech from text using Kokoro TTS."""
+    if not request.text:
+        return Response(status_code=400, content="Text is required")
+
+    # Use asyncio.to_thread to run the CPU-heavy TTS in a separate thread
+    wav_bytes = await asyncio.to_thread(generate_speech, request.text)
+
+    if not wav_bytes:
+        return Response(status_code=500, content="Failed to generate speech")
+
+    return Response(content=wav_bytes, media_type="audio/wav")
 
 
 @app.post("/api/diagnose")

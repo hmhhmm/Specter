@@ -160,7 +160,7 @@ async def call_llm_vision(
                 }
 
                 response = await asyncio.to_thread(
-                    requests.post, invoke_url, headers=headers, json=payload, timeout=30
+                    requests.post, invoke_url, headers=headers, json=payload, timeout=60
                 )
                 
                 if response.status_code != 200:
@@ -175,25 +175,40 @@ async def call_llm_vision(
     raise ValueError("No LLM clients available. Please set CLAUDE_API_KEY or NVIDIA_API_KEY.")
 
 def parse_json_from_llm(text: str) -> Optional[Dict[str, Any]]:
-    """Extract and parse JSON from LLM response."""
+    """Extract and parse JSON from LLM response with robust fallback."""
     if not text:
         return None
 
     text = text.strip()
-    if text.startswith("```"):
-        start_idx = text.find("{")
-        end_idx = text.rfind("}")
-        if start_idx != -1 and end_idx != -1:
-            text = text[start_idx : end_idx + 1]
+    
+    # 1. Clean markdown code blocks if present
+    if "```" in text:
+        # Try to find content between ```json and ``` or just ``` and ```
+        import re
+        json_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
+        if json_match:
+            text = json_match.group(1).strip()
+        else:
+            # Fallback: just remove the ``` markers
+            text = text.replace("```json", "").replace("```", "").strip()
 
+    # 2. Try standard parsing
     try:
         return json.loads(text)
     except json.JSONDecodeError:
+        # 3. Last resort: regex search for anything looking like a JSON object
         import re
+        # Find the first { and the last }
         match = re.search(r"\{.*\}", text, re.DOTALL)
         if match:
+            json_str = match.group()
             try:
-                return json.loads(match.group())
+                return json.loads(json_str)
             except:
-                pass
+                # Still failed? Try to clean up trailing commas which often break small LLM outputs
+                try:
+                    cleaned = re.sub(r",\s*([\]}])", r"\1", json_str)
+                    return json.loads(cleaned)
+                except:
+                    pass
         return None

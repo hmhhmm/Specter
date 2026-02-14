@@ -7,6 +7,7 @@ import { ControlDeck } from "@/components/lab/control-deck";
 import { DeviceEmulator } from "@/components/lab/device-emulator";
 import { NeuralMonologue } from "@/components/lab/neural-monologue";
 import { StatusBar } from "@/components/lab/status-bar";
+import { useTTS } from "@/lib/use-tts";
 
 export type SimulationState = "idle" | "scanning" | "analyzing" | "complete";
 
@@ -59,6 +60,7 @@ export default function LabPage() {
   const [network, setNetwork] = useState("wifi");
   const [locale, setLocale] = useState("en-US");
   const [isVoiceEnabled, setIsVoiceEnabled] = useState(true);
+  const { speak, stop: stopTTS } = useTTS(isVoiceEnabled);
   const [currentScreenshot, setCurrentScreenshot] = useState<string | null>(null);
   const [testResults, setTestResults] = useState<any>(null);
   const [logs, setLogs] = useState<string[]>([]);
@@ -150,6 +152,9 @@ export default function LabPage() {
     // Clean up live stream
     stopLiveStream();
     setLiveFrame(null);
+
+    // Stop any ongoing speech
+    stopTTS();
 
     // Clear saved state
     localStorage.removeItem("specter_lab_state");
@@ -317,8 +322,14 @@ export default function LabPage() {
             severity: data.stepData.severity,
             responsible_team: data.stepData.responsible_team,
             ux_issues: data.stepData.ux_issues,
-            alert_sent: data.stepData.alert_sent
+            alert_sent: data.stepData.alert_sent,
+            observation: data.stepData.observation,
+            reasoning: data.stepData.reasoning
           });
+
+          // NOTE: observation and reasoning are NOT available here yet —
+          // screenshot_callback fires BEFORE the LLM returns its plan.
+          // They are logged in the diagnostic_update handler below.
         }
         
         if (data.screenshot) {
@@ -341,8 +352,24 @@ export default function LabPage() {
             ux_issues: data.diagnosticData.ux_issues,
             alert_sent: data.diagnosticData.alert_sent,
             analysis_complete: data.diagnosticData.analysis_complete,
-            dwell_time_ms: data.diagnosticData.dwell_time_ms
+            dwell_time_ms: data.diagnosticData.dwell_time_ms,
+            observation: data.diagnosticData.observation,
+            reasoning: data.diagnosticData.reasoning
           });
+          
+          // Narrate diagnosis if present (vision and reasoning are NOT narrated to reduce lag)
+          if (data.diagnosticData.diagnosis) {
+            speak(data.diagnosticData.diagnosis);
+          }
+          
+          // Log Vision and Thought FIRST (before diagnosis) — natural order
+          // These are only available in diagnostic_update, NOT in step_update
+          if (data.diagnosticData.observation) {
+            addLog(`Vision: ${data.diagnosticData.observation}`);
+          }
+          if (data.diagnosticData.reasoning) {
+            addLog(`Thought: ${data.diagnosticData.reasoning}`);
+          }
           
           // Add detailed diagnostic summary to terminal
           if (data.diagnosticData.diagnosis) {
@@ -382,6 +409,13 @@ export default function LabPage() {
         addLog("Test completed");
         addLog(`Final Results: ${data.results?.passed || 0} passed, ${data.results?.failed || 0} failed`);
         
+        // Narrate completion if there's a reason
+        if (data.results?.reason) {
+          speak(data.results.reason);
+        } else {
+          speak(`Test complete. ${data.results?.passed || 0} steps passed, ${data.results?.failed || 0} issues detected.`);
+        }
+
         // Start countdown for next test (5 minutes = 300 seconds)
         setNextTestCountdown(300);
         
@@ -478,6 +512,7 @@ export default function LabPage() {
             results={testResults}
             currentAction={currentAction}
             maxSteps={5}
+            isVoiceEnabled={isVoiceEnabled}
           />
         </div>
 
