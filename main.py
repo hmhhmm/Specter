@@ -133,8 +133,8 @@ PERSONAS = {
     'zoomer': {
         'name': 'Zoomer (Speedster)',
         'desc': 'Tech-savvy user speed-running the signup',
-        'typing_delay': 0.05,
-        'action_delay': 0.5,
+        'typing_delay': 0.03,
+        'action_delay': 0.3,
         'hesitation': 0.0,
         'system_prompt': """
             You are an impatient, tech-savvy Gen Z user.
@@ -151,9 +151,9 @@ PERSONAS = {
     'boomer': {
         'name': 'Boomer (The Critic)',
         'desc': 'Anxious first-timer who gets stuck easily',
-        'typing_delay': 0.5,
-        'action_delay': 4.0,
-        'hesitation': 5.0,
+        'typing_delay': 0.3,
+        'action_delay': 1.5,
+        'hesitation': 1.0,
         'system_prompt': """
             You are a 65-year-old non-technical user. You are nervous.
             GOAL: Ensure everything is 100% clear before clicking.
@@ -169,9 +169,9 @@ PERSONAS = {
     'skeptic': {
         'name': 'The Skeptic',
         'desc': 'Privacy-focused user checking legal pages',
-        'typing_delay': 0.2,
-        'action_delay': 2.0,
-        'hesitation': 2.0,
+        'typing_delay': 0.15,
+        'action_delay': 0.8,
+        'hesitation': 0.5,
         'system_prompt': """
             You are a paranoid privacy advocate.
             GOAL: Find security flaws and broken links.
@@ -203,9 +203,9 @@ PERSONAS = {
     'mobile': {
         'name': 'Mobile Native',
         'desc': 'User on a small screen with fat fingers',
-        'typing_delay': 0.3,
-        'action_delay': 1.5,
-        'hesitation': 1.0,
+        'typing_delay': 0.2,
+        'action_delay': 0.6,
+        'hesitation': 0.3,
         'system_prompt': """
             You are using a smartphone with a cracked screen under bright sunlight.
             GOAL: Test touch targets and readability.
@@ -654,11 +654,9 @@ async def autonomous_signup_test(
             print(f"{'~' * 55}")
             print(f"Step {step_num}/{max_steps}")
 
-            # Persona timing
-            if step_num > 1 and persona_cfg['hesitation'] > 0:
-                await asyncio.sleep(persona_cfg['hesitation'])
+            # Minimal timing between steps for speed
             if step_num > 1:
-                await asyncio.sleep(persona_cfg['action_delay'])
+                await asyncio.sleep(0.3)  # Just enough for page to stabilize
 
             start_time = datetime.now()
             network_logs.clear()
@@ -829,7 +827,7 @@ async def autonomous_signup_test(
                             otp_result = await reader.wait_for_otp(
                                 sender_filter=sender_filter,
                                 since_timestamp=test_start_time,
-                                timeout_seconds=90
+                                timeout_seconds=120  # Extended timeout for OTP delivery
                             )
 
                             if otp_result['found']:
@@ -862,15 +860,33 @@ async def autonomous_signup_test(
                                     print(f"[OTP] No specific OTP input found, typing into focused element")
                                     await page.keyboard.type(otp_code)
 
-                                await asyncio.sleep(0.5)
-                                verify_btn = await page.query_selector(
-                                    'button[type="submit"], button:has-text("Verify"), button:has-text("Confirm"), '
-                                    'button:has-text("Submit"), button:has-text("Continue"), input[type="submit"]'
-                                )
-                                if verify_btn and await verify_btn.is_visible():
-                                    await verify_btn.click()
-                                    print(f"[OTP] Clicked verify/submit button")
-                                else:
+                                await asyncio.sleep(0.8)  # Wait for auto-complete
+                                
+                                # Try multiple common submit button patterns
+                                verify_selectors = [
+                                    'button[type="submit"]',
+                                    'button:has-text("Verify")',
+                                    'button:has-text("Confirm")',
+                                    'button:has-text("Submit")',
+                                    'button:has-text("Continue")',
+                                    'button:has-text("Next")',
+                                    'input[type="submit"]',
+                                    '[role="button"]:has-text("Verify")',
+                                ]
+                                
+                                verify_btn = None
+                                for selector in verify_selectors:
+                                    try:
+                                        verify_btn = await page.query_selector(selector)
+                                        if verify_btn and await verify_btn.is_visible():
+                                            await verify_btn.click()
+                                            print(f"[OTP] Clicked verify/submit button: {selector}")
+                                            break
+                                        verify_btn = None
+                                    except Exception:
+                                        continue
+                                
+                                if not verify_btn:
                                     await page.keyboard.press('Enter')
                                     print(f"[OTP] Pressed Enter to submit OTP")
 
@@ -906,7 +922,7 @@ async def autonomous_signup_test(
                             link_result = await reader.wait_for_magic_link(
                                 sender_filter=sender_filter,
                                 since_timestamp=test_start_time,
-                                timeout_seconds=90
+                                timeout_seconds=120  # Extended timeout for email delivery
                             )
 
                             if link_result['found']:
@@ -1102,8 +1118,21 @@ async def autonomous_signup_test(
                 step_report['outcome'] = handoff.get('outcome', step_report['outcome'])
                 
                 # Save complete step report with diagnosis
-                with open(os.path.join(reports_dir, f"step_{step_num:02d}_report.json"), 'w') as f:
+                report_path = os.path.join(reports_dir, f"step_{step_num:02d}_report.json")
+                with open(report_path, 'w') as f:
                     json.dump(step_report, f, indent=2)
+                
+                # Ensure GIF is generated for vault evidence (if screenshots exist)
+                try:
+                    screenshot_before = step_report.get('evidence', {}).get('screenshot_before_path')
+                    screenshot_after = step_report.get('evidence', {}).get('screenshot_after_path')
+                    if screenshot_before and screenshot_after:
+                        # GIF should already be generated, but verify it exists
+                        gif_path = os.path.join(reports_dir, f"step_{step_num:02d}.gif")
+                        if not os.path.exists(gif_path):
+                            print(f"  [Vault] Warning: GIF not found for step {step_num}")
+                except Exception as e:
+                    print(f"  [Vault] GIF check error: {e}")
                 
                 results.append({
                     'step': step_num, 'action': action_desc_text,
@@ -1113,9 +1142,19 @@ async def autonomous_signup_test(
                 print(f"  Specter: {pipeline_result}")
                 
                 # AUTO-STOP DETECTION: Prevent wasted tokens on stuck flows
+                if len(results) >= 2:
+                    # Check last 2 actions for repetition (faster detection)
+                    if len(results) >= 2:
+                        last_2_actions = [r.get('action') for r in results[-2:]]
+                        if last_2_actions[0] == last_2_actions[1] and last_2_actions[0]:
+                            print()
+                            print("  🛑 AUTO-STOP: Same action repeated twice")
+                            print(f"  Stuck on: {last_2_actions[0]}")
+                            results.append({'step': step_num + 1, 'result': 'DONE', 'reason': 'Auto-stopped: action repetition detected'})
+                            break
+                
                 if len(results) >= 3:
                     last_3_results = [r.get('result') for r in results[-3:]]
-                    last_3_actions = [r.get('action') for r in results[-3:]]
                     
                     # Stop if stuck in failure loop (3 consecutive failures)
                     if all(result == 'FAIL' for result in last_3_results):
@@ -1123,14 +1162,6 @@ async def autonomous_signup_test(
                         print("  🛑 AUTO-STOP: 3 consecutive failures detected")
                         print("  Flow appears stuck - stopping early to save tokens")
                         results.append({'step': step_num + 1, 'result': 'DONE', 'reason': 'Auto-stopped: stuck in failure loop'})
-                        break
-                    
-                    # Stop if repeating same action (likely stuck)
-                    if last_3_actions[0] == last_3_actions[1] == last_3_actions[2]:
-                        print()
-                        print("  🛑 AUTO-STOP: Same action repeated 3 times")
-                        print(f"  Stuck on: {last_3_actions[0]}")
-                        results.append({'step': step_num + 1, 'result': 'DONE', 'reason': 'Auto-stopped: action repetition detected'})
                         break
                 
                 # Broadcast complete diagnostic data to frontend (after diagnosis)
@@ -1164,6 +1195,17 @@ async def autonomous_signup_test(
     print(f"  Avg Confusion: {avg_confusion:.1f}/10" +
           (" (High!)" if avg_confusion >= 7 else " (Moderate)" if avg_confusion >= 4 else ""))
     print(f"  Reports: {reports_dir}")
+    
+    # Count evidence files saved to vault
+    evidence_count = 0
+    try:
+        for file in os.listdir(reports_dir):
+            if file.endswith(('.png', '.jpg', '.gif', '.json')):
+                evidence_count += 1
+        print(f"  Vault Evidence: {evidence_count} files saved")
+    except Exception:
+        pass
+    
     print("=" * 70)
     
     # 🚨 SEND SUMMARY ALERT ONCE AT END (if there were failures)

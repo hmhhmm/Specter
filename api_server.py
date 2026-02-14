@@ -9,7 +9,7 @@ from fastapi import (
     Response
 )
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 import json
 import os
@@ -18,6 +18,7 @@ from typing import Optional, List
 from pathlib import Path
 import base64
 import asyncio
+from datetime import datetime
 from webqa_agent.browser.session import BrowserSessionPool
 
 # Add parent directory to path
@@ -53,7 +54,7 @@ class TestConfig(BaseModel):
     device: str = "desktop"
     network: str = "wifi"
     persona: str = "normal"  # Always fast normal user
-    max_steps: int = 20
+    max_steps: int = 10  # Optimal for token efficiency
 
 
 class TestResult(BaseModel):
@@ -385,6 +386,82 @@ async def get_test_status(test_id: str):
     return active_tests[test_id]
 
 
+@app.get("/api/reports/list")
+async def list_reports():
+    """List all test report folders."""
+    reports_dir = "reports"
+
+    if not os.path.exists(reports_dir):
+        return {"reports": [], "total": 0}
+
+    folders = sorted(
+        [
+            f
+            for f in os.listdir(reports_dir)
+            if os.path.isdir(os.path.join(reports_dir, f))
+        ],
+        reverse=True,
+    )
+
+    reports = []
+    for folder in folders:
+        folder_path = os.path.join(reports_dir, folder)
+        report_data = parse_report_folder(folder_path)
+        
+        # Parse timestamp from folder name (e.g., "test_1770983514" -> epoch or "test_2026-02-13_19-52-19")
+        formatted_time = folder
+        try:
+            if "_" in folder:
+                parts = folder.split("_")
+                if len(parts) >= 2:
+                    # Try epoch timestamp
+                    try:
+                        epoch = int(parts[1])
+                        formatted_time = datetime.fromtimestamp(epoch).isoformat()
+                    except (ValueError, OSError):
+                        # Try formatted timestamp
+                        if "-" in parts[1]:
+                            formatted_time = "_".join(parts[1:]).replace("_", " ")
+        except Exception:
+            pass
+        
+        # Calculate severity breakdown
+        severity_breakdown = {"P0": 0, "P1": 0, "P2": 0, "P3": 0}
+        for incident in report_data["incidents"]:
+            severity = incident.get("severity", "P3")
+            if severity in severity_breakdown:
+                severity_breakdown[severity] += 1
+        
+        # Collect evidence files (screenshots, GIFs)
+        evidence_files = report_data.get("evidence_files", [])
+        
+        reports.append(
+            {
+                "id": folder,
+                "timestamp": formatted_time,
+                "incident_count": len(report_data["incidents"]),
+                "avg_f_score": report_data["avg_f_score"],
+                "step_count": report_data["step_count"],
+                "incidents": report_data["incidents"],
+                "severity_breakdown": severity_breakdown,
+                "evidence_files": evidence_files,
+            }
+        )
+
+    return {"reports": reports, "total": len(reports)}
+
+
+@app.get("/api/reports/details/{report_id:path}")
+async def get_report_details(report_id: str):
+    """Get detailed report for a specific test run."""
+    report_path = os.path.join("reports", report_id)
+
+    if not os.path.exists(report_path):
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    return parse_report_folder(report_path)
+
+
 @app.get("/api/reports/{path:path}")
 async def get_report_file(path: str):
     """Serve report files (screenshots, GIFs, etc.)."""
@@ -602,6 +679,16 @@ def parse_report_folder(folder_path: str) -> dict:
     incidents = []
     total_f_score = 0
     step_count = 0
+    evidence_files = []
+
+    # Collect evidence files (screenshots, GIFs, etc.)
+    for filename in os.listdir(folder_path):
+        if filename.endswith(('.png', '.jpg', '.jpeg', '.gif')):
+            evidence_files.append({
+                "name": filename,
+                "path": f"{folder_name}/{filename}",
+                "type": "gif" if filename.endswith('.gif') else "screenshot"
+            })
 
     # Find all step report JSON files
     for filename in os.listdir(folder_path):
@@ -680,6 +767,7 @@ def parse_report_folder(folder_path: str) -> dict:
         "incidents": incidents,
         "avg_f_score": total_f_score / step_count if step_count > 0 else 0,
         "step_count": step_count,
+        "evidence_files": evidence_files,
     }
 
 
@@ -744,52 +832,6 @@ async def list_incidents(limit: int = 50):
     )
 
     return {"incidents": all_incidents[:limit], "total": len(all_incidents)}
-
-
-@app.get("/api/reports/list")
-async def list_reports():
-    """List all test report folders."""
-    reports_dir = "reports"
-
-    if not os.path.exists(reports_dir):
-        return {"reports": [], "total": 0}
-
-    folders = sorted(
-        [
-            f
-            for f in os.listdir(reports_dir)
-            if os.path.isdir(os.path.join(reports_dir, f))
-        ],
-        reverse=True,
-    )
-
-    reports = []
-    for folder in folders:
-        folder_path = os.path.join(reports_dir, folder)
-        report_data = parse_report_folder(folder_path)
-        reports.append(
-            {
-                "id": folder,
-                "timestamp": folder,
-                "incident_count": len(report_data["incidents"]),
-                "avg_f_score": report_data["avg_f_score"],
-                "step_count": report_data["step_count"],
-            }
-        )
-
-    return {"reports": reports, "total": len(reports)}
-
-
-@app.get("/api/reports/details/{report_id:path}")
-async def get_report_details(report_id: str):
-    """Get detailed report for a specific test run."""
-    report_path = os.path.join("reports", report_id)
-
-    if not os.path.exists(report_path):
-        raise HTTPException(status_code=404, detail="Report not found")
-
-    report_data = parse_report_folder(report_path)
-    return report_data
 
 
 # ======================================================================
