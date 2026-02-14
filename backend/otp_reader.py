@@ -116,8 +116,10 @@ class OTPReader:
         if dt.tzinfo is not None:
             # Convert timezone-aware to UTC then strip tzinfo
             return dt.astimezone(timezone.utc).replace(tzinfo=None)
-        # Assume naive datetime is local time, convert to UTC
-        return dt
+        # Assume naive datetime is local time — convert to UTC properly
+        # Attach local timezone, then convert to UTC, then strip tzinfo
+        local_tz = datetime.now(timezone.utc).astimezone().tzinfo
+        return dt.replace(tzinfo=local_tz).astimezone(timezone.utc).replace(tzinfo=None)
 
     def _fetch_otp_sync(
         self,
@@ -142,8 +144,8 @@ class OTPReader:
                 return {"found": False, "error": f"IMAP login failed: {err_msg}"}
             print(f"[OTP-IMAP] Logged in as {self.email_address}")
             
-            # Apply a 5-minute buffer to since_timestamp to avoid missing emails due to clock skew
-            safe_since = since_timestamp - timedelta(minutes=5)
+            # Apply a 15-minute buffer to since_timestamp to avoid missing emails due to clock skew
+            safe_since = since_timestamp - timedelta(minutes=15)
             
             # Try multiple folders: INBOX first, then Spam/Junk
             folders_to_check = ['INBOX', '[Gmail]/Spam', '[Gmail]/All Mail']
@@ -173,8 +175,8 @@ class OTPReader:
                 email_ids = messages[0].split()
                 print(f"[OTP-IMAP] Folder '{folder}': found {len(email_ids)} emails since {date_str}")
                 
-                # Process emails in reverse order (newest first) - check latest 20 max
-                for email_id in list(reversed(email_ids))[:20]:
+                # Process emails in reverse order (newest first) - check latest 50 max
+                for email_id in list(reversed(email_ids))[:50]:
                     try:
                         # Fetch email
                         status, msg_data = mail.fetch(email_id, '(RFC822)')
@@ -203,8 +205,19 @@ class OTPReader:
                         # Debug: log recent email subjects to help diagnose
                         print(f"[OTP-IMAP]   Checking email: '{subject}' from '{sender}' at {email_date}")
                         
-                        # Search for OTP code
-                        matches = re.findall(otp_pattern, body)
+                        # Search for OTP code in body AND subject
+                        combined_text = f"{subject} {body}"
+                        matches = re.findall(otp_pattern, combined_text)
+                        if not matches:
+                            # Broader fallback: look for "code is XXXXXX" or "code: XXXXXX" patterns
+                            broader = re.findall(r'(?:code|Code|CODE|OTP|otp|pin|PIN|token)[:\s]+(\d{4,8})', combined_text)
+                            if broader:
+                                matches = broader
+                        if not matches:
+                            # Even broader: "Your verification code is 123456"
+                            broader2 = re.findall(r'(?:verification|confirm|verify|security)\s+(?:code|number|pin)[:\s]+(\d{4,8})', combined_text, re.IGNORECASE)
+                            if broader2:
+                                matches = broader2
                         if matches:
                             # Return first match
                             code = matches[0]

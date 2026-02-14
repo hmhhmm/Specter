@@ -1,11 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Octokit } from "@octokit/core";
-import { createPullRequest } from "octokit-plugin-create-pull-request";
 import fs from "fs";
 import path from "path";
 import { HEALER_SCENARIOS } from "@/lib/specter-healer/scenarios";
-
-const MyOctokit = Octokit.plugin(createPullRequest);
 
 export async function POST(req: NextRequest) {
   try {
@@ -29,56 +26,27 @@ export async function POST(req: NextRequest) {
     }
     const currentCode = fs.readFileSync(fullPath, "utf-8");
 
-    // 3. Call NVIDIA NIM for the fix
-    const nvidiaApiKey = process.env.NVIDIA_API_KEY;
-    if (!nvidiaApiKey) {
-      return NextResponse.json({ error: "NVIDIA_API_KEY missing" }, { status: 500 });
-    }
-
-    const systemPrompt = `You are a Senior Frontend Engineer at Specter.AI. 
-Your task is to fix a bug in a React component detected by our QA agent.
-You must return the ENTIRE corrected file content. 
-DO NOT include any explanation or markdown commentary. 
-ONLY return the code inside a single markdown code block.
-
-Bug Title: ${title}
-Bug Description: ${description}
-${scenario ? `Fix Hint: ${scenario.fixHint}` : ""}
-
-Ensure the fix is professional and follows the existing code style.`;
-
-    const userPrompt = `Here is the current content of ${filePath}:
-
-\`\`\`tsx
-${currentCode}
-\`\`\`
-
-Please provide the full corrected version of this file.`;
-
-    const response = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
+    // 3. Call backend AI endpoint for the fix
+    const backendResponse = await fetch("http://localhost:8000/api/ai/fix-code", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${nvidiaApiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "meta/llama-3.3-70b-instruct",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-        temperature: 0.2,
-        max_tokens: 4096,
+        filePath,
+        currentCode,
+        title,
+        description,
+        fixHint: scenario?.fixHint || "",
       }),
     });
 
-    if (!response.ok) {
-      const errorData = await response.text();
-      return NextResponse.json({ error: `LLM API failed: ${errorData}` }, { status: 500 });
+    if (!backendResponse.ok) {
+      return NextResponse.json({ error: "Backend AI service failed" }, { status: 500 });
     }
 
-    const result = await response.json();
-    const llmOutput = result.choices[0].message.content;
+    const result = await backendResponse.json();
+    const llmOutput = result.fixedCode;
 
     // Extract code from markdown block
     const codeMatch = llmOutput.match(/```(?:tsx|jsx|typescript|javascript|)\n([\s\S]*?)```/) || 
@@ -107,25 +75,72 @@ Please provide the full corrected version of this file.`;
       });
     }
 
-    const octokit = new MyOctokit({ auth: githubToken });
+    const octokit = new Octokit({ auth: githubToken });
     const branchName = `fix/specter-patch-${Date.now()}`;
 
-    // Verify repository exists and get correct casing if needed
-    let finalOwner = owner;
-    let finalRepo = repo;
-    
-    try {
-      const { data: repository } = await octokit.request("GET /repos/{owner}/{repo}", { owner, repo });
-      finalOwner = repository.owner.login;
-      finalRepo = repository.name;
-    } catch (e) {
-      console.warn(`[Healer API] Could not verify repo ${owner}/${repo}, proceeding with original values.`);
-    }
+    // 1. Get the latest commit SHA from main branch
+    const { data: refData } = await octokit.request('GET /repos/{owner}/{repo}/git/ref/{ref}', {
+      owner,
+      repo,
+      ref: 'heads/main',
+    });
+    const mainSha = refData.object.sha;
 
-    const prResponse = await octokit.createPullRequest({
-      owner: finalOwner,
-      repo: finalRepo,
+    // 2. Get the commit to get the tree SHA
+    const { data: commitData } = await octokit.request('GET /repos/{owner}/{repo}/git/commits/{commit_sha}', {
+      owner,
+      repo,
+      commit_sha: mainSha,
+    });
+    const baseTreeSha = commitData.tree.sha;
+
+    // 3. Create a blob for the new file content
+    const { data: blobData } = await octokit.request('POST /repos/{owner}/{repo}/git/blobs', {
+      owner,
+      repo,
+      content: Buffer.from(fixedCode).toString('base64'),
+      encoding: 'base64',
+    });
+
+    // 4. Create a new tree with the updated file
+    const { data: newTree } = await octokit.request('POST /repos/{owner}/{repo}/git/trees', {
+      owner,
+      repo,
+      base_tree: baseTreeSha,
+      tree: [
+        {
+          path: filePath,
+          mode: '100644',
+          type: 'blob',
+          sha: blobData.sha,
+        },
+      ],
+    });
+
+    // 5. Create a new commit
+    const { data: newCommit } = await octokit.request('POST /repos/{owner}/{repo}/git/commits', {
+      owner,
+      repo,
+      message: `fix: autonomously resolve ${title.toLowerCase()}`,
+      tree: newTree.sha,
+      parents: [mainSha],
+    });
+
+    // 6. Create a new branch with the commit
+    await octokit.request('POST /repos/{owner}/{repo}/git/refs', {
+      owner,
+      repo,
+      ref: `refs/heads/${branchName}`,
+      sha: newCommit.sha,
+    });
+
+    // 7. Create the pull request
+    const { data: prData } = await octokit.request('POST /repos/{owner}/{repo}/pulls', {
+      owner,
+      repo,
       title: `[Specter Bot] Fix: ${title}`,
+      head: branchName,
+      base: 'main',
       body: `## 🔮 Specter Autonomous Healing
       
 ### Bug Report
@@ -134,31 +149,17 @@ Please provide the full corrected version of this file.`;
 - **Severity:** ${scenario?.severity || "P2"}
 
 ### Resolution
-This PR was automatically generated by the Specter Healer agent using Llama 3.3 70B.
+This PR was automatically generated by the Specter Healer agent.
 
 **Target File:** \`${filePath}\`
 
 Please review the changes and merge if they meet requirements.`,
-      head: branchName,
-      base: "main",
-      changes: [
-        {
-          files: {
-            [filePath]: fixedCode,
-          },
-          commit: `fix: autonomously resolve ${title.toLowerCase()}`,
-        },
-      ],
     });
-
-    if (!prResponse) {
-        throw new Error("Failed to create pull request");
-    }
 
     return NextResponse.json({
       success: true,
-      prUrl: prResponse.data.html_url,
-      prNumber: prResponse.data.number,
+      prUrl: prData.html_url,
+      prNumber: prData.number,
       codeBefore: currentCode,
       codeAfter: fixedCode,
       filePath,

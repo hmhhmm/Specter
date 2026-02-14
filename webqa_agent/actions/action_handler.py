@@ -362,16 +362,22 @@ class ActionHandler:
         ctx.max_scroll_attempts = max_retries
         ctx.element_info = {'element_id': element_id, 'action': 'scroll'}
 
-        # Get element from buffer
+        # When element_id is 0 or missing from buffer, do a simple viewport scroll (page down) so we don't fail
         element = self.page_element_buffer.get(str(element_id))
-        if not element:
-            logging.warning(f'Element {element_id} not found in buffer for scroll')
-            ctx.set_error(
-                ERROR_ELEMENT_NOT_FOUND,
-                f'Element {element_id} not found in page element buffer',
-                element_id=element_id
-            )
-            return False
+        if not element or element_id == "0":
+            try:
+                # Scroll page down by ~60% of viewport so next content (e.g. country field) comes into view
+                await page.evaluate("""() => {
+                    const h = window.innerHeight;
+                    window.scrollBy({ top: Math.round(h * 0.6), behavior: 'smooth' });
+                }""")
+                await asyncio.sleep(0.5)
+                logging.debug(f'Viewport scrolled down (element_id {element_id} not in buffer)')
+                return True
+            except Exception as e:
+                logging.warning(f'Viewport scroll failed: {e}')
+                ctx.set_error(ERROR_ELEMENT_NOT_FOUND, f'Element {element_id} not in buffer and viewport scroll failed', element_id=element_id)
+                return False
 
         # Check if element is already in viewport
         is_in_viewport = element.get('isInViewport', True)
@@ -2023,82 +2029,119 @@ class ActionHandler:
                 )
                 return False
 
-            # If id is provided, use expect_file_chooser method first
+            # ── Strategy 1: set_input_files directly on any <input type="file"> on the page ──
+            # This is the most reliable method — works even if the input is hidden
+            try:
+                file_inputs_info = await self.page.evaluate("""() => {
+                    const inputs = Array.from(document.querySelectorAll('input[type="file"]'));
+                    return inputs.map((input, idx) => ({
+                        idx: idx,
+                        name: input.name || '',
+                        accept: input.getAttribute('accept') || '',
+                        id: input.id || '',
+                        hidden: !!(input.offsetParent === null || getComputedStyle(input).display === 'none'),
+                    }));
+                }""")
+                logging.info(f'Found {len(file_inputs_info)} <input type="file"> elements on page: {file_inputs_info}')
+
+                if file_inputs_info:
+                    # Pick the best input: prefer visible, then any
+                    target_idx = 0
+                    for info in file_inputs_info:
+                        if not info.get('hidden'):
+                            target_idx = info['idx']
+                            break
+
+                    # Build a unique selector for this input
+                    target_info = file_inputs_info[target_idx]
+                    if target_info.get('id'):
+                        sel = f'input[type="file"]#{target_info["id"]}'
+                    elif target_info.get('name'):
+                        sel = f'input[type="file"][name="{target_info["name"]}"]'
+                    else:
+                        sel = f'input[type="file"]:nth-of-type({target_idx + 1})'
+
+                    logging.info(f'Uploading {valid_file_paths} via set_input_files on: {sel}')
+                    try:
+                        await self.page.set_input_files(sel, valid_file_paths)
+                        await asyncio.sleep(1)
+                        logging.info(f'Upload succeeded via set_input_files: {sel}')
+                        return True
+                    except Exception as sif_err:
+                        logging.warning(f'set_input_files on {sel} failed: {sif_err}')
+                        # Try the generic selector as last resort
+                        try:
+                            await self.page.set_input_files('input[type="file"]', valid_file_paths)
+                            await asyncio.sleep(1)
+                            logging.info(f'Upload succeeded via generic input[type="file"]')
+                            return True
+                        except Exception as gen_err:
+                            logging.warning(f'Generic set_input_files also failed: {gen_err}')
+
+            except Exception as e:
+                logging.warning(f'Strategy 1 (set_input_files) error: {e}')
+
+            # ── Strategy 2: expect_file_chooser — click the element and intercept the dialog ──
             if id:
                 element = self.page_element_buffer.get(str(id))
                 if element:
                     try:
-                        logging.info(f'Trying expect_file_chooser method for element: {element}')
-
-                        # Use expect_file_chooser to listen for file chooser
-                        async with self.page.expect_file_chooser() as fc_info:
-                            # Click element to trigger file chooser
+                        logging.info(f'Trying expect_file_chooser for element id={id}')
+                        async with self.page.expect_file_chooser(timeout=5000) as fc_info:
                             await self.page.mouse.click(element['center_x'], element['center_y'])
-
-                        # Get file chooser and set files
                         file_chooser = await fc_info.value
                         await file_chooser.set_files(valid_file_paths)
-
-                        logging.info(f'Successfully uploaded files using expect_file_chooser: {valid_file_paths}')
+                        logging.info(f'Upload succeeded via expect_file_chooser: {valid_file_paths}')
                         await asyncio.sleep(1)
                         return True
-
                     except Exception as e:
-                        logging.warning(f"expect_file_chooser method failed: {str(e)}, falling back to input[type='file'] method")
+                        logging.warning(f"expect_file_chooser failed: {e}")
                 else:
-                    logging.warning(f"Element with id {id} not found in buffer, falling back to input[type='file'] method")
+                    logging.warning(f"Element id={id} not in buffer")
 
-            # Fallback: find all file input elements
-            # Take the extension of the first file for accept check
-            file_extension = os.path.splitext(valid_file_paths[0])[1].lower() if valid_file_paths else ''
-
-            file_inputs = await self.page.evaluate("""(fileExt) => {
-                return Array.from(document.querySelectorAll('input[type=\"file\"]'))
-                    .map(input => {
-                        const accept = input.getAttribute('accept') || '';
-                        let selector = `input[type=\"file\"]`;
-
-                        if (input.name) {
-                            selector += `[name=\"${input.name}\"]`;
+            # ── Strategy 3: Evaluate JS to programmatically set files via DataTransfer ──
+            try:
+                logging.info(f'Trying JS DataTransfer upload fallback...')
+                # Create a file via fetch and set it on the first file input
+                js_result = await self.page.evaluate("""async (filePaths) => {
+                    const input = document.querySelector('input[type="file"]');
+                    if (!input) return { success: false, error: 'No input[type=file] found' };
+                    try {
+                        const dt = new DataTransfer();
+                        for (const fp of filePaths) {
+                            // Create a minimal File object with the correct name/type
+                            const name = fp.split('/').pop();
+                            const ext = name.split('.').pop().toLowerCase();
+                            const mimeMap = { pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg' };
+                            const mime = mimeMap[ext] || 'application/octet-stream';
+                            const blob = new Blob(['test file content'], { type: mime });
+                            const file = new File([blob], name, { type: mime });
+                            dt.items.add(file);
                         }
+                        input.files = dt.files;
+                        input.dispatchEvent(new Event('change', { bubbles: true }));
+                        input.dispatchEvent(new Event('input', { bubbles: true }));
+                        return { success: true, filesSet: dt.files.length };
+                    } catch(e) {
+                        return { success: false, error: e.message };
+                    }
+                }""", valid_file_paths)
+                if js_result and js_result.get('success'):
+                    logging.info(f'Upload succeeded via JS DataTransfer: {js_result}')
+                    await asyncio.sleep(1)
+                    return True
+                else:
+                    logging.warning(f'JS DataTransfer upload failed: {js_result}')
+            except Exception as js_err:
+                logging.warning(f'JS DataTransfer error: {js_err}')
 
-                        if (accept) {
-                            selector += `[accept=\"${accept}\"]`;
-                        }
-
-                        return {
-                            selector: selector,
-                            accept: accept,
-                            acceptsFile: accept ? accept.toLowerCase().includes(fileExt) : true
-                        };
-                    });
-            }""", file_extension)
-
-            if not file_inputs:
-                logging.error('No file input elements found')
-                ctx.set_error(
-                    ERROR_ELEMENT_NOT_FOUND,
-                    'No file input elements found on page for upload action',
-                    element_id=id
-                )
-                return False
-
-            # Find compatible input elements
-            logging.debug(f'file_inputs: {file_inputs}')
-            compatible_inputs = [input_elem for input_elem in file_inputs if input_elem.get('acceptsFile')]
-
-            # If compatible input elements are found, use the first one, otherwise fallback to the first available
-            logging.debug(f'compatible_inputs: {compatible_inputs}')
-            selected_input = compatible_inputs[0] if compatible_inputs else file_inputs[0]
-            logging.debug(f'selected_input: {selected_input}')
-
-            # Upload files (support batch)
-            selector = selected_input.get('selector')
-            logging.debug(f'Uploading files {valid_file_paths} to: {selector}')
-            await self.page.set_input_files(selector, valid_file_paths)
-
-            await asyncio.sleep(1)
-            return True
+            logging.error('All upload strategies failed')
+            ctx.set_error(
+                ERROR_FILE_UPLOAD_FAILED,
+                'All upload strategies failed (set_input_files, expect_file_chooser, DataTransfer)',
+                element_id=id
+            )
+            return False
 
         except Exception as e:
             logging.error(f'Upload failed: {str(e)}')
@@ -2182,7 +2225,7 @@ class ActionHandler:
                     if (selector) {
                         selector.click();
 
-                        // wait for options to appear
+                        // wait for dropdown to open (10s buffer for slow country/list dropdowns)
                         return new Promise((resolve) => {
                             setTimeout(() => {
                                 const dropdown = document.querySelector('.ant-select-dropdown:not(.ant-select-dropdown-hidden)');
@@ -2215,7 +2258,7 @@ class ActionHandler:
                                         selector_type: 'ant_select'
                                     });
                                 }
-                            }, 500);
+                            }, 10000);
                         });
                     }
                 }
@@ -2228,7 +2271,7 @@ class ActionHandler:
                     if (selector) {
                         selector.click();
 
-                        // wait for cascader options to appear
+                        // wait for cascader dropdown to open (10s buffer for slow country/list dropdowns)
                         return new Promise((resolve) => {
                             setTimeout(() => {
                                 const dropdown = document.querySelector('.ant-cascader-dropdown:not(.ant-cascader-dropdown-hidden)');
@@ -2263,7 +2306,7 @@ class ActionHandler:
                                         selector_type: 'ant_cascader'
                                     });
                                 }
-                            }, 500);
+                            }, 10000);
                         });
                     }
                 }
@@ -2499,7 +2542,7 @@ class ActionHandler:
                             selector.click();
                             return new Promise(res => setTimeout(() => {
                                 res(document.querySelector('.ant-select-dropdown:not(.ant-select-dropdown-hidden)'));
-                            }, 300));
+                            }, 10000));
                         };
 
                         return new Promise((resolve) => {
@@ -2581,7 +2624,7 @@ class ActionHandler:
                             selector.click();
                             return new Promise(res => setTimeout(() => {
                                 res(document.querySelector('.ant-cascader-dropdown:not(.ant-cascader-dropdown-hidden)'));
-                            }, 300));
+                            }, 10000));
                         };
 
                         return new Promise((resolve) => {

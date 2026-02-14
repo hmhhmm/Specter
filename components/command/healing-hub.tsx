@@ -13,6 +13,7 @@ interface HealingSuggestion {
   code_before: string;
   code_after: string;
   impact: string;
+  confidence?: number;
 }
 
 export function HealingHub() {
@@ -38,7 +39,8 @@ export function HealingHub() {
               description: "Improve fee visibility contrast",
               code_before: ".checkout-fee { color: #0a0a0c; }",
               code_after: ".checkout-fee { color: #f4f4f5; }",
-              impact: "High friction: Fee value is invisible on dark background."
+              impact: "High friction: Fee value is invisible on dark background.",
+              confidence: 95
             });
           }
         }
@@ -52,7 +54,8 @@ export function HealingHub() {
           description: "Improve fee visibility contrast",
           code_before: ".checkout-fee { color: #0a0a0c; }",
           code_after: ".checkout-fee { color: #f4f4f5; }",
-          impact: "High friction: Fee value is invisible on dark background."
+          impact: "High friction: Fee value is invisible on dark background.",
+          confidence: 95
         });
       } finally {
         setLoading(false);
@@ -62,7 +65,7 @@ export function HealingHub() {
   }, []);
 
   const handleOpenPR = async () => {
-    if (!suggestion) return;
+    if (!suggestion || !canOpenPR) return;
     
     setHealingInProgress(true);
     try {
@@ -81,7 +84,9 @@ export function HealingHub() {
 
       if (response.ok) {
         const data = await response.json();
-        setPrUrl(data.prUrl);
+        if (data.prUrl) {
+          setPrUrl(data.prUrl);
+        }
         // Update suggestion with REAL AI code if available
         if (data.codeBefore && data.codeAfter) {
           setSuggestion({
@@ -91,10 +96,13 @@ export function HealingHub() {
           });
         }
       } else {
-        console.error("Failed to trigger healer");
+        const errorData = await response.json();
+        console.error("Failed to create PR:", errorData);
+        alert(`Failed to create PR: ${errorData.error || 'Unknown error'}`);
       }
     } catch (err) {
-      console.error("Error triggering healer:", err);
+      console.error("Error creating PR:", err);
+      alert('Error creating PR. Check console for details.');
     } finally {
       setHealingInProgress(false);
     }
@@ -107,37 +115,56 @@ export function HealingHub() {
   // Parse code lines for display
   const beforeLines = codeBefore.split("\n");
   const afterLines = codeAfter.split("\n");
+  const confidence = suggestion?.confidence || 0;
+  const canOpenPR = confidence >= 80;
 
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Autonomous Remediation Card - fixed height container */}
-      <div className="rounded-[2.5rem] bg-zinc-900/40 border border-emerald-500/10 p-6 flex flex-col flex-1 min-h-0 relative overflow-hidden group shadow-lg">
-        {/* Glow Accent */}
-        <div className="absolute top-0 right-0 w-48 h-48 bg-emerald-500/5 blur-3xl pointer-events-none group-hover:bg-emerald-500/10 transition-colors duration-700" />
+      <div className="rounded-lg bg-zinc-900/60 border border-zinc-800 p-4 flex flex-col flex-1 min-h-0 relative overflow-hidden">
         
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center relative">
-              <Cpu className="w-5 h-5 text-emerald-500" />
-              <motion.div 
-                animate={{ opacity: [0, 1, 0] }}
-                transition={{ duration: 2, repeat: Infinity }}
-                className="absolute inset-0 bg-emerald-500/20 blur-md rounded-xl"
-              />
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded bg-zinc-800/50 border border-zinc-700 flex items-center justify-center">
+              <Cpu className="w-4 h-4 text-blue-400" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-white tracking-tight">Auto-Remediation</h3>
-              <p className="text-[10px] text-emerald-500/60 font-mono uppercase tracking-widest font-bold">Neural Engine Active</p>
+              <h3 className="text-sm font-semibold text-white">Auto-Remediation</h3>
+              <p className="text-[10px] text-zinc-500 uppercase tracking-wide">System Active</p>
             </div>
           </div>
           
-          <div className="flex items-center gap-2">
-            <div className="flex -space-x-2">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="w-6 h-6 rounded-full border border-zinc-950 bg-zinc-900 flex items-center justify-center">
-                  <div className="w-3 h-3 rounded-full bg-emerald-500/20 animate-pulse" />
-                </div>
-              ))}
+          <div className="flex items-center gap-3">
+            {/* Circular Confidence Indicator */}
+            <div className="relative w-12 h-12">
+              <svg className="transform -rotate-90 w-12 h-12">
+                <circle
+                  cx="24"
+                  cy="24"
+                  r="20"
+                  stroke="currentColor"
+                  strokeWidth="3"
+                  fill="none"
+                  className="text-zinc-800"
+                />
+                <circle
+                  cx="24"
+                  cy="24"
+                  r="20"
+                  stroke="currentColor"
+                  strokeWidth="3"
+                  fill="none"
+                  strokeDasharray={`${2 * Math.PI * 20}`}
+                  strokeDashoffset={`${2 * Math.PI * 20 * (1 - confidence / 100)}`}
+                  className={confidence >= 80 ? 'text-emerald-500' : 'text-amber-500'}
+                  strokeLinecap="round"
+                />
+              </svg>
+              <div className="absolute inset-0 flex items-center justify-center">
+                <span className={`text-[10px] font-bold ${confidence >= 80 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                  {confidence}%
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -168,23 +195,41 @@ export function HealingHub() {
               <ExternalLink className="w-3 h-3 ml-1" />
             </GlowButton>
           ) : (
-            <GlowButton 
-              onClick={handleOpenPR}
-              disabled={healingInProgress || loading}
-              className="w-full py-4 text-[10px] tracking-[0.2em] uppercase flex items-center justify-center gap-3 font-bold group/btn"
-            >
-              {healingInProgress ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Healing in Progress...
-                </>
-              ) : (
-                <>
-                  <Github className="w-4 h-4 group-hover/btn:scale-110 transition-transform" />
-                  Open GitHub Pull Request
-                </>
+            <>
+              <GlowButton 
+                onClick={handleOpenPR}
+                disabled={healingInProgress || loading || !canOpenPR}
+                className="w-full py-4 text-[10px] tracking-[0.2em] uppercase flex items-center justify-center gap-3 font-bold group/btn disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {healingInProgress ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Generating Fix...
+                  </>
+                ) : (
+                  <>
+                    <Github className="w-4 h-4" />
+                    Open GitHub Pull Request
+                    <ChevronRight className="w-3 h-3 ml-1 group-hover/btn:translate-x-1 transition-transform" />
+                  </>
+                )}
+              </GlowButton>
+              {!canOpenPR && (
+                <div className="mt-3 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-start gap-2">
+                  <div className="w-4 h-4 rounded-full bg-amber-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <span className="text-amber-400 text-[10px] font-bold">!</span>
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-[10px] font-medium text-amber-400 leading-relaxed">
+                      Manual review required
+                    </p>
+                    <p className="text-[9px] text-amber-500/70 mt-0.5">
+                      Confidence below threshold (80%)
+                    </p>
+                  </div>
+                </div>
               )}
-            </GlowButton>
+            </>
           )}
         </div>
 

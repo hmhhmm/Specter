@@ -2,8 +2,6 @@
 
 import { motion } from "framer-motion";
 import { SpecterNav } from "@/components/landing/specter-nav";
-import { StatusBar } from "@/components/lab/status-bar";
-import { AIBriefing } from "@/components/command/ai-briefing";
 import { IntelligencePanel } from "@/components/command/intelligence-panel";
 import { RevenueEpicenter } from "@/components/command/revenue-epicenter";
 import { HealingHub } from "@/components/command/healing-hub";
@@ -23,21 +21,17 @@ export default function CommandPage() {
       </div>
 
       {/* Page Content */}
-      <div className="relative z-10 flex flex-col min-h-screen">
+      <div className="relative z-10 flex flex-col h-screen">
         <SpecterNav />
 
-        <div className="mt-28">
-          <AIBriefing />
-        </div>
-
-        <div className="flex-1 p-6 md:p-8 max-w-[1600px] mx-auto w-full mb-10 min-h-0 flex flex-col">
-          <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr_350px] gap-6 h-[calc(100vh-13rem)] min-h-[520px] items-stretch">
+        <div className="flex-1 px-8 py-6 max-w-[1650px] mx-auto w-full overflow-hidden mt-20">
+          <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr_340px] gap-6 h-full max-h-full">
             {/* Left Panel */}
             <motion.div
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.6, delay: 0.2 }}
-              className="min-h-0 overflow-hidden flex flex-col"
+              className="h-full overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent"
             >
               <IntelligencePanel />
             </motion.div>
@@ -47,7 +41,7 @@ export default function CommandPage() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.1 }}
-              className="min-h-0 overflow-hidden flex flex-col"
+              className="h-full overflow-hidden"
             >
               <RevenueEpicenter />
             </motion.div>
@@ -57,17 +51,12 @@ export default function CommandPage() {
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.6, delay: 0.3 }}
-              className="min-h-0 overflow-hidden flex flex-col"
+              className="h-full overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent"
             >
               <HealingHub />
             </motion.div>
           </div>
         </div>
-
-        <StatusBar
-          state="complete"
-          onTerminate={() => (window.location.href = "/")}
-        />
       </div>
     </main>
   );

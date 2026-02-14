@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "run": "concurrently -n backend,frontend -c blue,green \"python3 run_dev.py\" \"npm run dev\""
   },
   "dependencies": {
     "@octokit/core": "^7.0.6",
@@ -25,6 +26,7 @@
     "tailwind-merge": "^3.4.0"
   },
   "devDependencies": {
+    "concurrently": "^9.1.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",

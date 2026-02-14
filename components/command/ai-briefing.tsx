@@ -14,7 +14,7 @@ export function AIBriefing() {
         const response = await fetch("http://localhost:8000/api/dashboard/stats");
         if (response.ok) {
           const data = await response.json();
-          setText(data.ai_briefing || "System stable. No critical issues detected.");
+          setText(data.ai_briefing || "Stable. No critical issues detected.");
         }
       } catch (err) {
         setText("Backend connection pending. Run tests to populate dashboard.");
@@ -26,23 +26,7 @@ export function AIBriefing() {
   }, []);
   
   return (
-    <div className="w-full bg-zinc-900/40 border-b border-amber-500/10 backdrop-blur-md px-8 py-3 flex items-center gap-4 overflow-hidden">
-      <div className="flex items-center gap-2 shrink-0">
-        <div className="relative">
-          <Brain className="w-4 h-4 text-amber-500" />
-          <motion.div 
-            animate={{ opacity: [0.2, 1, 0.2] }}
-            transition={{ duration: 2, repeat: Infinity }}
-            className="absolute inset-0 bg-amber-500 blur-sm rounded-full -z-10"
-          />
-        </div>
-        <span className="text-[10px] font-mono text-amber-500/60 uppercase tracking-widest font-bold">
-          AI Briefing
-        </span>
-      </div>
-      
-      <div className="h-4 w-px bg-white/5" />
-      
+    <div className="w-full bg-zinc-900/60 border-b border-zinc-800 backdrop-blur-sm px-8 py-3 flex items-center gap-4 overflow-hidden">
       <div className="font-mono text-[11px] text-zinc-400 tracking-tight">
         <motion.span
           initial={{ opacity: 0 }}
