@@ -63,9 +63,9 @@ export function RevenueEpicenter() {
   let accumulatedOffset = 0;
 
   return (
-    <div className="flex flex-col gap-6 h-full">
+    <div className="flex flex-col gap-4 h-full max-h-full">
       {/* Revenue Ticker */}
-      <div className="rounded-[3rem] bg-zinc-900/20 border border-white/5 p-8 md:p-12 flex flex-col items-center justify-center relative overflow-hidden min-h-[380px]">
+      <div className="rounded-lg bg-zinc-900/60 border border-zinc-800 p-8 flex flex-col items-center justify-center relative overflow-hidden" style={{height: '55%'}}>
         <div className="absolute inset-0 bg-gradient-to-b from-amber-500/5 to-transparent pointer-events-none" />
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-amber-500/5 blur-[120px] rounded-full pointer-events-none" />
         
@@ -89,14 +89,14 @@ export function RevenueEpicenter() {
             </motion.h2>
           </div>
           
-          <p className="max-w-xs text-zinc-500 font-mono text-[10px] mt-8 uppercase tracking-widest leading-relaxed">
-            Direct financial recovery opportunity detected via agentic flow optimization.
+          <p className="max-w-xs text-zinc-500 text-[10px] mt-4 uppercase tracking-wide leading-relaxed">
+            Potential recovery opportunity from user experience optimization
           </p>
         </div>
       </div>
 
       {/* Impact Breakdown Donut */}
-      <div className="rounded-[2.5rem] bg-zinc-900/40 border border-white/5 p-8 flex-1 flex flex-col md:flex-row gap-8 items-center">
+      <div className="rounded-lg bg-zinc-900/60 border border-zinc-800 p-6 flex flex-col md:flex-row gap-6 items-center" style={{height: '42%'}}>
         <div className="relative w-48 h-48 shrink-0">
           <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="rotate-[-90deg]">
             {segments.map((segment, i) => {

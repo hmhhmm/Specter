@@ -898,7 +898,7 @@ async def get_dashboard_stats():
     elif severity_breakdown["P1"] > 0:
         ai_briefing = f"High-priority issues found. {severity_breakdown['P1']} P1 incidents affecting user experience. Estimated ${total_revenue_leak:,} annual revenue impact."
     else:
-        ai_briefing = f"System stable. {len(all_incidents)} minor issues detected. Average F-Score: {avg_f_score:.1f}/100."
+        ai_briefing = f"Stable. {len(all_incidents)} minor issues detected. Average F-Score: {avg_f_score:.1f}/100."
 
     return {
         "total_incidents": len(all_incidents),
@@ -1281,6 +1281,73 @@ async def get_healing_suggestions():
             "categorized": issue_counts,
         },
     }
+
+
+class FixCodeRequest(BaseModel):
+    filePath: str
+    currentCode: str
+    title: str
+    description: str
+    fixHint: str = ""
+
+
+@app.post("/api/ai/fix-code")
+async def fix_code(request: FixCodeRequest):
+    """
+    Use Claude API to generate a code fix for the given bug.
+    Returns the fixed code ready for PR creation.
+    """
+    from backend.ai_utils import get_anthropic_client
+    
+    try:
+        anthropic_client = get_anthropic_client()
+        if not anthropic_client:
+            raise HTTPException(status_code=500, detail="Claude API not configured. Please set CLAUDE_API_KEY in backend/.env")
+        
+        system_prompt = f"""You are a Senior Frontend Engineer at Specter.AI. 
+Your task is to fix a bug in a React component detected by our QA agent.
+You must return the ENTIRE corrected file content. 
+DO NOT include any explanation or markdown commentary. 
+ONLY return the code inside a single markdown code block.
+
+Bug Title: {request.title}
+Bug Description: {request.description}
+{f'Fix Hint: {request.fixHint}' if request.fixHint else ''}
+
+Ensure the fix is professional and follows the existing code style."""
+
+        user_prompt = f"""Here is the current content of {request.filePath}:
+
+```tsx
+{request.currentCode}
+```
+
+Please provide the full corrected version of this file."""
+
+        response = await asyncio.to_thread(
+            anthropic_client.messages.create,
+            model="claude-sonnet-4-20250514",
+            max_tokens=4096,
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_prompt}],
+        )
+        
+        llm_output = response.content[0].text
+        
+        # Extract code from markdown block
+        import re
+        code_match = re.search(r"```(?:tsx|jsx|typescript|javascript|)\n([\s\S]*?)```", llm_output) or \
+                      re.search(r"```([\s\S]*?)```", llm_output)
+        fixed_code = code_match.group(1).strip() if code_match else llm_output.strip()
+        
+        if not fixed_code or len(fixed_code) < 50:
+            raise HTTPException(status_code=500, detail="LLM returned invalid code")
+        
+        return {"fixedCode": fixed_code}
+        
+    except Exception as e:
+        print(f"Fix code error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":

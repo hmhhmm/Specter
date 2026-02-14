@@ -1,22 +1,21 @@
 "use client";
 
-import { Map, Zap, Activity, GitBranch } from "lucide-react";
+import { Map, Zap, GitBranch } from "lucide-react";
 import { RegionalMap } from "./regional-map";
 import { CompetitorBar } from "./competitor-bar";
-import { FScoreWave } from "./f-score-wave";
 import { RootCausePanel } from "./root-cause-panel";
 
 export function IntelligencePanel() {
   return (
-    <div className="flex flex-col gap-6 h-full">
+    <div className="flex flex-col gap-3 h-full">
       {/* Regional Map */}
-      <div className="rounded-[2.5rem] bg-zinc-900/40 border border-white/5 p-6 flex flex-col h-[300px] shadow-sm">
+      <div className="rounded-lg bg-zinc-900/60 border border-zinc-800 p-4 flex flex-col h-[160px]">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <Map className="w-4 h-4 text-emerald-500" />
-            <h3 className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest font-bold">Regional Leak Map</h3>
+            <Map className="w-4 h-4 text-blue-400" />
+            <h3 className="text-[10px] font-medium text-zinc-400 uppercase tracking-wide">Regional Analysis</h3>
           </div>
-          <div className="px-2 py-0.5 rounded border border-emerald-500/20 bg-emerald-500/5 text-[8px] font-mono text-emerald-500 uppercase tracking-widest animate-pulse">
+          <div className="px-2 py-0.5 rounded border border-blue-500/20 bg-blue-500/10 text-[8px] font-medium text-blue-400 uppercase tracking-wide">
             Active
           </div>
         </div>
@@ -26,30 +25,21 @@ export function IntelligencePanel() {
       </div>
 
       {/* Competitor Benchmarking */}
-      <div className="rounded-[2.5rem] bg-zinc-900/40 border border-white/5 p-6 flex flex-col shadow-sm">
-        <div className="flex items-center gap-2 mb-6">
-          <Zap className="w-4 h-4 text-amber-500" />
-          <h3 className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest font-bold">Competitive Tension</h3>
+      <div className="rounded-lg bg-zinc-900/60 border border-zinc-800 p-3 flex flex-col">
+        <div className="flex items-center gap-2 mb-3">
+          <Zap className="w-4 h-4 text-blue-400" />
+          <h3 className="text-[10px] font-medium text-zinc-400 uppercase tracking-wide">Competitive Analysis</h3>
         </div>
         <CompetitorBar />
       </div>
 
       {/* Root Cause Intelligence */}
-      <div className="rounded-[2.5rem] bg-zinc-900/40 border border-white/5 p-6 flex flex-col shadow-sm">
-        <div className="flex items-center gap-2 mb-4">
-          <GitBranch className="w-4 h-4 text-emerald-500" />
-          <h3 className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest font-bold">Recurring Patterns</h3>
+      <div className="rounded-lg bg-zinc-900/60 border border-zinc-800 p-3 flex flex-col">
+        <div className="flex items-center gap-2 mb-3">
+          <GitBranch className="w-4 h-4 text-blue-400" />
+          <h3 className="text-[10px] font-medium text-zinc-400 uppercase tracking-wide">Recurring Patterns</h3>
         </div>
         <RootCausePanel />
-      </div>
-
-      {/* F-Score Waveform */}
-      <div className="rounded-[2.5rem] bg-zinc-900/40 border border-white/5 p-6 flex flex-col flex-1 shadow-sm overflow-hidden">
-        <div className="flex items-center gap-2 mb-6">
-          <Activity className="w-4 h-4 text-emerald-500" />
-          <h3 className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest font-bold">Average Frustration</h3>
-        </div>
-        <FScoreWave />
       </div>
     </div>
   );

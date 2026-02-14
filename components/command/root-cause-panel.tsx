@@ -49,7 +49,7 @@ export function RootCausePanel() {
           No recurring patterns detected yet
         </div>
       ) : (
-        patterns.slice(0, 5).map((pattern, index) => (
+        patterns.slice(0, 2).map((pattern, index) => (
           <motion.div
             key={pattern.pattern_id}
             initial={{ opacity: 0, x: -20 }}
