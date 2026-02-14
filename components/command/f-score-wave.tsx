@@ -9,19 +9,19 @@ export function FScoreWave() {
   ];
 
   return (
-    <div className="rounded-2xl border-2 border-white/10 bg-gradient-to-br from-zinc-900/80 to-zinc-900/40 backdrop-blur-sm p-6">
+    <div className="rounded-2xl border-2 border-zinc-200 dark:border-white/10 bg-gradient-to-br from-white to-zinc-50 dark:from-zinc-900/80 dark:to-zinc-900/40 backdrop-blur-sm p-6 transition-colors duration-300">
       <h3 className="text-lg font-bold mb-6">Quality Score Trend</h3>
       
       <div className="space-y-6">
         <div>
           <div className="flex items-baseline gap-3 mb-2">
-            <span className="text-5xl font-bold text-yellow-400">72</span>
+            <span className="text-5xl font-bold text-yellow-500 dark:text-yellow-400">72</span>
             <div className="flex items-center gap-2">
-              <TrendingDown className="w-4 h-4 text-red-400" />
-              <span className="text-sm text-red-400 font-semibold">-8 from last run</span>
+              <TrendingDown className="w-4 h-4 text-red-500 dark:text-red-400" />
+              <span className="text-sm text-red-500 dark:text-red-400 font-semibold">-8 from last run</span>
             </div>
           </div>
-          <p className="text-xs text-zinc-500">Current F-Score</p>
+          <p className="text-xs text-zinc-500 dark:text-zinc-500">Current F-Score</p>
         </div>
 
         <div>
@@ -45,8 +45,8 @@ export function FScoreWave() {
           </div>
         </div>
 
-        <div className="pt-4 border-t border-white/10">
-          <p className="text-xs text-zinc-500">
+        <div className="pt-4 border-t border-zinc-200 dark:border-white/10">
+          <p className="text-xs text-zinc-500 dark:text-zinc-500">
             Test #1250 • 13 issues detected • 2 critical
           </p>
         </div>

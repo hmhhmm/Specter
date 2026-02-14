@@ -12,7 +12,7 @@ export function AIBriefing({
   revenueLoss = 0 
 }: AIBriefingProps) {
   return (
-    <div className="relative rounded-3xl border-2 border-white/10 bg-gradient-to-br from-zinc-900/80 to-zinc-900/40 backdrop-blur-xl p-10 mb-12 overflow-hidden">
+    <div className="relative rounded-3xl border-2 border-zinc-200 dark:border-white/10 bg-gradient-to-br from-white to-zinc-50 dark:from-zinc-900/80 dark:to-zinc-900/40 backdrop-blur-xl p-10 mb-12 overflow-hidden transition-colors duration-300">
       {/* Background decoration */}
       <div className="absolute top-0 right-0 w-96 h-96 bg-emerald-500/5 rounded-full blur-3xl" />
       
@@ -25,31 +25,31 @@ export function AIBriefing({
           <span className="text-xs uppercase tracking-[0.2em] text-emerald-400 font-semibold">Live System Status</span>
         </div>
         
-        <h2 className="text-3xl font-bold mb-4 bg-gradient-to-r from-white to-zinc-400 bg-clip-text text-transparent">
+        <h2 className="text-3xl font-bold mb-4 bg-gradient-to-r from-zinc-900 to-zinc-600 dark:from-white dark:to-zinc-400 bg-clip-text text-transparent">
           Autonomous QA Dashboard
         </h2>
         
-        <p className="text-base text-zinc-400 leading-relaxed max-w-3xl">
+        <p className="text-base text-zinc-600 dark:text-zinc-400 leading-relaxed max-w-3xl transition-colors duration-300">
           Real-time intelligence from Claude Sonnet 4 analyzing user flows across 5 behavioral personas. 
           Surfacing critical UX failures, revenue blockers, and accessibility violations before they reach production.
         </p>
 
         <div className="grid grid-cols-4 gap-6 mt-8">
-          <div className="rounded-xl bg-white/5 p-4 border border-white/10">
-            <p className="text-xs text-zinc-500 uppercase tracking-wider mb-2">Total Tests</p>
-            <p className="text-2xl font-bold text-white">{totalTests.toLocaleString()}</p>
+          <div className="rounded-xl bg-zinc-100 dark:bg-white/5 p-4 border border-zinc-300 dark:border-white/10 transition-colors duration-300">
+            <p className="text-xs text-zinc-500 dark:text-zinc-500 uppercase tracking-wider mb-2">Total Tests</p>
+            <p className="text-2xl font-bold text-zinc-900 dark:text-white">{totalTests.toLocaleString()}</p>
           </div>
-          <div className="rounded-xl bg-white/5 p-4 border border-white/10">
-            <p className="text-xs text-zinc-500 uppercase tracking-wider mb-2">Issues Found</p>
-            <p className="text-2xl font-bold text-red-400">{issuesFound.toLocaleString()}</p>
+          <div className="rounded-xl bg-zinc-100 dark:bg-white/5 p-4 border border-zinc-300 dark:border-white/10 transition-colors duration-300">
+            <p className="text-xs text-zinc-500 dark:text-zinc-500 uppercase tracking-wider mb-2">Issues Found</p>
+            <p className="text-2xl font-bold text-red-500 dark:text-red-400">{issuesFound.toLocaleString()}</p>
           </div>
-          <div className="rounded-xl bg-white/5 p-4 border border-white/10">
-            <p className="text-xs text-zinc-500 uppercase tracking-wider mb-2">Revenue Loss</p>
-            <p className="text-2xl font-bold text-orange-400">${(revenueLoss / 1000).toFixed(0)}k</p>
+          <div className="rounded-xl bg-zinc-100 dark:bg-white/5 p-4 border border-zinc-300 dark:border-white/10 transition-colors duration-300">
+            <p className="text-xs text-zinc-500 dark:text-zinc-500 uppercase tracking-wider mb-2">Revenue Loss</p>
+            <p className="text-2xl font-bold text-orange-500 dark:text-orange-400">${(revenueLoss / 1000).toFixed(0)}k</p>
           </div>
-          <div className="rounded-xl bg-white/5 p-4 border border-white/10">
-            <p className="text-xs text-zinc-500 uppercase tracking-wider mb-2">Uptime</p>
-            <p className="text-2xl font-bold text-emerald-400">{uptime}</p>
+          <div className="rounded-xl bg-zinc-100 dark:bg-white/5 p-4 border border-zinc-300 dark:border-white/10 transition-colors duration-300">
+            <p className="text-xs text-zinc-500 dark:text-zinc-500 uppercase tracking-wider mb-2">Uptime</p>
+            <p className="text-2xl font-bold text-emerald-500 dark:text-emerald-400">{uptime}</p>
           </div>
         </div>
       </div>

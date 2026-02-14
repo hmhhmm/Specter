@@ -74,17 +74,17 @@ export default function VaultPage() {
   }, []);
 
   return (
-    <main className="relative min-h-screen bg-[#050505] text-white overflow-hidden selection:bg-emerald-500/30">
+    <main className="relative min-h-screen bg-white dark:bg-[#050505] text-zinc-900 dark:text-white overflow-hidden selection:bg-emerald-500/30 transition-colors duration-300">
       {/* Grain overlay */}
-      <div className="fixed inset-0 pointer-events-none z-50 overflow-hidden opacity-[0.03]">
+      <div className="fixed inset-0 pointer-events-none z-50 overflow-hidden opacity-[0.03] dark:opacity-[0.03]">
         <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] brightness-100 contrast-150"></div>
       </div>
 
       {/* Scanline effect */}
-      <div className="fixed inset-0 pointer-events-none z-50 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.1)_50%)] bg-[length:100%_4px] opacity-20"></div>
+      <div className="fixed inset-0 pointer-events-none z-50 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.1)_50%)] dark:bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.1)_50%)] bg-[length:100%_4px] opacity-5 dark:opacity-20"></div>
 
       {/* Background grid */}
-      <div className="fixed inset-0 z-0 opacity-10 pointer-events-none">
+      <div className="fixed inset-0 z-0 opacity-[0.03] dark:opacity-10 pointer-events-none">
         <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:40px_40px]"></div>
       </div>
 
@@ -102,12 +102,12 @@ export default function VaultPage() {
           {isLoading && incidents.length === 0 ? (
             <div className="text-center py-20">
               <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-emerald-500 border-t-transparent"></div>
-              <p className="mt-4 text-zinc-400">Loading incidents...</p>
+              <p className="mt-4 text-zinc-600 dark:text-zinc-400">Loading incidents...</p>
             </div>
           ) : error && incidents.length === 0 ? (
             <div className="text-center py-20">
-              <p className="text-red-400 mb-2">⚠️ {error}</p>
-              <p className="text-zinc-500 text-sm">Make sure the backend is running on port 8000</p>
+              <p className="text-red-500 dark:text-red-400 mb-2">⚠️ {error}</p>
+              <p className="text-zinc-500 dark:text-zinc-500 text-sm">Make sure the backend is running on port 8000</p>
             </div>
           ) : null}
           

@@ -15,14 +15,14 @@ export function RootCausePanel() {
   };
 
   return (
-    <div className="rounded-2xl border-2 border-white/10 bg-gradient-to-br from-zinc-900/80 to-zinc-900/40 backdrop-blur-sm p-6">
+    <div className="rounded-2xl border-2 border-zinc-200 dark:border-white/10 bg-gradient-to-br from-white to-zinc-50 dark:from-zinc-900/80 dark:to-zinc-900/40 backdrop-blur-sm p-6 transition-colors duration-300">
       <h3 className="text-lg font-bold mb-6">Root Cause Tracing</h3>
       
       <div className="space-y-3">
         {issues.map((issue, i) => (
           <div
             key={i}
-            className="group rounded-xl border-2 border-white/5 bg-white/5 p-4 hover:border-white/10 hover:bg-white/10 transition-all"
+            className="group rounded-xl border-2 border-zinc-200 dark:border-white/5 bg-zinc-100 dark:bg-white/5 p-4 hover:border-zinc-300 dark:hover:border-white/10 hover:bg-zinc-200 dark:hover:bg-white/10 transition-all"
           >
             <div className="flex items-start gap-4">
               <div className={`px-2.5 py-1 rounded-lg text-xs font-bold border-2 bg-gradient-to-br ${colorMap[issue.color as keyof typeof colorMap]}`}>
@@ -30,13 +30,13 @@ export function RootCausePanel() {
               </div>
               <div className="flex-1 space-y-2">
                 <div className="flex items-center gap-2">
-                  <FileCode2 className="w-4 h-4 text-zinc-400" />
-                  <span className="text-sm font-mono text-white">{issue.file}</span>
-                  <span className="text-xs text-zinc-500">L{issue.line}</span>
+                  <FileCode2 className="w-4 h-4 text-zinc-600 dark:text-zinc-400" />
+                  <span className="text-sm font-mono text-zinc-900 dark:text-white">{issue.file}</span>
+                  <span className="text-xs text-zinc-500 dark:text-zinc-500">L{issue.line}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Users className="w-3 h-3 text-zinc-500" />
-                  <span className="text-xs text-zinc-400">@{issue.owner}</span>
+                  <Users className="w-3 h-3 text-zinc-500 dark:text-zinc-500" />
+                  <span className="text-xs text-zinc-600 dark:text-zinc-400">@{issue.owner}</span>
                 </div>
               </div>
             </div>

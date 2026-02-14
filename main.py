@@ -35,6 +35,8 @@ import base64
 import traceback
 from datetime import datetime
 from typing import Dict, Any, List, Optional
+import logging
+
 
 # Specter Core - Feature 2 (Diagnosis Engine)
 from backend.expectation_engine import check_expectation
@@ -462,7 +464,7 @@ async def autonomous_signup_test(
     network: str = 'wifi',
     persona: str = 'zoomer',
     locale: str = 'en-US',
-    max_steps: int = 10,
+    max_steps: int = 15,
     screenshot_callback = None,
     diagnostic_callback = None,
     page_callback = None,
@@ -645,6 +647,105 @@ async def autonomous_signup_test(
                     file_name=f'step_{step_num:02d}_observe',
                     context='autonomous',
                 )
+                
+                # Save interactive elements JSON alongside screenshot
+                if screenshot_path:
+                    try:
+                        import json
+                        from pathlib import Path
+                        screenshot_file = Path(screenshot_path)
+                        if screenshot_file.exists():
+                            # Extract interactive elements from crawl result
+                            # Try multiple sources: extract_interactive_elements() or raw_dict()
+                            interactive_elems = crawler.extract_interactive_elements()
+                            
+                            # If empty, try getting from crawl_result directly
+                            if not interactive_elems:
+                                raw_data = crawl_result.raw_dict()
+                                interactive_elems = raw_data if isinstance(raw_data, dict) else {}
+                            
+                            print(f"  Found {len(interactive_elems)} raw elements from DOM")
+                            
+                            # Convert to expected format with bbox in [x, y, w, h] format
+                            formatted_elements = []
+                            for elem_id, elem_data in interactive_elems.items():
+                                try:
+                                    viewport = elem_data.get('viewport', {})
+                                    text = elem_data.get('innerText', '').strip()
+                                    tag = elem_data.get('tagName', 'unknown')
+                                    
+                                    # Get bounding box coordinates
+                                    if viewport and viewport.get('width', 0) > 0 and viewport.get('height', 0) > 0:
+                                        bbox = [
+                                            int(viewport.get('x', 0)),
+                                            int(viewport.get('y', 0)),
+                                            int(viewport.get('width', 0)),
+                                            int(viewport.get('height', 0))
+                                        ]
+                                    else:
+                                        continue  # Skip elements without valid bbox
+                                    
+                                    formatted_elements.append({
+                                        'id': str(elem_id),
+                                        'type': tag.lower(),
+                                        'text': text,
+                                        'bbox': bbox,
+                                        'confidence': 0.95,  # DOM extraction is highly reliable
+                                        'ocr_confidence': 1.0 if text else 0.0,  # DOM text is ground truth
+                                        'attributes': elem_data.get('attributes', {}),
+                                        'selector': elem_data.get('selector', ''),
+                                        'isInteractive': elem_data.get('isInteractive', False),
+                                        'isVisible': elem_data.get('isVisible', False)
+                                    })
+                                except Exception as e:
+                                    print(f"  Failed to format element {elem_id}: {e}")
+                                    continue
+                            
+                            # Save to JSON file
+                            elements_json_path = screenshot_file.parent / f"{screenshot_file.stem}_interactive_elements.json"
+                            with open(elements_json_path, 'w', encoding='utf-8') as f:
+                                json.dump({'interactive_elements': formatted_elements}, f, indent=2)
+                            
+                            print(f"  💾 Saved {len(formatted_elements)} DOM elements to: {elements_json_path.name}")
+                            
+                            # Generate per-step heatmap (use step number in filename)
+                            try:
+                                from backend.expectation_engine import extract_uncertainty_from_elements, generate_uncertainty_heatmap
+                                
+                                # Create agent decision based on current state
+                                agent_decision = {
+                                    'action': 'observe',
+                                    'confidence': 0.8,
+                                    'reasoning': 'Observing page elements'
+                                }
+                                
+                                # Extract uncertainty from elements
+                                uncertainty_data = extract_uncertainty_from_elements(
+                                    formatted_elements,
+                                    agent_decision,
+                                    str(screenshot_file),
+                                    attention_map=None
+                                )
+                                
+                                # Generate step-based heatmap in reports root directory
+                                step_heatmap_path = Path(screenshot_dir).parent / f"uncertainty_heatmap_step_{step_num:02d}.png"
+                                generate_uncertainty_heatmap(
+                                    img_path=str(screenshot_file),
+                                    output_path=str(step_heatmap_path),
+                                    uncertainty_data=uncertainty_data,
+                                    color_scheme='uncertainty',
+                                    show_legend=True,
+                                    show_bboxes=True,
+                                    blur_strength=41,
+                                    debug=False
+                                )
+                                print(f"  🔥 Generated heatmap: uncertainty_heatmap_step_{step_num:02d}.png")
+                            except Exception as hm_err:
+                                print(f"  ⚠️  Heatmap generation failed: {hm_err}")
+                    except Exception as e:
+                        print(f"  ⚠️  Failed to save interactive elements JSON: {e}")
+                        import traceback
+                        traceback.print_exc()
 
                 await crawler.remove_marker()
                 
@@ -770,6 +871,67 @@ async def autonomous_signup_test(
                 screenshot_after_b64, screenshot_after_path = await action_handler.b64_page_screenshot(
                     file_name=f'step_{step_num:02d}_after', context='autonomous',
                 )
+                
+                # Save interactive elements JSON for after screenshot
+                if screenshot_after_path:
+                    try:
+                        import json
+                        from pathlib import Path
+                        screenshot_file = Path(screenshot_after_path)
+                        if screenshot_file.exists():
+                            # Re-crawl to get updated DOM after action
+                            after_crawl = await crawler.crawl(highlight=False, cache_dom=False, viewport_only=False)
+                            after_elems = crawler.extract_interactive_elements()
+                            
+                            # Convert to expected format
+                            formatted_after = []
+                            for elem_id, elem_data in after_elems.items():
+                                try:
+                                    viewport = elem_data.get('viewport', {})
+                                    text = elem_data.get('innerText', '').strip()
+                                    tag = elem_data.get('tagName', 'unknown')
+                                    
+                                    if viewport:
+                                        bbox = [
+                                            int(viewport.get('x', 0)),
+                                            int(viewport.get('y', 0)),
+                                            int(viewport.get('width', 0)),
+                                            int(viewport.get('height', 0))
+                                        ]
+                                    else:
+                                        continue
+                                    
+                                    formatted_after.append({
+                                        'id': str(elem_id),
+                                        'type': tag.lower(),
+                                        'text': text,
+                                        'bbox': bbox,
+                                        'confidence': 0.95,
+                                        'ocr_confidence': 1.0 if text else 0.0,
+                                        'attributes': elem_data.get('attributes', {}),
+                                        'selector': elem_data.get('selector', ''),
+                                        'isInteractive': elem_data.get('isInteractive', False),
+                                        'isVisible': elem_data.get('isVisible', False)
+                                    })
+                                except Exception:
+                                    continue
+                            
+                            after_json_path = screenshot_file.parent / f"{screenshot_file.stem}_interactive_elements.json"
+                            with open(after_json_path, 'w', encoding='utf-8') as f:
+                                json.dump({'interactive_elements': formatted_after}, f, indent=2)
+                            
+                            print(f"  💾 Saved {len(formatted_after)} DOM elements (after) to: {after_json_path.name}")
+                            
+                            # Note: Heatmap generated only for observe screenshot (not after)
+                            # This keeps it simple: 5 steps = 5 heatmaps
+                            
+                            # Store for handoff to expectation engine
+                            after_elements_for_handoff = formatted_after
+                    except Exception as e:
+                        print(f"  Failed to save after screenshot elements JSON: {e}")
+                        after_elements_for_handoff = []
+                else:
+                    after_elements_for_handoff = []
 
                 # -- VERIFY: Dual-screenshot diagnosis --
                 dual_diagnosis = None
@@ -821,6 +983,7 @@ async def autonomous_signup_test(
                         'console_logs': list(console_logs),
                         'expected_outcome': 'Action progresses the sign-up flow',
                         'actual_outcome': action_desc_text,
+                        'interactive_elements': after_elements_for_handoff,  # Add DOM elements for heatmap generation
                         'ui_analysis': {
                             'issues': ux_issues,
                             'confusion_score': confusion,

@@ -15,7 +15,7 @@ export function IntelligencePanel() {
   };
 
   return (
-    <div className="rounded-2xl border-2 border-white/10 bg-gradient-to-br from-zinc-900/80 to-zinc-900/40 backdrop-blur-sm p-6 h-full">
+    <div className="rounded-2xl border-2 border-zinc-200 dark:border-white/10 bg-gradient-to-br from-white to-zinc-50 dark:from-zinc-900/80 dark:to-zinc-900/40 backdrop-blur-sm p-6 h-full transition-colors duration-300">
       <h3 className="text-lg font-bold mb-6 flex items-center gap-2">
         <span>Persona Intelligence</span>
         <span className="text-xs px-2 py-1 rounded-full bg-emerald-500/20 text-emerald-400">Live</span>
@@ -25,18 +25,18 @@ export function IntelligencePanel() {
         {personas.map((persona) => (
           <div
             key={persona.name}
-            className="group relative rounded-xl border-2 border-white/5 bg-white/5 p-4 hover:border-white/10 hover:bg-white/10 transition-all duration-300"
+            className="group relative rounded-xl border-2 border-zinc-200 dark:border-white/5 bg-zinc-100 dark:bg-white/5 p-4 hover:border-zinc-300 dark:hover:border-white/10 hover:bg-zinc-200 dark:hover:bg-white/10 transition-all duration-300"
           >
             <div className="flex items-start gap-3">
               <span className="text-2xl">{persona.icon}</span>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="text-sm font-semibold text-white">{persona.name}</span>
+                  <span className="text-sm font-semibold text-zinc-900 dark:text-white">{persona.name}</span>
                   <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${severityColors[persona.severity as keyof typeof severityColors]}`}>
                     {persona.severity}
                   </span>
                 </div>
-                <p className="text-xs text-zinc-400">{persona.issue}</p>
+                <p className="text-xs text-zinc-600 dark:text-zinc-400">{persona.issue}</p>
               </div>
             </div>
           </div>

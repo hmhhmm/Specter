@@ -313,6 +313,14 @@ def convert_click_result_to_handoff(
             "actual_outcome": "NEW_PAGE" if click_result.get('has_new_page') else "SAME_PAGE",
         }
     }
+    # Preserve any interactive element data produced by webqa_agent (if present)
+    try:
+        ie = click_result.get('interactive_elements') or click_result.get('elements') or click_result.get('element_map')
+        if ie:
+            # attach into evidence for downstream analyzers
+            handoff_packet['evidence']['interactive_elements'] = ie
+    except Exception:
+        pass
     # Enrich ui_analysis with any available data from click_result
     ui_analysis = {}
     # Issues reported by webqa_agent's UX checks (if present)

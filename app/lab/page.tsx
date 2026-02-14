@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { toast } from "sonner";
-import { MissionHeader } from "@/components/lab/mission-header";
+import { SpecterNav } from "@/components/landing/specter-nav";
 import { ControlDeck } from "@/components/lab/control-deck";
 import { DeviceEmulator } from "@/components/lab/device-emulator";
 import { NeuralMonologue } from "@/components/lab/neural-monologue";
@@ -354,7 +354,7 @@ export default function LabPage() {
         network: network || "wifi",
         persona: persona || "normal",
         locale: locale || "en-US",
-        max_steps: 5
+        max_steps: 15
       };
 
       console.log("Starting test with config:", requestBody);
@@ -393,15 +393,11 @@ export default function LabPage() {
   };
 
   return (
-    <main className="relative min-h-screen bg-[#050505] text-white overflow-hidden selection:bg-emerald-500/30">
+    <main className="relative min-h-screen bg-white dark:bg-[#050505] text-zinc-900 dark:text-white overflow-hidden selection:bg-emerald-500/30 transition-colors duration-300">
       <div className="relative z-10 flex flex-col h-screen">
-        <MissionHeader 
-          activePersona={persona}
-          networkCondition={network}
-          nextTestIn={nextTestCountdown}
-        />
+        <SpecterNav />
         
-        <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-6 px-6 py-6 overflow-hidden pb-40">
+        <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-6 px-6 py-6 overflow-hidden pb-40 pt-24">
           <DeviceEmulator 
             state={simulationState} 
             step={simulationStep} 

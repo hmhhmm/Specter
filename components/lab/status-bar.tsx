@@ -32,20 +32,20 @@ export function StatusBar({ state, onTerminate }: StatusBarProps) {
   };
 
   return (
-    <footer className="fixed bottom-0 left-0 right-0 h-12 bg-zinc-950/90 backdrop-blur-md border-t border-white/5 px-6 flex items-center justify-between z-50">
+    <footer className="fixed bottom-0 left-0 right-0 h-12 bg-white/90 dark:bg-zinc-950/90 backdrop-blur-md border-t border-zinc-200 dark:border-white/5 px-6 flex items-center justify-between z-50 transition-colors duration-300">
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2">
-          <div className={`w-1.5 h-1.5 rounded-full ${state !== "idle" ? "bg-emerald-500 animate-pulse" : "bg-zinc-700"}`} />
-          <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-wider">
+          <div className={`w-1.5 h-1.5 rounded-full ${state !== "idle" ? "bg-emerald-500 animate-pulse" : "bg-zinc-300 dark:bg-zinc-700"}`} />
+          <span className="text-[10px] font-mono text-zinc-500 dark:text-zinc-500 uppercase tracking-wider">
             {state === "idle" ? "Ready" : state === "scanning" ? "Scanning" : state === "analyzing" ? "Analyzing" : "Complete"}
           </span>
         </div>
         
-        <div className="h-3 w-px bg-white/10" />
+        <div className="h-3 w-px bg-zinc-200 dark:bg-white/10" />
         
         <div className="flex items-center gap-2">
-          <span className="text-[10px] font-mono text-zinc-600 uppercase tracking-wider">Session</span>
-          <span className="text-[11px] font-mono text-white">{formatTime(sessionTime)}</span>
+          <span className="text-[10px] font-mono text-zinc-400 dark:text-zinc-600 uppercase tracking-wider">Session</span>
+          <span className="text-[11px] font-mono text-zinc-900 dark:text-white">{formatTime(sessionTime)}</span>
         </div>
       </div>
 

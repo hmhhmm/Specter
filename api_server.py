@@ -12,6 +12,7 @@ import sys
 from pathlib import Path
 import base64
 from webqa_agent.browser.session import BrowserSessionPool
+from main import autonomous_signup_test
 
 # Add parent directory to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -44,7 +45,7 @@ class TestConfig(BaseModel):
     device: str = "desktop"
     network: str = "wifi"
     persona: str = "normal"  # Always fast normal user
-    max_steps: int = 5
+    max_steps: int = 15
 
 class TestResult(BaseModel):
     step_id: str
@@ -96,7 +97,7 @@ async def run_test_background(test_id: str, config: TestConfig):
         if parent_dir not in sys.path:
             sys.path.insert(0, parent_dir)
         
-        from main import autonomous_signup_test
+     
         
         # Broadcast test started
         await manager.broadcast({

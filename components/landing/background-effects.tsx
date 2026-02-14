@@ -21,7 +21,7 @@ export function BackgroundEffects() {
   }, [mouseX, mouseY]);
 
   return (
-    <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden bg-[#050505]">
+    <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden bg-white dark:bg-[#050505] transition-colors duration-300">
       {/* Static subtle gradient */}
       <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 via-transparent to-transparent" />
       
