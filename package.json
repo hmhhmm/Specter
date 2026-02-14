@@ -6,15 +6,19 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "run": "concurrently -n backend,frontend -c blue,green \"python3 run_dev.py\" \"npm run dev\""
   },
   "dependencies": {
+    "@octokit/core": "^7.0.6",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "fastapi": "^0.0.8",
     "framer-motion": "^12.33.0",
     "lucide-react": "^0.563.0",
     "next": "16.1.6",
+    "octokit": "^5.0.5",
+    "octokit-plugin-create-pull-request": "^6.0.1",
     "radix-ui": "^1.4.3",
     "react": "19.2.3",
     "react-dom": "19.2.3",
@@ -22,6 +26,7 @@
     "tailwind-merge": "^3.4.0"
   },
   "devDependencies": {
+    "concurrently": "^9.1.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",

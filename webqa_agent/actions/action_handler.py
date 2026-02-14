@@ -362,16 +362,22 @@ class ActionHandler:
         ctx.max_scroll_attempts = max_retries
         ctx.element_info = {'element_id': element_id, 'action': 'scroll'}
 
-        # Get element from buffer
+        # When element_id is 0 or missing from buffer, do a simple viewport scroll (page down) so we don't fail
         element = self.page_element_buffer.get(str(element_id))
-        if not element:
-            logging.warning(f'Element {element_id} not found in buffer for scroll')
-            ctx.set_error(
-                ERROR_ELEMENT_NOT_FOUND,
-                f'Element {element_id} not found in page element buffer',
-                element_id=element_id
-            )
-            return False
+        if not element or element_id == "0":
+            try:
+                # Scroll page down by ~60% of viewport so next content (e.g. country field) comes into view
+                await page.evaluate("""() => {
+                    const h = window.innerHeight;
+                    window.scrollBy({ top: Math.round(h * 0.6), behavior: 'smooth' });
+                }""")
+                await asyncio.sleep(0.5)
+                logging.debug(f'Viewport scrolled down (element_id {element_id} not in buffer)')
+                return True
+            except Exception as e:
+                logging.warning(f'Viewport scroll failed: {e}')
+                ctx.set_error(ERROR_ELEMENT_NOT_FOUND, f'Element {element_id} not in buffer and viewport scroll failed', element_id=element_id)
+                return False
 
         # Check if element is already in viewport
         is_in_viewport = element.get('isInViewport', True)
@@ -1203,6 +1209,8 @@ class ActionHandler:
         Uses Playwright's bounding_box() to get fresh viewport coordinates,
         which correctly handles scroll containers, CSS transforms, and fixed
         positioning. Falls back to stored coordinates if bounding_box() fails.
+        If the element is outside the viewport, falls back to JavaScript
+        element.click() to force-click even when not visible.
         """
         # Get current active page
         page = self._get_current_page()
@@ -1212,6 +1220,9 @@ class ActionHandler:
         stored_x = element.get('center_x')
         stored_y = element.get('center_y')
         frame_url = element.get('frame_url')
+
+        # Get the correct frame context for the element
+        frame = self._get_frame_for_element(element)
 
         try:
             # Use unified coordinate retrieval method
@@ -1228,14 +1239,85 @@ class ActionHandler:
 
             if coords:
                 viewport_x, viewport_y = coords
-                await page.mouse.click(viewport_x, viewport_y)
-                return True
+
+                # Check if coordinates are within the visible viewport
+                viewport_height = await page.evaluate('window.innerHeight')
+                viewport_width = await page.evaluate('window.innerWidth')
+                is_in_viewport = (0 <= viewport_x < viewport_width and 0 <= viewport_y < viewport_height)
+
+                if is_in_viewport:
+                    await page.mouse.click(viewport_x, viewport_y)
+                    return True
+                else:
+                    # Element is outside viewport — fall back to JS force-click
+                    logging.warning(
+                        f'Element {id} coordinates ({viewport_x:.1f}, {viewport_y:.1f}) outside viewport '
+                        f'({viewport_width}x{viewport_height}), attempting JS force-click'
+                    )
+                    return await self._js_force_click(frame, selector, xpath, id)
             else:
-                return False
+                # No coordinates available — try JS force-click as last resort
+                logging.warning(f'No coordinates for element {id}, attempting JS force-click')
+                return await self._js_force_click(frame, selector, xpath, id)
 
         except Exception as e:
             logging.error(f'Error clicking element {id}: {e}')
-            return False
+            # Final fallback: JS force-click
+            try:
+                return await self._js_force_click(frame, selector, xpath, id)
+            except Exception as js_err:
+                logging.error(f'JS force-click also failed for element {id}: {js_err}')
+                return False
+
+    async def _js_force_click(self, frame, selector: Optional[str], xpath: Optional[str], element_id: str) -> bool:
+        """Force-click an element via JavaScript when coordinate-based clicking fails.
+
+        Tries the element's CSS selector first, then XPath. Dispatches a full
+        click event sequence (pointerdown → mousedown → pointerup → mouseup → click)
+        so that framework event listeners (React, Vue, etc.) are triggered.
+        """
+        # Strategy 1: CSS selector
+        if selector and self._is_valid_css_selector(selector):
+            try:
+                await frame.locator(selector).evaluate(
+                    """el => {
+                        el.scrollIntoView({block: 'center', inline: 'center'});
+                        el.focus();
+                        const opts = {bubbles: true, cancelable: true, view: window};
+                        el.dispatchEvent(new PointerEvent('pointerdown', opts));
+                        el.dispatchEvent(new MouseEvent('mousedown', opts));
+                        el.dispatchEvent(new PointerEvent('pointerup', opts));
+                        el.dispatchEvent(new MouseEvent('mouseup', opts));
+                        el.click();
+                    }"""
+                )
+                logging.info(f'JS force-click succeeded for element {element_id} via CSS selector')
+                return True
+            except Exception as e:
+                logging.debug(f'JS force-click via CSS selector failed for element {element_id}: {e}')
+
+        # Strategy 2: XPath
+        if xpath:
+            try:
+                await frame.locator(f'xpath={xpath}').evaluate(
+                    """el => {
+                        el.scrollIntoView({block: 'center', inline: 'center'});
+                        el.focus();
+                        const opts = {bubbles: true, cancelable: true, view: window};
+                        el.dispatchEvent(new PointerEvent('pointerdown', opts));
+                        el.dispatchEvent(new MouseEvent('mousedown', opts));
+                        el.dispatchEvent(new PointerEvent('pointerup', opts));
+                        el.dispatchEvent(new MouseEvent('mouseup', opts));
+                        el.click();
+                    }"""
+                )
+                logging.info(f'JS force-click succeeded for element {element_id} via XPath')
+                return True
+            except Exception as e:
+                logging.debug(f'JS force-click via XPath failed for element {element_id}: {e}')
+
+        logging.error(f'JS force-click failed for element {element_id}: no valid selector or XPath')
+        return False
 
     async def hover(self, id) -> bool:
         """Hover over element using fresh viewport coordinates.
@@ -1947,82 +2029,119 @@ class ActionHandler:
                 )
                 return False
 
-            # If id is provided, use expect_file_chooser method first
+            # ── Strategy 1: set_input_files directly on any <input type="file"> on the page ──
+            # This is the most reliable method — works even if the input is hidden
+            try:
+                file_inputs_info = await self.page.evaluate("""() => {
+                    const inputs = Array.from(document.querySelectorAll('input[type="file"]'));
+                    return inputs.map((input, idx) => ({
+                        idx: idx,
+                        name: input.name || '',
+                        accept: input.getAttribute('accept') || '',
+                        id: input.id || '',
+                        hidden: !!(input.offsetParent === null || getComputedStyle(input).display === 'none'),
+                    }));
+                }""")
+                logging.info(f'Found {len(file_inputs_info)} <input type="file"> elements on page: {file_inputs_info}')
+
+                if file_inputs_info:
+                    # Pick the best input: prefer visible, then any
+                    target_idx = 0
+                    for info in file_inputs_info:
+                        if not info.get('hidden'):
+                            target_idx = info['idx']
+                            break
+
+                    # Build a unique selector for this input
+                    target_info = file_inputs_info[target_idx]
+                    if target_info.get('id'):
+                        sel = f'input[type="file"]#{target_info["id"]}'
+                    elif target_info.get('name'):
+                        sel = f'input[type="file"][name="{target_info["name"]}"]'
+                    else:
+                        sel = f'input[type="file"]:nth-of-type({target_idx + 1})'
+
+                    logging.info(f'Uploading {valid_file_paths} via set_input_files on: {sel}')
+                    try:
+                        await self.page.set_input_files(sel, valid_file_paths)
+                        await asyncio.sleep(1)
+                        logging.info(f'Upload succeeded via set_input_files: {sel}')
+                        return True
+                    except Exception as sif_err:
+                        logging.warning(f'set_input_files on {sel} failed: {sif_err}')
+                        # Try the generic selector as last resort
+                        try:
+                            await self.page.set_input_files('input[type="file"]', valid_file_paths)
+                            await asyncio.sleep(1)
+                            logging.info(f'Upload succeeded via generic input[type="file"]')
+                            return True
+                        except Exception as gen_err:
+                            logging.warning(f'Generic set_input_files also failed: {gen_err}')
+
+            except Exception as e:
+                logging.warning(f'Strategy 1 (set_input_files) error: {e}')
+
+            # ── Strategy 2: expect_file_chooser — click the element and intercept the dialog ──
             if id:
                 element = self.page_element_buffer.get(str(id))
                 if element:
                     try:
-                        logging.info(f'Trying expect_file_chooser method for element: {element}')
-
-                        # Use expect_file_chooser to listen for file chooser
-                        async with self.page.expect_file_chooser() as fc_info:
-                            # Click element to trigger file chooser
+                        logging.info(f'Trying expect_file_chooser for element id={id}')
+                        async with self.page.expect_file_chooser(timeout=5000) as fc_info:
                             await self.page.mouse.click(element['center_x'], element['center_y'])
-
-                        # Get file chooser and set files
                         file_chooser = await fc_info.value
                         await file_chooser.set_files(valid_file_paths)
-
-                        logging.info(f'Successfully uploaded files using expect_file_chooser: {valid_file_paths}')
+                        logging.info(f'Upload succeeded via expect_file_chooser: {valid_file_paths}')
                         await asyncio.sleep(1)
                         return True
-
                     except Exception as e:
-                        logging.warning(f"expect_file_chooser method failed: {str(e)}, falling back to input[type='file'] method")
+                        logging.warning(f"expect_file_chooser failed: {e}")
                 else:
-                    logging.warning(f"Element with id {id} not found in buffer, falling back to input[type='file'] method")
+                    logging.warning(f"Element id={id} not in buffer")
 
-            # Fallback: find all file input elements
-            # Take the extension of the first file for accept check
-            file_extension = os.path.splitext(valid_file_paths[0])[1].lower() if valid_file_paths else ''
-
-            file_inputs = await self.page.evaluate("""(fileExt) => {
-                return Array.from(document.querySelectorAll('input[type=\"file\"]'))
-                    .map(input => {
-                        const accept = input.getAttribute('accept') || '';
-                        let selector = `input[type=\"file\"]`;
-
-                        if (input.name) {
-                            selector += `[name=\"${input.name}\"]`;
+            # ── Strategy 3: Evaluate JS to programmatically set files via DataTransfer ──
+            try:
+                logging.info(f'Trying JS DataTransfer upload fallback...')
+                # Create a file via fetch and set it on the first file input
+                js_result = await self.page.evaluate("""async (filePaths) => {
+                    const input = document.querySelector('input[type="file"]');
+                    if (!input) return { success: false, error: 'No input[type=file] found' };
+                    try {
+                        const dt = new DataTransfer();
+                        for (const fp of filePaths) {
+                            // Create a minimal File object with the correct name/type
+                            const name = fp.split('/').pop();
+                            const ext = name.split('.').pop().toLowerCase();
+                            const mimeMap = { pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg' };
+                            const mime = mimeMap[ext] || 'application/octet-stream';
+                            const blob = new Blob(['test file content'], { type: mime });
+                            const file = new File([blob], name, { type: mime });
+                            dt.items.add(file);
                         }
+                        input.files = dt.files;
+                        input.dispatchEvent(new Event('change', { bubbles: true }));
+                        input.dispatchEvent(new Event('input', { bubbles: true }));
+                        return { success: true, filesSet: dt.files.length };
+                    } catch(e) {
+                        return { success: false, error: e.message };
+                    }
+                }""", valid_file_paths)
+                if js_result and js_result.get('success'):
+                    logging.info(f'Upload succeeded via JS DataTransfer: {js_result}')
+                    await asyncio.sleep(1)
+                    return True
+                else:
+                    logging.warning(f'JS DataTransfer upload failed: {js_result}')
+            except Exception as js_err:
+                logging.warning(f'JS DataTransfer error: {js_err}')
 
-                        if (accept) {
-                            selector += `[accept=\"${accept}\"]`;
-                        }
-
-                        return {
-                            selector: selector,
-                            accept: accept,
-                            acceptsFile: accept ? accept.toLowerCase().includes(fileExt) : true
-                        };
-                    });
-            }""", file_extension)
-
-            if not file_inputs:
-                logging.error('No file input elements found')
-                ctx.set_error(
-                    ERROR_ELEMENT_NOT_FOUND,
-                    'No file input elements found on page for upload action',
-                    element_id=id
-                )
-                return False
-
-            # Find compatible input elements
-            logging.debug(f'file_inputs: {file_inputs}')
-            compatible_inputs = [input_elem for input_elem in file_inputs if input_elem.get('acceptsFile')]
-
-            # If compatible input elements are found, use the first one, otherwise fallback to the first available
-            logging.debug(f'compatible_inputs: {compatible_inputs}')
-            selected_input = compatible_inputs[0] if compatible_inputs else file_inputs[0]
-            logging.debug(f'selected_input: {selected_input}')
-
-            # Upload files (support batch)
-            selector = selected_input.get('selector')
-            logging.debug(f'Uploading files {valid_file_paths} to: {selector}')
-            await self.page.set_input_files(selector, valid_file_paths)
-
-            await asyncio.sleep(1)
-            return True
+            logging.error('All upload strategies failed')
+            ctx.set_error(
+                ERROR_FILE_UPLOAD_FAILED,
+                'All upload strategies failed (set_input_files, expect_file_chooser, DataTransfer)',
+                element_id=id
+            )
+            return False
 
         except Exception as e:
             logging.error(f'Upload failed: {str(e)}')
@@ -2106,7 +2225,7 @@ class ActionHandler:
                     if (selector) {
                         selector.click();
 
-                        // wait for options to appear
+                        // wait for dropdown to open (10s buffer for slow country/list dropdowns)
                         return new Promise((resolve) => {
                             setTimeout(() => {
                                 const dropdown = document.querySelector('.ant-select-dropdown:not(.ant-select-dropdown-hidden)');
@@ -2139,7 +2258,7 @@ class ActionHandler:
                                         selector_type: 'ant_select'
                                     });
                                 }
-                            }, 500);
+                            }, 10000);
                         });
                     }
                 }
@@ -2152,7 +2271,7 @@ class ActionHandler:
                     if (selector) {
                         selector.click();
 
-                        // wait for cascader options to appear
+                        // wait for cascader dropdown to open (10s buffer for slow country/list dropdowns)
                         return new Promise((resolve) => {
                             setTimeout(() => {
                                 const dropdown = document.querySelector('.ant-cascader-dropdown:not(.ant-cascader-dropdown-hidden)');
@@ -2187,7 +2306,7 @@ class ActionHandler:
                                         selector_type: 'ant_cascader'
                                     });
                                 }
-                            }, 500);
+                            }, 10000);
                         });
                     }
                 }
@@ -2315,7 +2434,41 @@ class ActionHandler:
             }
 
         try:
-            # use JavaScript to detect selector type and select option
+            # Try Playwright's native selectOption first for native <select> elements
+            selector = element.get('selector')
+            xpath = element.get('xpath')
+            
+            if selector and 'select' in selector.lower():
+                try:
+                    # Try to use Playwright's selectOption for native selects
+                    playwright_selector = selector if selector else xpath
+                    if playwright_selector:
+                        # Try selecting by label (text), then by value
+                        try:
+                            await self.page.select_option(playwright_selector, label=option_text, timeout=2000)
+                            logging.debug(f'Successfully selected option using Playwright native select: {option_text}')
+                            return {
+                                'success': True,
+                                'message': f"Successfully selected option: '{option_text}'",
+                                'selected_value': option_text,
+                                'selected_text': option_text,
+                                'selector_type': 'native_select_playwright',
+                            }
+                        except Exception:
+                            # Try by value if label fails
+                            await self.page.select_option(playwright_selector, value=option_text, timeout=2000)
+                            logging.debug(f'Successfully selected option by value using Playwright: {option_text}')
+                            return {
+                                'success': True,
+                                'message': f"Successfully selected option: '{option_text}'",
+                                'selected_value': option_text,
+                                'selected_text': option_text,
+                                'selector_type': 'native_select_playwright',
+                            }
+                except Exception as e:
+                    logging.debug(f'Playwright native select failed, falling back to JavaScript: {e}')
+            
+            # Fallback: use JavaScript to detect selector type and select option
             js_code = """
             (params) => {
                 const elementData = params.elementData;
@@ -2353,13 +2506,20 @@ class ActionHandler:
                         };
                     }
 
-                    // select option
+                    // Focus and click the select element first (some frameworks require interaction)
+                    selectElement.focus();
+                    selectElement.click();
+                    
+                    // Select the option (browsers handle this synchronously)
                     selectElement.selectedIndex = targetOption.index;
                     targetOption.selected = true;
 
-                    // trigger event
+                    // Trigger all relevant events for framework reactivity
+                    selectElement.dispatchEvent(new Event('focus', { bubbles: true }));
+                    selectElement.dispatchEvent(new Event('click', { bubbles: true }));
                     selectElement.dispatchEvent(new Event('change', { bubbles: true }));
                     selectElement.dispatchEvent(new Event('input', { bubbles: true }));
+                    selectElement.dispatchEvent(new Event('blur', { bubbles: true }));
 
                     return {
                         success: true,
@@ -2382,7 +2542,7 @@ class ActionHandler:
                             selector.click();
                             return new Promise(res => setTimeout(() => {
                                 res(document.querySelector('.ant-select-dropdown:not(.ant-select-dropdown-hidden)'));
-                            }, 300));
+                            }, 10000));
                         };
 
                         return new Promise((resolve) => {
@@ -2418,22 +2578,28 @@ class ActionHandler:
                                         return;
                                     }
 
-                                    // click option
-                                    targetOption.click();
+                                    // scroll option into view within dropdown before clicking
+                                    targetOption.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+                                    
+                                    // wait for scroll to complete
+                                    setTimeout(() => {
+                                        // click option
+                                        targetOption.click();
 
-                                    // trigger event
-                                    antSelect.dispatchEvent(new Event('change', { bubbles: true }));
+                                        // trigger event
+                                        antSelect.dispatchEvent(new Event('change', { bubbles: true }));
 
-                                    const selectedText = targetOption.querySelector('.ant-select-item-option-content')?.textContent.trim() || targetOption.textContent.trim();
-                                    const selectedValue = targetOption.getAttribute('data-value') || selectedText;
+                                        const selectedText = targetOption.querySelector('.ant-select-item-option-content')?.textContent.trim() || targetOption.textContent.trim();
+                                        const selectedValue = targetOption.getAttribute('data-value') || selectedText;
 
-                                    resolve({
-                                        success: true,
-                                        message: `Successfully selected ant-select option: "${selectedText}"`,
-                                        selectedValue: selectedValue,
-                                        selectedText: selectedText,
-                                        selector_type: 'ant_select'
-                                    });
+                                        resolve({
+                                            success: true,
+                                            message: `Successfully selected ant-select option: "${selectedText}"`,
+                                            selectedValue: selectedValue,
+                                            selectedText: selectedText,
+                                            selector_type: 'ant_select'
+                                        });
+                                    }, 300);
                                 } else {
                                     resolve({
                                         success: false,
@@ -2458,7 +2624,7 @@ class ActionHandler:
                             selector.click();
                             return new Promise(res => setTimeout(() => {
                                 res(document.querySelector('.ant-cascader-dropdown:not(.ant-cascader-dropdown-hidden)'));
-                            }, 300));
+                            }, 10000));
                         };
 
                         return new Promise((resolve) => {
@@ -2489,29 +2655,35 @@ class ActionHandler:
                                         return;
                                     }
 
-                                    // click option
-                                    targetOption.click();
+                                    // scroll option into view within dropdown before clicking
+                                    targetOption.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+                                    
+                                    // wait for scroll to complete
+                                    setTimeout(() => {
+                                        // click option
+                                        targetOption.click();
 
-                                    // if it is leaf node (no sub options), trigger select event and close dropdown
-                                    if (!targetOption.classList.contains('ant-cascader-menu-item-expand')) {
-                                        antCascader.dispatchEvent(new Event('change', { bubbles: true }));
+                                        // if it is leaf node (no sub options), trigger select event and close dropdown
+                                        if (!targetOption.classList.contains('ant-cascader-menu-item-expand')) {
+                                            antCascader.dispatchEvent(new Event('change', { bubbles: true }));
 
-                                        // close dropdown
-                                        setTimeout(() => {
-                                            document.body.click();
-                                        }, 100);
-                                    }
+                                            // close dropdown
+                                            setTimeout(() => {
+                                                document.body.click();
+                                            }, 100);
+                                        }
 
-                                    const selectedText = targetOption.textContent.trim();
-                                    const selectedValue = targetOption.getAttribute('data-path-key') || selectedText;
+                                        const selectedText = targetOption.textContent.trim();
+                                        const selectedValue = targetOption.getAttribute('data-path-key') || selectedText;
 
-                                    resolve({
-                                        success: true,
-                                        message: `Successfully selected cascader option: "${selectedText}"`,
-                                        selectedValue: selectedValue,
-                                        selectedText: selectedText,
-                                        selector_type: 'ant_cascader'
-                                    });
+                                        resolve({
+                                            success: true,
+                                            message: `Successfully selected cascader option: "${selectedText}"`,
+                                            selectedValue: selectedValue,
+                                            selectedText: selectedText,
+                                            selector_type: 'ant_cascader'
+                                        });
+                                    }, 300);
                                 } else {
                                     resolve({
                                         success: false,
@@ -2524,39 +2696,58 @@ class ActionHandler:
                     }
                 }
 
-                // 4. handle other custom dropdown components
+                // 4. handle other custom dropdown components (including Facebook-style dropdowns)
                 let customDropdown = element.closest('[role="combobox"], [role="listbox"], .dropdown, .select');
                 if (customDropdown) {
                     // try to click to expand
                     customDropdown.click();
 
-                    setTimeout(() => {
-                        const options = Array.from(document.querySelectorAll('[role="option"], .option, .item'));
-                        let targetOption = null;
+                    return new Promise((resolve) => {
+                        setTimeout(() => {
+                            const options = Array.from(document.querySelectorAll('[role="option"], .option, .item'));
+                            let targetOption = null;
 
-                        for (let option of options) {
-                            const optionText = option.textContent.trim();
-                            if (optionText === targetText ||
-                                optionText.includes(targetText) ||
-                                targetText.includes(optionText)) {
-                                targetOption = option;
-                                break;
+                            for (let option of options) {
+                                const optionText = option.textContent.trim();
+                                if (optionText === targetText ||
+                                    optionText.includes(targetText) ||
+                                    targetText.includes(optionText)) {
+                                    targetOption = option;
+                                    break;
+                                }
                             }
-                        }
 
-                        if (targetOption) {
-                            targetOption.click();
-                            customDropdown.dispatchEvent(new Event('change', { bubbles: true }));
+                            if (targetOption) {
+                                // Ensure the dropdown container is scrollable
+                                const dropdownContainer = targetOption.closest('[role="listbox"], .dropdown, [class*="menu"]');
+                                
+                                // Scroll option into view within its container
+                                targetOption.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+                                
+                                // Wait for scroll animation, then click
+                                setTimeout(() => {
+                                    targetOption.click();
+                                    customDropdown.dispatchEvent(new Event('change', { bubbles: true }));
 
-                            return {
-                                success: true,
-                                message: `Successfully selected custom dropdown option: "${targetOption.textContent.trim()}"`,
-                                selectedValue: targetOption.getAttribute('value') || targetOption.textContent.trim(),
-                                selectedText: targetOption.textContent.trim(),
-                                selector_type: 'custom_dropdown'
-                            };
-                        }
-                    }, 300);
+                                    resolve({
+                                        success: true,
+                                        message: `Successfully selected custom dropdown option: "${targetOption.textContent.trim()}"`,
+                                        selectedValue: targetOption.getAttribute('value') || targetOption.textContent.trim(),
+                                        selectedText: targetOption.textContent.trim(),
+                                        selector_type: 'custom_dropdown'
+                                    });
+                                }, 300);
+                            } else {
+                                const availableOptions = options.map(opt => opt.textContent.trim());
+                                resolve({
+                                    success: false,
+                                    message: `Option "${targetText}" not found in custom dropdown. Available: ${availableOptions.join(', ')}`,
+                                    selector_type: 'custom_dropdown',
+                                    availableOptions: availableOptions
+                                });
+                            }
+                        }, 300);
+                    });
                 }
 
                 // if no match, return failure

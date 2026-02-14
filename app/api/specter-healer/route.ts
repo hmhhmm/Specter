@@ -1,0 +1,173 @@
+import { NextRequest, NextResponse } from "next/server";
+import { Octokit } from "@octokit/core";
+import fs from "fs";
+import path from "path";
+import { HEALER_SCENARIOS } from "@/lib/specter-healer/scenarios";
+
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const { bugId, bugTitle, bugDescription, filePath: reqFilePath } = body;
+
+    // 1. Resolve Scenario context
+    const scenario = HEALER_SCENARIOS.find((s) => s.bugId === bugId);
+    const title = bugTitle || scenario?.bugTitle || "Specter Healing Patch";
+    const description = bugDescription || scenario?.bugDescription || "Automated fix for QA detected issue.";
+    const filePath = reqFilePath || scenario?.filePath;
+
+    if (!filePath) {
+      return NextResponse.json({ error: "File path is required" }, { status: 400 });
+    }
+
+    // 2. Read current file content
+    const fullPath = path.join(process.cwd(), filePath);
+    if (!fs.existsSync(fullPath)) {
+      return NextResponse.json({ error: `File not found: ${filePath}` }, { status: 404 });
+    }
+    const currentCode = fs.readFileSync(fullPath, "utf-8");
+
+    // 3. Call backend AI endpoint for the fix
+    const backendResponse = await fetch("http://localhost:8000/api/ai/fix-code", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        filePath,
+        currentCode,
+        title,
+        description,
+        fixHint: scenario?.fixHint || "",
+      }),
+    });
+
+    if (!backendResponse.ok) {
+      return NextResponse.json({ error: "Backend AI service failed" }, { status: 500 });
+    }
+
+    const result = await backendResponse.json();
+    const llmOutput = result.fixedCode;
+
+    // Extract code from markdown block
+    const codeMatch = llmOutput.match(/```(?:tsx|jsx|typescript|javascript|)\n([\s\S]*?)```/) || 
+                      llmOutput.match(/```([\s\S]*?)```/);
+    const fixedCode = codeMatch ? codeMatch[1].trim() : llmOutput.trim();
+
+    if (!fixedCode || fixedCode.length < 50) {
+      return NextResponse.json({ error: "LLM returned invalid code" }, { status: 500 });
+    }
+
+    // 4. Create GitHub PR using Octokit
+    const githubToken = process.env.GITHUB_TOKEN;
+    const owner = process.env.GITHUB_OWNER;
+    const repo = process.env.GITHUB_REPO || "Specter";
+
+    if (!githubToken || !owner) {
+      // For demo purposes, we return the diff even if GH is not configured
+      return NextResponse.json({
+        success: true,
+        mocked: true,
+        message: "GitHub not configured. Returning diff only.",
+        prUrl: "#",
+        codeBefore: currentCode,
+        codeAfter: fixedCode,
+        filePath,
+      });
+    }
+
+    const octokit = new Octokit({ auth: githubToken });
+    const branchName = `fix/specter-patch-${Date.now()}`;
+
+    // 1. Get the latest commit SHA from main branch
+    const { data: refData } = await octokit.request('GET /repos/{owner}/{repo}/git/ref/{ref}', {
+      owner,
+      repo,
+      ref: 'heads/main',
+    });
+    const mainSha = refData.object.sha;
+
+    // 2. Get the commit to get the tree SHA
+    const { data: commitData } = await octokit.request('GET /repos/{owner}/{repo}/git/commits/{commit_sha}', {
+      owner,
+      repo,
+      commit_sha: mainSha,
+    });
+    const baseTreeSha = commitData.tree.sha;
+
+    // 3. Create a blob for the new file content
+    const { data: blobData } = await octokit.request('POST /repos/{owner}/{repo}/git/blobs', {
+      owner,
+      repo,
+      content: Buffer.from(fixedCode).toString('base64'),
+      encoding: 'base64',
+    });
+
+    // 4. Create a new tree with the updated file
+    const { data: newTree } = await octokit.request('POST /repos/{owner}/{repo}/git/trees', {
+      owner,
+      repo,
+      base_tree: baseTreeSha,
+      tree: [
+        {
+          path: filePath,
+          mode: '100644',
+          type: 'blob',
+          sha: blobData.sha,
+        },
+      ],
+    });
+
+    // 5. Create a new commit
+    const { data: newCommit } = await octokit.request('POST /repos/{owner}/{repo}/git/commits', {
+      owner,
+      repo,
+      message: `fix: autonomously resolve ${title.toLowerCase()}`,
+      tree: newTree.sha,
+      parents: [mainSha],
+    });
+
+    // 6. Create a new branch with the commit
+    await octokit.request('POST /repos/{owner}/{repo}/git/refs', {
+      owner,
+      repo,
+      ref: `refs/heads/${branchName}`,
+      sha: newCommit.sha,
+    });
+
+    // 7. Create the pull request
+    const { data: prData } = await octokit.request('POST /repos/{owner}/{repo}/pulls', {
+      owner,
+      repo,
+      title: `[Specter Bot] Fix: ${title}`,
+      head: branchName,
+      base: 'main',
+      body: `## 🔮 Specter Autonomous Healing
+      
+### Bug Report
+- **Title:** ${title}
+- **Description:** ${description}
+- **Severity:** ${scenario?.severity || "P2"}
+
+### Resolution
+This PR was automatically generated by the Specter Healer agent.
+
+**Target File:** \`${filePath}\`
+
+Please review the changes and merge if they meet requirements.`,
+    });
+
+    return NextResponse.json({
+      success: true,
+      prUrl: prData.html_url,
+      prNumber: prData.number,
+      codeBefore: currentCode,
+      codeAfter: fixedCode,
+      filePath,
+      branchName,
+    });
+
+  } catch (error: any) {
+    console.error("Healer API Error:", error);
+    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+  }
+}

@@ -1,46 +1,43 @@
-import { TrendingDown } from "lucide-react";
+"use client";
+
+import { motion } from "framer-motion";
 
 export function CompetitorBar() {
   return (
-    <div className="rounded-2xl border-2 border-white/10 bg-gradient-to-br from-zinc-900/80 to-zinc-900/40 backdrop-blur-sm p-6">
-      <h3 className="text-lg font-bold mb-6">Competitive Analysis</h3>
-      
-      <div className="space-y-6">
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <div>
-              <span className="text-sm text-zinc-400">Your Product</span>
-              <p className="text-xs text-zinc-600 mt-0.5">UX Quality Score</p>
-            </div>
-            <span className="text-3xl font-bold text-yellow-400">72</span>
-          </div>
-          <div className="relative h-3 bg-white/5 rounded-full overflow-hidden">
-            <div className="absolute inset-y-0 left-0 bg-gradient-to-r from-yellow-500 to-yellow-600 rounded-full" style={{width: '72%'}} />
-          </div>
+    <div className="space-y-6">
+      <div className="space-y-2">
+        <div className="flex justify-between items-end">
+          <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">NovaTrade Pro</span>
+          <span className="text-sm font-bold font-mono text-amber-500">8.2/10</span>
         </div>
-
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <div>
-              <span className="text-sm text-zinc-400">Industry Leader</span>
-              <p className="text-xs text-zinc-600 mt-0.5">Benchmark Score</p>
-            </div>
-            <span className="text-3xl font-bold text-emerald-400">89</span>
-          </div>
-          <div className="relative h-3 bg-white/5 rounded-full overflow-hidden">
-            <div className="absolute inset-y-0 left-0 bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-full" style={{width: '89%'}} />
-          </div>
+        <div className="h-1.5 w-full bg-zinc-800 rounded-full overflow-hidden">
+          <motion.div 
+            initial={{ width: 0 }}
+            animate={{ width: "82%" }}
+            transition={{ duration: 1, delay: 0.5, ease: "circOut" }}
+            className="h-full bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.3)]"
+          />
         </div>
-
-        <div className="pt-4 border-t border-white/10">
-          <div className="flex items-center gap-2 text-red-400">
-            <TrendingDown className="w-4 h-4" />
-            <span className="text-sm font-semibold">17 points below industry leader</span>
-          </div>
-          <p className="text-xs text-zinc-500 mt-2">
-            Primary gaps: Mobile UX (12 pts), Accessibility (5 pts)
-          </p>
+      </div>
+      <div className="space-y-2">
+        <div className="flex justify-between items-end">
+          <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">Industry Average</span>
+          <span className="text-sm font-bold font-mono text-emerald-500">2.4/10</span>
         </div>
+        <div className="h-1.5 w-full bg-zinc-800 rounded-full overflow-hidden">
+          <motion.div 
+            initial={{ width: 0 }}
+            animate={{ width: "24%" }}
+            transition={{ duration: 1, delay: 0.7, ease: "circOut" }}
+            className="h-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.3)]"
+          />
+        </div>
+      </div>
+      <div className="pt-2 flex items-center gap-2">
+        <div className="px-1.5 py-0.5 rounded bg-red-500/10 border border-red-500/20 text-[8px] font-mono text-red-500 uppercase tracking-widest font-bold">
+          High Friction Delta
+        </div>
+        <span className="text-[9px] font-mono text-zinc-600 uppercase tracking-widest leading-none">Critical churn risk detected</span>
       </div>
     </div>
   );

@@ -424,10 +424,13 @@ class ActionExecutor:
             }
 
 
-    async def _execute_upload(self, action, file_path):
-        """Execute upload action."""
+    async def _execute_upload(self, action):
+        """Execute upload action. file_path comes from action.param.file_path (str or list)."""
         if not self._validate_params(action, ['locate.id']):
             return {'success': False, 'message': 'Missing locate.id for upload action', 'bug_type': 'none'}
+        file_path = action.get('param', {}).get('file_path')
+        if not file_path:
+            return {'success': False, 'message': 'Missing param.file_path for upload action', 'bug_type': 'none'}
 
         success = await self._actions.upload_file(action.get('locate').get('id'), file_path)
 

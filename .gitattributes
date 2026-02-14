@@ -1,0 +1,3 @@
+# Normalize line endings to LF so Mac/Linux teammates don't get CRLF from Windows.
+# https://git-scm.com/docs/gitattributes#_end_of_line_conversion
+* text=auto eol=lf
