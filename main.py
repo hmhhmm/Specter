@@ -251,10 +251,12 @@ RULES:
 - DO NOT click social login buttons (Google, Apple, Facebook) - use email signup.
 
 CAPTCHA HANDLING (CRITICAL):
-- If you see a CAPTCHA (reCAPTCHA, hCaptcha, image puzzle, distorted text), respond ONLY with:
+- If you see a CAPTCHA (reCAPTCHA, hCaptcha, image puzzle, distorted text), use the SolveCaptcha action:
   {"action": {"type": "SolveCaptcha"}, "observation": "CAPTCHA detected - [type]", ...}
-- Do NOT Tap the "Verify" button, "Submit" button, or "Skip" inside the CAPTCHA challenge. The SolveCaptcha action will screenshot the 9 tiles, run AI, and click Verify itself. Tapping Verify/Submit yourself will trigger "automated queries" and fail.
-- If the page shows a 9-grid image challenge ("Select all images with..."), you MUST use SolveCaptcha again (do not Tap any button).
+- NOTE: Auto-solving is currently disabled. The SolveCaptcha action will DETECT the CAPTCHA and report it, but it will NOT solve it automatically. The CAPTCHA requires manual human intervention.
+- After SolveCaptcha reports the CAPTCHA, continue with the next logical step in the flow. Do NOT keep retrying SolveCaptcha — just note the CAPTCHA as a UX friction issue and move on.
+- Do NOT try to manually tap CAPTCHA tiles, Verify, Skip, or any CAPTCHA elements yourself. Just report it and continue.
+- If the CAPTCHA blocks form submission, note it as a P1 blocker requiring human action and proceed to the DONE state.
 
 OTP HANDLING:
 - If the page says "Enter the code sent to your email" or "Verify your email":
@@ -788,26 +790,31 @@ async def autonomous_signup_test(
                     detection = await detector.detect(page, elements_json, screenshot_b64, client)
                     
                     if detection['has_captcha']:
-                        # Use captcha_provider param (falls back to env var, then 'claude')
-                        ai_provider = captcha_provider or os.getenv('CAPTCHA_AI_PROVIDER', 'claude')
-                        tile_dir = str(screenshot_dir) if screenshot_dir else None
-                        has_claude = client is not None
-                        has_openai = bool(os.getenv('OPENAI_API_KEY'))
-                        has_google = bool(os.getenv('GOOGLE_API_KEY'))
-                        print(f"CAPTCHA: provider={ai_provider}, claude={'yes' if has_claude else 'no'}, OPENAI_API_KEY={'set' if has_openai else 'not set'}, GOOGLE_API_KEY={'set' if has_google else 'not set'}")
-                        if ai_provider == 'openai' and not has_openai:
-                            print("  ⚠️ CAPTCHA_AI_PROVIDER=openai but OPENAI_API_KEY not set — tile analysis may fail. Set OPENAI_API_KEY or use CAPTCHA_AI_PROVIDER=claude")
-                        solver = CaptchaSolver(page, claude_client=client, ai_provider=ai_provider, tile_screenshot_dir=tile_dir)
-                        solve_result = await solver.solve(
-                            detection['captcha_type'], 
-                            detection['captcha_selector'],
-                            detection.get('instruction_text', '')
-                        )
-                        success = solve_result['solved']
-                        exec_msg = f"CAPTCHA {detection['captcha_type']}: {'solved' if success else 'failed'} via {solve_result['method']} ({solve_result['time_taken_ms']}ms)"
+                        # ── CAPTCHA auto-solving DISABLED ──
+                        # The auto-solver code is preserved in captcha_handler.py but
+                        # reCAPTCHA consistently detects automation. Instead, we notify
+                        # the user/tester that manual human intervention is required.
+                        captcha_type = detection['captcha_type']
+                        print(f"[CAPTCHA DETECTED] Type: {captcha_type}")
+                        print(f"[CAPTCHA] Auto-solving is disabled. This CAPTCHA requires human intervention.")
+                        print(f"[CAPTCHA] Please solve the CAPTCHA manually in the browser window, then the test will continue.")
                         
-                        # Add CAPTCHA friction to UX issues
-                        ux_issues.append(f"CAPTCHA present ({detection['captcha_type']}) - {solve_result['time_taken_ms']}ms to solve")
+                        success = False
+                        exec_msg = (
+                            f"CAPTCHA detected ({captcha_type}). "
+                            f"Auto-solving is disabled — this CAPTCHA requires manual human action. "
+                            f"Please solve it in the browser window."
+                        )
+                        ux_issues.append(f"CAPTCHA present ({captcha_type}) - requires human intervention")
+                        
+                        # --- Original auto-solve code (preserved, disabled) ---
+                        # ai_provider = captcha_provider or os.getenv('CAPTCHA_AI_PROVIDER', 'claude')
+                        # tile_dir = str(screenshot_dir) if screenshot_dir else None
+                        # solver = CaptchaSolver(page, claude_client=client, ai_provider=ai_provider, tile_screenshot_dir=tile_dir)
+                        # solve_result = await solver.solve(detection['captcha_type'], detection['captcha_selector'], detection.get('instruction_text', ''))
+                        # success = solve_result['solved']
+                        # exec_msg = f"CAPTCHA {detection['captcha_type']}: {'solved' if success else 'failed'} via {solve_result['method']} ({solve_result['time_taken_ms']}ms)"
+                        # ux_issues.append(f"CAPTCHA present ({detection['captcha_type']}) - {solve_result['time_taken_ms']}ms to solve")
                     else:
                         success = True
                         exec_msg = "No CAPTCHA detected"
@@ -815,55 +822,124 @@ async def autonomous_signup_test(
                 elif action_type == 'WaitForOTP':
                     otp_email = os.getenv('TEST_EMAIL_ADDRESS')
                     otp_password = os.getenv('TEST_EMAIL_APP_PASSWORD')
+                    imap_server = os.getenv('TEST_EMAIL_IMAP_SERVER', 'imap.gmail.com')
                     
                     if not otp_email or not otp_password:
                         success = False
                         exec_msg = "OTP reader not configured (missing TEST_EMAIL_ADDRESS/TEST_EMAIL_APP_PASSWORD in .env)"
+                        print(f"[OTP] ERROR: TEST_EMAIL_ADDRESS={'set' if otp_email else 'MISSING'}, TEST_EMAIL_APP_PASSWORD={'set' if otp_password else 'MISSING'}")
                     else:
-                        reader = OTPReader(otp_email, otp_password)
+                        print(f"[OTP] Reading OTP from {otp_email} via {imap_server}")
+                        print(f"[OTP] Polling inbox for new emails since test start...")
+                        reader = OTPReader(otp_email, otp_password, imap_server=imap_server)
                         sender_filter = value or action_dict.get('param', {}).get('sender_filter')
-                        otp_result = await reader.wait_for_otp(
-                            sender_filter=sender_filter,
-                            since_timestamp=test_start_time,  # Only read emails from after test started
-                            timeout_seconds=60
-                        )
+                        if sender_filter:
+                            print(f"[OTP] Filtering by sender: {sender_filter}")
                         
-                        if otp_result['found']:
-                            # Type the OTP into the focused input field
-                            await page.keyboard.type(otp_result['code'])
-                            await page.keyboard.press('Enter')
-                            success = True
-                            exec_msg = f"OTP entered: {otp_result['code']} (waited {otp_result['wait_time_ms']}ms)"
-                            ux_issues.append(f"OTP required - {otp_result['wait_time_ms']}ms wait time")
-                        else:
+                        try:
+                            otp_result = await reader.wait_for_otp(
+                                sender_filter=sender_filter,
+                                since_timestamp=test_start_time,
+                                timeout_seconds=90
+                            )
+                            
+                            if otp_result['found']:
+                                otp_code = otp_result['code']
+                                print(f"[OTP] Found OTP code: {otp_code} (subject: {otp_result.get('email_subject', 'N/A')})")
+                                
+                                # Find the OTP input field on the page and type the code
+                                # Try common OTP input selectors first
+                                otp_input = None
+                                otp_selectors = [
+                                    'input[name*="otp" i]', 'input[name*="code" i]', 'input[name*="verification" i]',
+                                    'input[name*="token" i]', 'input[type="tel"]', 'input[type="number"]',
+                                    'input[autocomplete="one-time-code"]',
+                                    'input[inputmode="numeric"]',
+                                ]
+                                for sel in otp_selectors:
+                                    try:
+                                        otp_input = await page.query_selector(sel)
+                                        if otp_input and await otp_input.is_visible():
+                                            break
+                                        otp_input = None
+                                    except Exception:
+                                        continue
+                                
+                                if otp_input:
+                                    await otp_input.click()
+                                    await asyncio.sleep(0.3)
+                                    await otp_input.fill(otp_code)
+                                    print(f"[OTP] Typed OTP into detected input field")
+                                else:
+                                    # Fallback: type into whatever is focused
+                                    print(f"[OTP] No specific OTP input found, typing into focused element")
+                                    await page.keyboard.type(otp_code)
+                                
+                                # Brief wait, then try pressing Enter or clicking submit
+                                await asyncio.sleep(0.5)
+                                # Look for a submit/verify button near the OTP input
+                                verify_btn = await page.query_selector(
+                                    'button[type="submit"], button:has-text("Verify"), button:has-text("Confirm"), '
+                                    'button:has-text("Submit"), button:has-text("Continue"), input[type="submit"]'
+                                )
+                                if verify_btn and await verify_btn.is_visible():
+                                    await verify_btn.click()
+                                    print(f"[OTP] Clicked verify/submit button")
+                                else:
+                                    await page.keyboard.press('Enter')
+                                    print(f"[OTP] Pressed Enter to submit OTP")
+                                
+                                success = True
+                                exec_msg = f"OTP entered: {otp_code} (waited {otp_result['wait_time_ms']}ms)"
+                                ux_issues.append(f"OTP required - {otp_result['wait_time_ms']}ms wait time")
+                            else:
+                                success = False
+                                exec_msg = f"OTP not received within timeout: {otp_result.get('error', 'timeout')}"
+                                print(f"[OTP] {exec_msg}")
+                        except Exception as e:
                             success = False
-                            exec_msg = f"OTP not received within timeout: {otp_result.get('error', 'timeout')}"
+                            exec_msg = f"OTP reader error: {str(e)}"
+                            print(f"[OTP] Exception: {e}")
+                            import traceback
+                            traceback.print_exc()
                 
                 elif action_type == 'WaitForMagicLink':
                     otp_email = os.getenv('TEST_EMAIL_ADDRESS')
                     otp_password = os.getenv('TEST_EMAIL_APP_PASSWORD')
+                    imap_server = os.getenv('TEST_EMAIL_IMAP_SERVER', 'imap.gmail.com')
                     
                     if not otp_email or not otp_password:
                         success = False
                         exec_msg = "Magic link reader not configured (missing TEST_EMAIL_ADDRESS/TEST_EMAIL_APP_PASSWORD in .env)"
+                        print(f"[MagicLink] ERROR: TEST_EMAIL_ADDRESS={'set' if otp_email else 'MISSING'}, TEST_EMAIL_APP_PASSWORD={'set' if otp_password else 'MISSING'}")
                     else:
-                        reader = OTPReader(otp_email, otp_password)
+                        print(f"[MagicLink] Reading magic link from {otp_email} via {imap_server}")
+                        reader = OTPReader(otp_email, otp_password, imap_server=imap_server)
                         sender_filter = value or action_dict.get('param', {}).get('sender_filter')
-                        link_result = await reader.wait_for_magic_link(
-                            sender_filter=sender_filter,
-                            since_timestamp=test_start_time,
-                            timeout_seconds=60
-                        )
                         
-                        if link_result['found']:
-                            # Navigate to the magic link
-                            await page.goto(link_result['link'])
-                            success = True
-                            exec_msg = f"Magic link opened (waited {link_result['wait_time_ms']}ms)"
-                            ux_issues.append(f"Magic link required - {link_result['wait_time_ms']}ms wait time")
-                        else:
+                        try:
+                            link_result = await reader.wait_for_magic_link(
+                                sender_filter=sender_filter,
+                                since_timestamp=test_start_time,
+                                timeout_seconds=90
+                            )
+                            
+                            if link_result['found']:
+                                print(f"[MagicLink] Found link: {link_result['link'][:80]}...")
+                                await page.goto(link_result['link'])
+                                success = True
+                                exec_msg = f"Magic link opened (waited {link_result['wait_time_ms']}ms)"
+                                ux_issues.append(f"Magic link required - {link_result['wait_time_ms']}ms wait time")
+                            else:
+                                success = False
+                                exec_msg = f"Magic link not received within timeout: {link_result.get('error', 'timeout')}"
+                                print(f"[MagicLink] {exec_msg}")
+                        except Exception as e:
                             success = False
-                            exec_msg = f"Magic link not received within timeout: {link_result.get('error', 'timeout')}"
+                            exec_msg = f"Magic link reader error: {str(e)}"
+                            print(f"[MagicLink] Exception: {e}")
+                            import traceback
+                            traceback.print_exc()
                 
                 else:
                     # Normal action execution through ActionExecutor

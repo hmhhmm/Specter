@@ -84,20 +84,31 @@ class OTPReader:
                     }
                 
             except Exception as e:
-                print(f"OTP fetch error: {e}")
+                print(f"[OTP] Fetch error: {e}")
+                # If it's a login failure, don't keep retrying
+                if "login failed" in str(e).lower() or "authentication" in str(e).lower():
+                    return {
+                        "found": False,
+                        "code": None,
+                        "method": "email_imap",
+                        "wait_time_ms": int((datetime.now() - start_time).total_seconds() * 1000),
+                        "email_subject": "",
+                        "error": f"IMAP login failed: {e}"
+                    }
             
             # Wait before next poll
             await asyncio.sleep(poll_interval)
             elapsed_ms = int((datetime.now() - start_time).total_seconds() * 1000)
         
         # Timeout reached
+        print(f"[OTP] Timeout after {elapsed_ms}ms - no OTP email found")
         return {
             "found": False,
             "code": None,
             "method": "email_imap",
             "wait_time_ms": elapsed_ms,
             "email_subject": "",
-            "error": "Timeout: No OTP received"
+            "error": f"Timeout after {timeout_seconds}s: No OTP received in {self.email_address}"
         }
     
     def _fetch_otp_sync(
@@ -109,8 +120,19 @@ class OTPReader:
         """Synchronous IMAP operations (runs in executor)."""
         try:
             # Connect to IMAP server
+            print(f"[OTP-IMAP] Connecting to {self.imap_server}...")
             mail = imaplib.IMAP4_SSL(self.imap_server)
-            mail.login(self.email_address, self.app_password)
+            try:
+                mail.login(self.email_address, self.app_password)
+            except imaplib.IMAP4.error as login_err:
+                err_msg = str(login_err)
+                print(f"[OTP-IMAP] LOGIN FAILED: {err_msg}")
+                if "AUTHENTICATIONFAILED" in err_msg or "Invalid credentials" in err_msg:
+                    print(f"[OTP-IMAP] Hint: For Gmail, you need a 16-char App Password (not your regular password).")
+                    print(f"[OTP-IMAP] Generate one at: https://myaccount.google.com/apppasswords")
+                    print(f"[OTP-IMAP] Also ensure IMAP is enabled in Gmail Settings > Forwarding and POP/IMAP")
+                return {"found": False, "error": f"IMAP login failed: {err_msg}"}
+            print(f"[OTP-IMAP] Logged in as {self.email_address}")
             mail.select('INBOX')
             
             # Build search criteria
@@ -247,7 +269,12 @@ class OTPReader:
         """Synchronous magic link fetch (runs in executor)."""
         try:
             mail = imaplib.IMAP4_SSL(self.imap_server)
-            mail.login(self.email_address, self.app_password)
+            try:
+                mail.login(self.email_address, self.app_password)
+            except imaplib.IMAP4.error as login_err:
+                print(f"[MagicLink-IMAP] LOGIN FAILED: {login_err}")
+                print(f"[MagicLink-IMAP] For Gmail, use an App Password: https://myaccount.google.com/apppasswords")
+                return {"found": False, "error": f"IMAP login failed: {login_err}"}
             mail.select('INBOX')
             
             date_str = since_timestamp.strftime("%d-%b-%Y")
