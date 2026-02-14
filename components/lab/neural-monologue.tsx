@@ -13,9 +13,11 @@ interface NeuralMonologueProps {
   logs?: string[];
   results?: any;
   currentStepData?: any;
+  currentAction?: string;
+  maxSteps?: number;
 }
 
-export function NeuralMonologue({ state, step, persona, logs = [], results, currentStepData }: NeuralMonologueProps) {
+export function NeuralMonologue({ state, step, persona, logs = [], results, currentStepData, currentAction, maxSteps = 5 }: NeuralMonologueProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [currentTime, setCurrentTime] = useState("");
 
@@ -36,13 +38,40 @@ export function NeuralMonologue({ state, step, persona, logs = [], results, curr
   }, [logs, step, currentStepData]);
 
   return (
-    <div className="flex flex-col gap-4" style={{ maxHeight: 'calc(100vh - 200px)' }}>
+    <div className="flex flex-col gap-4" style={{ maxHeight: 'calc(100vh - 240px)' }}>
+      {/* Steps Display - only show when test is running */}
+      {state !== "idle" && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex gap-2 px-4"
+        >
+          {Array.from({ length: maxSteps }, (_, i) => i + 1).map((stepNum) => {
+            const isPast = stepNum < step;
+            const isCurrent = stepNum === step;
+            const isComplete = state === "complete" && stepNum <= step;
+
+            return (
+              <div
+                key={stepNum}
+                className={cn(
+                  "flex-1 h-1 rounded-full transition-all duration-300",
+                  (isPast || isComplete) && "bg-emerald-500",
+                  isCurrent && "bg-blue-500 animate-pulse",
+                  stepNum > step && "bg-zinc-800"
+                )}
+              />
+            );
+          })}
+        </motion.div>
+      )}
+
       {/* Terminal Container */}
       <motion.div 
         initial={{ x: 50, opacity: 0 }}
         animate={{ x: 0, opacity: 1 }}
         transition={{ duration: 0.8, delay: 0.2 }}
-        className="flex-1 rounded-[2rem] border border-white/5 bg-zinc-900/30 backdrop-blur-2xl overflow-hidden flex flex-col shadow-2xl"
+        className="flex-1 rounded-2xl border border-white/5 bg-zinc-900/30 backdrop-blur-xl overflow-hidden flex flex-col shadow-2xl"
       >
         {/* Terminal Header */}
         <div className="px-6 py-4 border-b border-white/5 flex items-center justify-between bg-white/5">
@@ -57,17 +86,11 @@ export function NeuralMonologue({ state, step, persona, logs = [], results, curr
           ref={containerRef}
           className="flex-1 p-6 font-mono text-xs overflow-y-auto space-y-4"
           style={{
-            maxHeight: 'calc(100vh - 400px)',
+            maxHeight: 'calc(100vh - 340px)',
             scrollbarWidth: 'thin',
             scrollbarColor: '#4ade80 #18181b'
           }}
         >
-          {state === "idle" && (
-            <div className="h-full flex items-center justify-center text-zinc-600">
-              Waiting for test...
-            </div>
-          )}
-
           {state === "scanning" && (
             <div className="space-y-2">
               <div className="flex items-center gap-2 text-emerald-500">

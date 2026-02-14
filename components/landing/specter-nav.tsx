@@ -22,11 +22,10 @@ export function SpecterNav() {
       transition={{ duration: 0.8, ease: "circOut" }}
       className="fixed top-0 left-0 right-0 z-50 flex justify-center p-6"
     >
-      <div className="flex items-center justify-between w-full max-w-7xl px-6 py-3 bg-zinc-950/40 backdrop-blur-xl border border-zinc-800/50 rounded-full shadow-2xl">
-        <Link href="/" className="flex items-center gap-2 group transition-opacity hover:opacity-80">
-          <Ghost className="w-6 h-6 text-emerald-500 group-hover:scale-110 transition-transform" />
+      <div className="flex items-center justify-between w-full max-w-7xl px-6 py-3 bg-zinc-950/60 backdrop-blur-xl border border-zinc-800/50 rounded-full shadow-xl">
+        <Link href="/" className="transition-opacity hover:opacity-80">
           <span className="font-bricolage text-xl font-bold tracking-tight text-white">
-            Specter.AI
+            Specter
           </span>
         </Link>
 
@@ -49,12 +48,6 @@ export function SpecterNav() {
               </Link>
             );
           })}
-        </div>
-
-        <div className="flex items-center">
-          <button className="px-6 py-2 rounded-full text-zinc-400 font-mono text-sm hover:text-white hover:bg-white/5 transition-all duration-300">
-            Login
-          </button>
         </div>
       </div>
     </motion.nav>

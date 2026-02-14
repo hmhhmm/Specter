@@ -146,20 +146,6 @@ export function ProblemGrid() {
       <div className="absolute top-1/2 left-0 -translate-y-1/2 w-[600px] h-[600px] bg-emerald-500/[0.08] blur-[120px] rounded-full pointer-events-none animate-pulse" />
       <div className="absolute bottom-0 right-0 w-[800px] h-[800px] bg-emerald-500/[0.08] blur-[120px] rounded-full pointer-events-none animate-pulse" style={{ animationDelay: '2s' }} />
 
-      {/* Horizontal Data Beams */}
-      <div className="absolute inset-0 pointer-events-none">
-        <motion.div 
-          animate={{ x: ["-100%", "100%"] }}
-          transition={{ duration: 10, repeat: Infinity, ease: "linear" }}
-          className="absolute top-[20%] left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-emerald-500/25 to-transparent"
-        />
-        <motion.div 
-          animate={{ x: ["100%", "-100%"] }}
-          transition={{ duration: 15, repeat: Infinity, ease: "linear" }}
-          className="absolute top-[60%] left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-emerald-500/15 to-transparent"
-        />
-      </div>
-
       <div className="max-w-7xl mx-auto px-6">
         <motion.div 
           initial="hidden"
@@ -168,10 +154,8 @@ export function ProblemGrid() {
           variants={fadeInUp}
           className="text-center mb-24 relative"
         >
-          <div className="inline-block px-4 py-1.5 mb-6 rounded-full bg-white/5 border border-white/10 text-[10px] font-mono text-zinc-500 uppercase tracking-[0.3em] backdrop-blur-sm">
-            Diagnostic Matrix v1.0
-          </div>
-          <h2 className="font-bricolage text-4xl md:text-7xl font-bold text-white mb-6 tracking-tighter">
+
+          <h2 className="font-bricolage text-4xl md:text-6xl font-bold text-white mb-6 tracking-tighter">
             Identifying the <span className="text-emerald-500">Silent</span> Killers
           </h2>
           <p className="text-zinc-500 font-mono text-base max-w-2xl mx-auto leading-relaxed">
@@ -193,26 +177,10 @@ export function ProblemGrid() {
             icon={Eye}
             accentColor="emerald"
           >
-            <div className="relative h-40 bg-zinc-950/50 rounded-2xl border border-white/5 overflow-hidden group/scan shadow-inner">
-               {/* Mock UI Sketch */}
-               <div className="absolute inset-4 space-y-3 opacity-20">
-                  <div className="h-4 w-3/4 bg-zinc-800 rounded-full" />
-                  <div className="h-24 w-full bg-zinc-800/50 rounded-lg" />
-                  <div className="flex gap-2">
-                    <div className="h-8 w-1/2 bg-zinc-800 rounded-lg" />
-                    <div className="h-8 w-1/2 bg-zinc-800 rounded-lg" />
-                  </div>
-               </div>
-               {/* Scan Line */}
-               <motion.div 
-                animate={{ top: ["-10%", "110%", "-10%"] }}
-                transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
-                className="absolute left-0 right-0 h-0.5 bg-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.8)] z-20"
-               />
-               <div className="absolute inset-0 bg-gradient-to-b from-emerald-500/5 via-transparent to-emerald-500/5 opacity-0 group-hover/scan:opacity-100 transition-opacity duration-700" />
-               <div className="absolute bottom-4 left-4 flex items-center gap-2">
-                  <Cpu className="w-3 h-3 text-emerald-500 animate-pulse" />
-                  <span className="text-[9px] font-mono text-emerald-500/60 uppercase tracking-widest">Neural Scan Active</span>
+            <div className="relative h-32 bg-zinc-950/50 rounded-xl border border-emerald-500/10 flex items-center justify-center">
+               <div className="flex items-center gap-2">
+                  <Cpu className="w-4 h-4 text-emerald-500" />
+                  <span className="text-xs font-mono text-emerald-500/80 uppercase tracking-wider">Neural Scan Active</span>
                </div>
             </div>
           </FeatureCard>
@@ -224,41 +192,13 @@ export function ProblemGrid() {
             icon={TrendingDown}
             accentColor="red"
           >
-            <div className="p-6 bg-black/40 rounded-2xl border border-red-500/10 shadow-inner">
-              <div className="flex justify-between items-start mb-6">
+            <div className="p-6 bg-black/40 rounded-xl border border-red-500/10">
+              <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-[10px] font-mono text-zinc-600 uppercase tracking-widest mb-1">Impact Velocity</p>
-                  <motion.p 
-                    animate={{ scale: [1, 1.05, 1] }}
-                    transition={{ duration: 2, repeat: Infinity }}
-                    className="text-3xl font-bold text-red-500 font-bricolage"
-                  >
-                    $42,850<span className="text-sm font-normal text-red-500/50">/mo</span>
-                  </motion.p>
+                  <p className="text-xs font-mono text-zinc-600 uppercase mb-1">Impact</p>
+                  <p className="text-2xl font-bold text-red-500 font-bricolage">$42,850<span className="text-sm text-red-500/50">/mo</span></p>
                 </div>
-                <div className="p-2 bg-red-500/10 rounded-lg border border-red-500/20">
-                  <AlertTriangle className="w-4 h-4 text-red-500" />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <div className="flex justify-between text-[10px] font-mono text-zinc-500">
-                  <span>Checkout Friction</span>
-                  <span className="text-red-400">Critical</span>
-                </div>
-                <div className="h-2 w-full bg-zinc-800/50 rounded-full overflow-hidden p-[2px]">
-                  <motion.div 
-                    initial={{ width: 0 }}
-                    whileInView={{ width: "85%" }}
-                    transition={{ duration: 2, ease: "circOut" }}
-                    className="h-full bg-gradient-to-r from-red-600 to-red-400 rounded-full relative shadow-[0_0_10px_rgba(239,68,68,0.4)]"
-                  >
-                    <motion.div 
-                      animate={{ opacity: [0.4, 1, 0.4], x: ["-100%", "200%"] }}
-                      transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
-                      className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent"
-                    />
-                  </motion.div>
-                </div>
+                <AlertTriangle className="w-5 h-5 text-red-500" />
               </div>
             </div>
           </FeatureCard>
@@ -270,7 +210,20 @@ export function ProblemGrid() {
             icon={Code2}
             accentColor="emerald"
           >
-            <TypingCode text={`// Resolving hydration mismatch\nconst safeValue = useSafeHydration(val);\n\n// Patching layout overflow\nstyle.overflow = 'hidden-visual';\n\n// Verified by GhostAgent v4.2`} />
+            <div className="p-4 bg-black/80 rounded-xl border border-emerald-500/20 font-mono">
+              <div className="flex items-center gap-2 mb-2 pb-2 border-b border-white/5">
+                <div className="flex gap-1.5">
+                  <div className="w-2 h-2 rounded-full bg-red-500/40" />
+                  <div className="w-2 h-2 rounded-full bg-yellow-500/40" />
+                  <div className="w-2 h-2 rounded-full bg-green-500/40" />
+                </div>
+                <span className="text-[10px] text-zinc-600 uppercase">patch_engine.sh</span>
+              </div>
+              <p className="text-xs text-emerald-400/90">
+                <span className="text-zinc-500">$</span> Resolving hydration mismatch<br/>
+                <span className="text-zinc-500">$</span> Patching layout overflow
+              </p>
+            </div>
           </FeatureCard>
         </motion.div>
 

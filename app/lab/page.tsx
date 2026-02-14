@@ -1,12 +1,12 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { toast } from "sonner";
 import { SpecterNav } from "@/components/landing/specter-nav";
 import { ControlDeck } from "@/components/lab/control-deck";
 import { DeviceEmulator } from "@/components/lab/device-emulator";
 import { NeuralMonologue } from "@/components/lab/neural-monologue";
 import { StatusBar } from "@/components/lab/status-bar";
-import { motion, AnimatePresence } from "framer-motion";
 
 export type SimulationState = "idle" | "scanning" | "analyzing" | "complete";
 
@@ -57,6 +57,7 @@ export default function LabPage() {
   const [persona, setPersona] = useState("zoomer");
   const [device, setDevice] = useState("iphone-15");
   const [network, setNetwork] = useState("wifi");
+  const [locale, setLocale] = useState("en-US");
   const [isVoiceEnabled, setIsVoiceEnabled] = useState(true);
   const [currentScreenshot, setCurrentScreenshot] = useState<string | null>(null);
   const [testResults, setTestResults] = useState<any>(null);
@@ -64,6 +65,8 @@ export default function LabPage() {
   const [currentStepData, setCurrentStepData] = useState<any>(null);
   const [currentTestId, setCurrentTestId] = useState<string | null>(null);
   const [isMounted, setIsMounted] = useState(false);
+  const [currentAction, setCurrentAction] = useState<string>("");
+  const [nextTestCountdown, setNextTestCountdown] = useState<number>(0);
   
   // Live browser streaming state — live mode ON by default
   const [isLiveMode, setIsLiveMode] = useState(true);
@@ -141,6 +144,8 @@ export default function LabPage() {
     setCurrentScreenshot(null);
     setCurrentStepData(null);
     setCurrentTestId(null);
+    setCurrentAction("");
+    setNextTestCountdown(0);
     
     // Clean up live stream
     stopLiveStream();
@@ -260,8 +265,14 @@ export default function LabPage() {
       handleWSMessageRef.current(data);  // always calls latest handler
     };
 
-    ws.onerror = (error) => console.error("WebSocket error:", error);
-    ws.onclose = () => console.log("WebSocket disconnected");
+    ws.onerror = (error) => {
+      console.error("WebSocket error:", error);
+      addLog("⚠️ Backend connection issue - Make sure api_server.py is running on port 8000");
+    };
+    ws.onclose = () => {
+      console.log("WebSocket disconnected");
+      addLog("⚠️ Disconnected from backend");
+    };
 
     wsRef.current = ws;
 
@@ -280,6 +291,9 @@ export default function LabPage() {
         setSimulationState("scanning");
         setCurrentTestId(data.test_id);
         addLog(`Test started: ${data.test_id}`);
+        toast.info("🤖 Test started", {
+          description: "AI agent is now analyzing your application..."
+        });
 
         if (isLiveModeRef.current) {
           startLiveStream(data.test_id);
@@ -289,8 +303,11 @@ export default function LabPage() {
       } else if (data.type === "step_update") {
         setSimulationState("analyzing");
         setSimulationStep(prev => prev + 1);
-        addLog(`Step ${data.step || simulationStep + 1}: ${data.action || "Processing..."}`);
+        const actionText = data.action || "Processing...";
+        setCurrentAction(actionText);
+        addLog(`Step ${data.step || simulationStep + 1}: ${actionText}`);
         
+        // Update current step diagnostic data (if available immediately)
         if (data.stepData) {
           setCurrentStepData({
             confusion_score: data.stepData.confusion_score,
@@ -305,9 +322,13 @@ export default function LabPage() {
         }
         
         if (data.screenshot) {
+          console.log("Setting screenshot, length:", data.screenshot.length);
           setCurrentScreenshot(data.screenshot);
+        } else {
+          console.log("No screenshot in message");
         }
       } else if (data.type === "diagnostic_update") {
+        // Separate diagnostic data broadcast after step analysis completes
         if (data.diagnosticData) {
           setCurrentStepData({
             confusion_score: data.diagnosticData.confusion_score,
@@ -323,14 +344,28 @@ export default function LabPage() {
             dwell_time_ms: data.diagnosticData.dwell_time_ms
           });
           
+          // Add detailed diagnostic summary to terminal
           if (data.diagnosticData.diagnosis) {
             const severityBadge = data.diagnosticData.severity?.split(' - ')[0] || 'Issue';
             addLog(` ${severityBadge} - ${data.diagnosticData.responsible_team}`);
             addLog(`    ${data.diagnosticData.diagnosis}`);
+            
+            // Show toast for critical issues
+            if (severityBadge.includes('P0') || severityBadge.includes('Critical')) {
+              toast.error("🚨 Critical Issue Detected", {
+                description: data.diagnosticData.diagnosis?.substring(0, 100) + "..."
+              });
+            } else if (severityBadge.includes('P1')) {
+              toast.warning("⚠️ High Priority Issue", {
+                description: data.diagnosticData.diagnosis?.substring(0, 100) + "..."
+              });
+            }
+            
             if (data.diagnosticData.alert_sent) {
               addLog(`   Alert sent to ${data.diagnosticData.responsible_team} team`);
             }
           } else if (data.diagnosticData.ux_issues && data.diagnosticData.ux_issues.length > 0) {
+            // UX issues detected - show what they are!
             addLog(`  UX Issues detected (${data.diagnosticData.ux_issues.length}):`);
             data.diagnosticData.ux_issues.forEach((issue: string, i: number) => {
               addLog(`   ${i + 1}. ${issue}`);
@@ -343,8 +378,28 @@ export default function LabPage() {
       } else if (data.type === "test_complete") {
         setSimulationState("complete");
         setTestResults(data.results);
+        setCurrentAction("");
         addLog("Test completed");
+        addLog(`Final Results: ${data.results?.passed || 0} passed, ${data.results?.failed || 0} failed`);
+        
+        // Start countdown for next test (5 minutes = 300 seconds)
+        setNextTestCountdown(300);
+        
+        const failedCount = data.results?.failed || 0;
+        if (failedCount > 0) {
+          toast.success("✅ Test Complete", {
+            description: `Found ${failedCount} issue${failedCount > 1 ? 's' : ''} that need attention`
+          });
+        } else {
+          toast.success("✅ Test Complete", {
+            description: "No critical issues detected"
+          });
+        }
+
+        // Clear test ID to prevent reconnection attempts
         setCurrentTestId(null);
+
+        // Keep the last live frame visible for 3 s, then tear down
         setTimeout(() => stopLiveStream(), 3000);
       } else if (data.type === "test_error") {
         setSimulationState("idle");
@@ -375,6 +430,7 @@ export default function LabPage() {
         device: deviceMap[device] || "desktop",
         network: network || "wifi",
         persona: persona || "normal",
+        locale: locale || "en-US",
         max_steps: 5
       };
 
@@ -420,6 +476,8 @@ export default function LabPage() {
             logs={logs}
             currentStepData={currentStepData}
             results={testResults}
+            currentAction={currentAction}
+            maxSteps={5}
           />
         </div>
 
@@ -437,6 +495,8 @@ export default function LabPage() {
           setNetwork={setNetwork}
           isVoiceEnabled={isVoiceEnabled}
           setIsVoiceEnabled={setIsVoiceEnabled}
+          locale={locale}
+          setLocale={setLocale}
         />
 
         <StatusBar 

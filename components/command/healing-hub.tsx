@@ -126,16 +126,34 @@ export function HealingHub() {
               />
             </div>
             <div>
-              <h4 className="text-[11px] font-mono text-emerald-500 uppercase tracking-widest leading-none mb-1 font-bold">Autonomous Remediation</h4>
-              <div className="flex items-center gap-1.5">
-                <div className="w-1 h-1 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="text-[8px] font-mono text-zinc-600 uppercase tracking-widest">{loading ? "Analyzing..." : "Self-Healing Active"}</span>
-              </div>
+              <h3 className="text-sm font-bold text-white tracking-tight">Auto-Remediation</h3>
+              <p className="text-[10px] text-emerald-500/60 font-mono uppercase tracking-widest font-bold">Neural Engine Active</p>
             </div>
           </div>
-          <div className="px-2.5 py-1 rounded-md border border-emerald-500/30 bg-emerald-500/5 text-[9px] font-mono text-emerald-500 uppercase tracking-[0.2em] font-bold">
-            v1.0.4
+          
+          <div className="flex items-center gap-2">
+            <div className="flex -space-x-2">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="w-6 h-6 rounded-full border border-zinc-950 bg-zinc-900 flex items-center justify-center">
+                  <div className="w-3 h-3 rounded-full bg-emerald-500/20 animate-pulse" />
+                </div>
+              ))}
+            </div>
           </div>
+        </div>
+
+        <div className="mb-6 rounded-2xl bg-emerald-500/5 border border-emerald-500/10 p-4 relative group/suggestion overflow-hidden">
+          <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500/40" />
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[9px] font-mono text-emerald-500/70 uppercase tracking-[0.2em] font-bold">Priority Diagnosis</span>
+            <span className="text-[8px] font-mono text-zinc-600 bg-zinc-900/50 px-2 py-0.5 rounded-full border border-white/5">SHA-256: 8f2a...</span>
+          </div>
+          <p className="text-xs text-zinc-200 leading-relaxed font-medium">
+            {suggestion?.description || "Analyzing codebase for potential fixes..."}
+          </p>
+          <p className="text-[10px] text-zinc-500 mt-2 italic">
+            {suggestion?.impact || "Estimated recovery: $12,400 ARR"}
+          </p>
         </div>
 
         {/* Primary Action Button Moved to Top */}
