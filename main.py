@@ -32,6 +32,7 @@ import os
 import argparse
 import json
 import base64
+import logging
 import traceback
 from datetime import datetime
 from typing import Dict, Any, List, Optional
@@ -247,22 +248,19 @@ RULES:
 - DO NOT click social login buttons (Google, Apple, Facebook) - use email signup.
 
 DROPDOWN/SELECT HANDLING (CRITICAL):
-- For country/region selectors, dropdowns, and comboboxes:
-  1. First TAP the dropdown element to open it (look for elements like "Select", "Choose", or arrow icons)
-  2. Wait for options to appear (they may be in a new list/menu)
-  3. Then TAP the specific option you want to select
-- If you see a dropdown showing "Select" or a placeholder, TAP it first to reveal options
-- After tapping a dropdown, the next step should be tapping the actual country/option
-- Look for elements with text like country names, or list items that appeared after opening
-- For native <select> elements, use Select action with the option value
+- For country/region selectors, dropdowns, and comboboxes, ALWAYS use the Select action:
+  Select: {"type":"Select","element_id":<dropdown_id>,"value":"<option text>"}
+  Example: {"type":"Select","element_id":42,"value":"Indonesia"}
+- The Select action handles opening the dropdown, finding the option, and selecting it automatically
+- Do NOT use Tap to select dropdown options — Tap does not trigger the selection mechanism
+- If you see a dropdown showing "Select" or a placeholder, use Select with the dropdown's element_id
+- For native <select> elements, also use Select with the option text as value
 
 COUNTRY SELECTION STRATEGY:
-- When selecting a country, first tap the dropdown to open it
-- IMPORTANT: Many financial/trading sites RESTRICT certain countries (US, UK, etc). If you search for a country and get "No result found", try a DIFFERENT country immediately!
-- ALWAYS pick from VISIBLE countries in the dropdown list. Good options: Indonesia, Malaysia, Singapore, Japan, Germany, France, Australia, Brazil, India
+- Use the Select action on the country dropdown: {"type":"Select","element_id":<id>,"value":"Indonesia"}
+- IMPORTANT: Many financial/trading sites RESTRICT certain countries (US, UK, etc). If a country fails, try a DIFFERENT one!
+- Good options: Indonesia, Malaysia, Singapore, Japan, Germany, France, Australia, Brazil, India
 - DO NOT keep retrying the same country if it fails or shows "No result found"
-- If a search shows "No result found", clear it and TAP directly on a visible country from the list
-- If dropdown has many items, scroll within the dropdown to find options
 
 AVOIDING REPETITION:
 - Check PREVIOUS ACTIONS history - do NOT repeat an action that already failed
@@ -394,8 +392,32 @@ def _parse_llm_json(text):
     return None
 
 
-def _build_action_dict(action_type, element_id, value):
-    """Build action dict for ActionExecutor.execute()."""
+def _build_action_dict(action_type, element_id, value, element_buffer=None):
+    """Build action dict for ActionExecutor.execute().
+    
+    If element_buffer is provided and action is Tap on a dropdown-like element,
+    automatically converts to SelectDropdown for reliable selection.
+    """
+    # Auto-detect: if Tap targets a dropdown option, convert to SelectDropdown
+    if action_type == 'Tap' and element_buffer and element_id is not None:
+        elem = element_buffer.get(str(element_id), {})
+        tag = (elem.get('tagName') or '').lower()
+        role = (elem.get('role') or '').lower()
+        class_name = (elem.get('className') or '').lower()
+        parent_tag = (elem.get('parentTagName') or '').lower()
+        text = (elem.get('innerText') or '').strip()
+        # Detect dropdown option patterns: <option>, role=option, ant-select items, listbox items
+        is_dropdown_option = (
+            tag in ('option', 'li') and role in ('option', 'listbox', '') and
+            any(kw in class_name for kw in ('select', 'dropdown', 'option', 'menu-item', 'ant-select', 'listbox'))
+        ) or role == 'option' or (
+            tag == 'select'
+        )
+        if is_dropdown_option and text:
+            logging.info(f'Auto-converting Tap on dropdown option #{element_id} ("{text[:40]}") to SelectDropdown')
+            action_type = 'Select'
+            value = text
+
     action = {"type": action_type, "locate": {}, "param": {}}
     if action_type in ('Tap', 'Hover', 'Scroll'):
         action["locate"]["id"] = str(element_id) if element_id is not None else "0"
@@ -404,11 +426,10 @@ def _build_action_dict(action_type, element_id, value):
         action["param"]["value"] = value or ""
         action["param"]["clear_before_type"] = True
     elif action_type == 'Select':
-        # Select action for native <select> elements or custom dropdowns
-        action["type"] = "Tap"  # Fall back to Tap for custom dropdowns
-        action["locate"]["id"] = str(element_id) if element_id is not None else "0"
-        if value:
-            action["param"]["value"] = value  # Option value to select
+        # Use SelectDropdown for proper dropdown handling
+        action["type"] = "SelectDropdown"
+        action["locate"]["dropdown_id"] = str(element_id) if element_id is not None else "0"
+        action["param"]["selection_path"] = value if value else ""
     elif action_type == 'KeyboardPress':
         action["param"]["value"] = value or "Enter"
     elif action_type == 'Sleep':
@@ -750,7 +771,7 @@ async def autonomous_signup_test(
                 if element_id is not None:
                     await _show_red_dot(page, element_buffer, element_id)
 
-                action_dict = _build_action_dict(action_type, element_id, value)
+                action_dict = _build_action_dict(action_type, element_id, value, element_buffer)
                 exec_result = await executor.execute(action_dict)
 
                 success = exec_result.get('success', False) if isinstance(exec_result, dict) else bool(exec_result)
@@ -764,7 +785,7 @@ async def autonomous_signup_test(
                 end_time = datetime.now()
                 dwell_time_ms = int((end_time - start_time).total_seconds() * 1000)
 
-                await asyncio.sleep(1.0)
+                await asyncio.sleep(0.3)
 
                 # -- AFTER screenshot --
                 screenshot_after_b64, screenshot_after_path = await action_handler.b64_page_screenshot(
@@ -1174,7 +1195,7 @@ async def main_async():
     os.makedirs("backend/assets", exist_ok=True)
     return await autonomous_signup_test(
         url=args.url, device=args.device, network=args.network,
-        persona=args.persona, locale=args.locale, max_steps=args.sps,
+        persona=args.persona, locale=args.locale, max_steps=args.max_steps,
     )
 
 

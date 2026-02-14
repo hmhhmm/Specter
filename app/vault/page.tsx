@@ -14,6 +14,8 @@ export default function VaultPage() {
 
   // Fetch incidents from backend
   useEffect(() => {
+    let isActive = true;
+    
     const fetchIncidents = async () => {
       try {
         setIsLoading(true);
@@ -24,13 +26,19 @@ export default function VaultPage() {
         }
         
         const data = await response.json();
-        setIncidents(data.incidents || []);
-        setError(null);
+        if (isActive) {
+          setIncidents(data.incidents || []);
+          setError(null);
+        }
       } catch (err: any) {
-        console.error("Error fetching incidents:", err);
-        setError(err.message || "Failed to load incidents");
+        if (isActive) {
+          console.error("Error fetching incidents:", err);
+          setError(err.message || "Failed to load incidents");
+        }
       } finally {
-        setIsLoading(false);
+        if (isActive) {
+          setIsLoading(false);
+        }
       }
     };
 
@@ -40,10 +48,13 @@ export default function VaultPage() {
     const ws = new WebSocket("ws://localhost:8000/ws");
     
     ws.onopen = () => {
-      console.log("Vault: Connected to backend for real-time updates");
+      if (isActive) {
+        console.log("Vault: Connected to backend for real-time updates");
+      }
     };
     
     ws.onmessage = (event) => {
+      if (!isActive) return;
       try {
         const data = JSON.parse(event.data);
         
@@ -52,22 +63,25 @@ export default function VaultPage() {
           fetchIncidents();
         }
       } catch (error) {
-        console.error("Vault WebSocket error:", error);
+        // Ignore parsing errors
       }
     };
     
-    ws.onerror = (error) => {
-      console.error("Vault WebSocket connection error:", error);
+    ws.onerror = () => {
+      // Suppress errors during cleanup or React strict mode double-mount
     };
     
     ws.onclose = () => {
-      console.log("Vault WebSocket disconnected");
+      // Silent cleanup
     };
     
     // Poll for updates every 30 seconds as backup
-    const interval = setInterval(fetchIncidents, 30000);
+    const interval = setInterval(() => {
+      if (isActive) fetchIncidents();
+    }, 30000);
     
     return () => {
+      isActive = false;
       clearInterval(interval);
       ws.close();
     };
