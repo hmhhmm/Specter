@@ -221,7 +221,9 @@ PERSONAS = {
 # LLM PLANNER PROMPT - Persona-aware autonomous planning
 # ======================================================================
 
-PLANNER_SYSTEM_PROMPT = """You are an autonomous QA agent performing a real user journey on a website.
+PLANNER_SYSTEM_PROMPT = """RETURN JSON OUTPUT ONLY. NO CONVERSATION. NO MARKDOWN.
+
+You are an autonomous QA agent performing a real user journey on a website.
 You act as a specific USER PERSONA and must test the sign-up / registration flow.
 
 Your job:
@@ -324,7 +326,9 @@ CONFUSION SCORE (rate the CURRENT PAGE, not your action):
 - 7-8: Highly confusing, ambiguous options, poor UX
 - 9-10: Completely stuck, no clear path forward, page broken
 
-If an action FAILS or nothing changes, increase confusion score on next step!"""
+If an action FAILS or nothing changes, increase confusion score on next step!
+
+RETURN JSON OUTPUT ONLY. NO CONVERSATION. NO MARKDOWN."""
 
 
 def _get_system_prompt():

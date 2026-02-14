@@ -15,9 +15,10 @@ interface NeuralMonologueProps {
   currentStepData?: any;
   currentAction?: string;
   maxSteps?: number;
+  isVoiceEnabled?: boolean;
 }
 
-export function NeuralMonologue({ state, step, persona, logs = [], results, currentStepData, currentAction, maxSteps = 5 }: NeuralMonologueProps) {
+export function NeuralMonologue({ state, step, persona, logs = [], results, currentStepData, currentAction, maxSteps = 5, isVoiceEnabled }: NeuralMonologueProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [currentTime, setCurrentTime] = useState("");
 
@@ -116,7 +117,37 @@ export function NeuralMonologue({ state, step, persona, logs = [], results, curr
                 
                 <div className="flex-1 space-y-1">
                   <p className="text-zinc-300 leading-relaxed group-hover:text-white transition-colors text-xs">
-                    {log}
+                    {(() => {
+                      const timePart = log.match(/^\[.*?\]/)?.[0] || "";
+                      const contentPart = log.replace(timePart, "").trim();
+                      
+                      if (contentPart.startsWith("Thought:")) {
+                        return (
+                          <>
+                            <span className="text-[10px] text-zinc-500 mr-2">{timePart}</span>
+                            <span className="text-emerald-500 font-bold mr-2">THOUGHT:</span>
+                            <span className="text-zinc-100">{contentPart.replace("Thought: ", "")}</span>
+                          </>
+                        );
+                      }
+                      
+                      if (contentPart.startsWith("Vision:")) {
+                        return (
+                          <>
+                            <span className="text-[10px] text-zinc-500 mr-2">{timePart}</span>
+                            <span className="text-cyan-500 font-bold mr-2">VISION:</span>
+                            <span className="text-zinc-200 italic">{contentPart.replace("Vision: ", "")}</span>
+                          </>
+                        );
+                      }
+
+                      return (
+                        <>
+                          <span className="text-[10px] text-zinc-500 mr-2">{timePart}</span>
+                          <span>{contentPart}</span>
+                        </>
+                      );
+                    })()}
                   </p>
                 </div>
               </motion.div>

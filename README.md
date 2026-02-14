@@ -29,6 +29,28 @@ Specter combines AI-powered navigation (Feature 1) with mathematical friction an
 
 ---
 
+## 🧠 The Architecture (Double-Brain System)
+
+Specter uses a high-performance hybrid architecture to simulate human behavior while maintaining rigorous technical diagnosis.
+
+### 1. The Planner Brain (`main.py`)
+This is the "Persona" engine. It observes the page, thinks like a human (e.g., "I'm a Zoomer and I'm impatient"), and decides on the next click or input.
+- **Output:** `Vision` (what it sees) + `Thought` (why it's doing it).
+- **Frontend:** Displayed in real-time in the Neural Monologue log.
+
+### 2. The Doctor Brain (`diagnosis_doctor.py`)
+This is the "Analytical" engine. It runs after every action to verify if the action worked and detect deep technical issues (console errors, network failures, UX friction).
+- **Output:** `Diagnosis` + `Severity` + `F-Score`.
+- **Voice:** This is the ONLY part narrated by the TTS to ensure the most important findings are heard immediately without lag.
+
+### 3. Neural Link (TTS Service)
+Powered by **Kokoro-ONNX**, a lightweight and low-latency voice model.
+- **Voice:** `af_sky` (Human-like, modern).
+- **Pre-warming:** The model is initialized on server startup to ensure 0ms latency for the first step.
+- **Filter:** Only narrate concise, human-like summaries of the Diagnosis to avoid audio clutter.
+
+---
+
 ## 🚀 Quick Start
 
 ### 1. Installation
@@ -40,6 +62,12 @@ pip install -r requirements.txt
 # Install Playwright (for autonomous mode)
 pip install playwright
 playwright install chromium
+
+# Download Kokoro TTS Models (Required for Neural Monologue Voice)
+# 1. Create a 'models' folder in the project root
+# 2. Download 'kokoro-v1.0.onnx' and 'voices-v1.0.bin' from:
+#    https://github.com/thewh1teagle/kokoro-onnx/releases/tag/model-files
+# 3. Place them in the 'models/' folder.
 ```
 
 ### 2. Configuration
