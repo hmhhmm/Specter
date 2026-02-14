@@ -697,18 +697,23 @@ def generate_uncertainty_heatmap(
             elem_id = region.get('element_id', '?')
             ocr_conf = region.get('ocr_confidence', 0.0)
             
-            # Color code: Green = target, Red = high uncertainty, Yellow = medium
+            # FIX 11: Make ALL bounding boxes clearly visible
+            # Color code based on uncertainty, but all have good contrast
             if is_target:
-                box_color = (0, 255, 0)  # Green
+                box_color = (0, 255, 0)  # Bright Green (target element)
                 thickness = 3
             elif uncertainty > 0.7:
-                box_color = (0, 0, 255)  # Red
+                box_color = (0, 0, 255)  # Red (high uncertainty)
                 thickness = 2
             elif uncertainty > 0.4:
-                box_color = (0, 165, 255)  # Orange
+                box_color = (255, 128, 0)  # Orange (medium uncertainty)
+                thickness = 2
+            elif uncertainty > 0.15:
+                box_color = (255, 255, 0)  # Cyan (low-medium uncertainty)
                 thickness = 2
             else:
-                box_color = (0, 255, 255)  # Yellow
+                # Very low uncertainty: use white for maximum visibility
+                box_color = (255, 255, 255)  # White (very low uncertainty)
                 thickness = 1
             
             # Draw rectangle
@@ -1124,6 +1129,9 @@ def check_expectation(handoff):
         issues = ui_analysis.get('issues', [])
         ui_summary = ' '.join(issues) if issues else ui_analysis.get('summary', '')
     
+    # Extract dwell_ms early (needed for entropy calculation)
+    dwell_ms = meta.get('dwell_time_ms', 0) if isinstance(meta, dict) else 0
+    
     # Extract entropy
     entropy_val = 0.0
     if isinstance(meta, dict) and meta.get('action_probabilities'):
@@ -1149,8 +1157,6 @@ def check_expectation(handoff):
                 dwell_entropy = min(1.5, max(0, (dwell_ms - 3000) / 4000.0))
                 entropy_val = min(2.5, confusion_entropy + dwell_entropy)
     
-    dwell_ms = meta.get('dwell_time_ms', 0) if isinstance(meta, dict) else 0
-    
     semantic_dist = _FM.calculate_semantic_distance(
         handoff.get('agent_expectation', ''),
         ui_summary
@@ -1171,8 +1177,13 @@ def check_expectation(handoff):
     has_errors = any(log.get('status', 0) >= 400 for log in network_logs)
     if console_logs and not has_errors:
         has_errors = any('error' in str(log).lower() for log in console_logs)
-    if not has_errors and f_score > 35:
-        f_score = 35.0
+    
+    # Cap F-Score at 35 only if there are no errors AND low friction signals
+    # Allow higher scores for high dwell time or entropy even without errors
+    if not has_errors:
+        # Only cap if friction is genuinely low (quick interactions with low entropy)
+        if dwell_ms < 5000 and entropy_val < 1.0 and f_score > 35:
+            f_score = 35.0
     
     print(f"      + F-Score: {f_score:.1f} (entropy={entropy_val:.2f}, semantic={semantic_dist:.2f}, dwell={dwell_ms}ms)")
     

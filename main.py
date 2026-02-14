@@ -464,7 +464,7 @@ async def autonomous_signup_test(
     network: str = 'wifi',
     persona: str = 'zoomer',
     locale: str = 'en-US',
-    max_steps: int = 15,
+    max_steps: int = 5,
     screenshot_callback = None,
     diagnostic_callback = None,
     page_callback = None,

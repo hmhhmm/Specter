@@ -45,7 +45,7 @@ class TestConfig(BaseModel):
     device: str = "desktop"
     network: str = "wifi"
     persona: str = "normal"  # Always fast normal user
-    max_steps: int = 15
+    max_steps: int = 5
 
 class TestResult(BaseModel):
     step_id: str

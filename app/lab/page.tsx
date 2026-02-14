@@ -354,7 +354,7 @@ export default function LabPage() {
         network: network || "wifi",
         persona: persona || "normal",
         locale: locale || "en-US",
-        max_steps: 15
+        max_steps: 5
       };
 
       console.log("Starting test with config:", requestBody);
