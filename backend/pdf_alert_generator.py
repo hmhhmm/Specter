@@ -13,6 +13,8 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.lib.enums import TA_CENTER
+import ssl
+import certifi
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 from dotenv import load_dotenv
@@ -27,7 +29,8 @@ TEAM_CHANNELS = {
     "QA": os.getenv("SLACK_QA_CHANNEL", os.getenv("SLACK_CHANNEL_ID"))
 }
 
-client = WebClient(token=SLACK_BOT_TOKEN)
+ssl_context = ssl.create_default_context(cafile=certifi.where())
+client = WebClient(token=SLACK_BOT_TOKEN, ssl=ssl_context)
 
 
 def generate_team_alert_pdf(final_packet, output_dir="reports/pdf_alerts"):
