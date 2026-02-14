@@ -52,6 +52,79 @@ CLAUDE_API_KEY=your_claude_api_key_here
 SLACK_WEBHOOK_URL=your_slack_webhook_url_here
 ```
 
+---
+
+## 🛠 Development setup (full-stack app)
+
+For working on the Next.js dashboard (Lab, Vault, Command Center, Healer) with the FastAPI backend.
+
+### Prerequisites
+
+- **Node.js** 20+ (LTS or current). [nvm](https://github.com/nvm-sh/nvm) or [fnm](https://github.com/Schniz/fnm) recommended.
+- **Python** 3.10+ and `pip`.
+- **Git** (for Healer PRs; token required only if you use "Open GitHub Pull Request").
+
+### 1. Install dependencies
+
+```bash
+# Frontend
+npm install
+
+# Backend
+pip install -r requirements.txt
+
+# Playwright (only if you run E2E or autonomous agent)
+pip install playwright
+playwright install chromium
+# Optional for Next.js E2E: npx playwright install
+```
+
+### 2. Environment variables
+
+**Backend** — create `backend/.env`:
+
+```bash
+CLAUDE_API_KEY=your_anthropic_api_key_here
+SLACK_WEBHOOK_URL=your_slack_webhook_url_here   # optional
+NVIDIA_API_KEY=your_nvidia_api_key_here         # optional; used by diagnosis/Healer
+GEMINI_API_KEY=your_gemini_api_key_here         # optional; fallback
+```
+
+**Frontend** — create `.env.local` in the **project root** (next to `package.json`):
+
+```bash
+# GitHub (required for Specter Healer "Open GitHub Pull Request")
+# Create a classic Personal Access Token with 'repo' scope: https://github.com/settings/tokens
+GITHUB_TOKEN=your_github_pat_here
+GITHUB_OWNER=your_github_username_or_org
+GITHUB_REPO=Specter
+
+# NVIDIA NIM (for Healer AI-generated fixes; can copy from backend/.env)
+NVIDIA_API_KEY=your_nvidia_api_key_here
+```
+
+If `GITHUB_TOKEN` / `GITHUB_OWNER` are missing, the Healer still runs but will return a mocked PR (no real branch or PR created). Do **not** commit `.env` or `.env.local`; they are gitignored.
+
+### 3. Run the app
+
+```bash
+# Terminal 1 — FastAPI backend (port 8000)
+python run_dev.py
+
+# Terminal 2 — Next.js (port 3000)
+npm run dev
+```
+
+Then open [http://localhost:3000](http://localhost:3000). The Command Center (Page 4) talks to the backend at `http://localhost:8000`.
+
+**Note:** On Windows, `run_dev.py` disables auto-reload to avoid socket errors; restart it manually after backend code changes.
+
+### Line endings (Windows ↔ macOS/Linux)
+
+The repo uses **LF** line endings (enforced via `.gitattributes`). That way Mac/Linux teammates don’t see CRLF-related diffs or script issues after pulling. On Windows, Git will still handle your working copy according to `core.autocrlf`; commits stay LF. If the repo had CRLF files before, a one-time renormalize (e.g. `git add --renormalize .` then commit) will fix them; after that, everyone gets LF.
+
+---
+
 ### 3. Run Tests
 
 **Demo Mode** (uses mock data, shows Feature 2):
