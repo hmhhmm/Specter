@@ -53,7 +53,7 @@ class TestConfig(BaseModel):
     device: str = "desktop"
     network: str = "wifi"
     persona: str = "normal"  # Always fast normal user
-    max_steps: int = 5
+    max_steps: int = 20
 
 
 class TestResult(BaseModel):
@@ -901,6 +901,14 @@ class TTSRequest(BaseModel):
     text: str
 
 
+@app.get("/api/tts/status")
+async def tts_status():
+    """Check if TTS service is available."""
+    from backend.tts_service import get_kokoro
+    available = get_kokoro() is not None
+    return {"available": available}
+
+
 @app.post("/api/tts")
 async def text_to_speech(request: TTSRequest):
     """Generate speech from text using Kokoro TTS."""
@@ -911,7 +919,7 @@ async def text_to_speech(request: TTSRequest):
     wav_bytes = await asyncio.to_thread(generate_speech, request.text)
 
     if not wav_bytes:
-        return Response(status_code=500, content="Failed to generate speech")
+        return JSONResponse(status_code=503, content={"error": "TTS unavailable", "detail": "kokoro-onnx not installed or model files missing"})
 
     return Response(content=wav_bytes, media_type="audio/wav")
 

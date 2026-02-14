@@ -144,8 +144,11 @@ export default function LabPage() {
 
   const stopLiveStream = useCallback(() => {
     if (liveStreamRef.current) {
-      try { liveStreamRef.current.send("stop"); } catch {}
-      try { liveStreamRef.current.close(); } catch {}
+      const ws = liveStreamRef.current;
+      if (ws.readyState === WebSocket.OPEN) {
+        try { ws.send("stop"); } catch {}
+        try { ws.close(); } catch {}
+      }
       liveStreamRef.current = null;
     }
     setLiveFrame(null);
@@ -486,7 +489,7 @@ export default function LabPage() {
         network: network || "wifi",
         persona: persona || "normal",
         locale: locale || "en-US",
-        max_steps: 5
+        max_steps: 20
       };
 
       console.log("Starting test with config:", requestBody);
@@ -532,7 +535,7 @@ export default function LabPage() {
             currentStepData={currentStepData}
             results={testResults}
             currentAction={currentAction}
-            maxSteps={5}
+            maxSteps={20}
             isVoiceEnabled={isVoiceEnabled}
           />
         </div>

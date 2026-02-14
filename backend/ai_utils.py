@@ -94,7 +94,7 @@ async def call_llm_vision(
                     })
 
             content.append({"type": "text", "text": user_prompt})
-            model = "claude-3-5-sonnet-20241022"
+            model = os.getenv("CLAUDE_MODEL", "claude-sonnet-4-20250514")
 
             response = await asyncio.to_thread(
                 anthropic_client.messages.create,

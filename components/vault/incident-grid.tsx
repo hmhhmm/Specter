@@ -69,9 +69,9 @@ export function IncidentGrid({ activeFilter, incidents = [], isLoading = false }
         heatmapPath: inc.heatmap_path || null,
         aiReasoning: diagnosis || (hasConsoleErrors ? `Console errors: ${inc.console_logs.join(', ')}` : null),
         confusionTime: inc.confusion_score || (inc.dwell_time_ms ? inc.dwell_time_ms / 1000 : null),
-        impactEstimate: inc.revenueLoss ? `Est. $${inc.revenueLoss.toLocaleString()} revenue impact` : null,
-        responsibleTeam: inc.responsible_team || null,
-        fScore: inc.f_score || null
+        impactEstimate: inc.revenueLoss ? `Est. $${inc.revenueLoss.toLocaleString()} revenue impact` : undefined,
+        responsibleTeam: inc.responsible_team || undefined,
+        fScore: inc.f_score || undefined
       };
     });
   
@@ -100,8 +100,8 @@ export function IncidentGrid({ activeFilter, incidents = [], isLoading = false }
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      {filteredIncidents.map((incident) => (
-        <div key={incident.id} className="space-y-3">
+      {filteredIncidents.map((incident, index) => (
+        <div key={`${incident.id}_${index}`} className="space-y-3">
           <IncidentCard 
             {...incident}
             aiReasoning={incident.aiReasoning}

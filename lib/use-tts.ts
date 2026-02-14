@@ -17,6 +17,16 @@ export function useTTS(enabled: boolean = true) {
   const queueRef = useRef<string[]>([]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const isProcessingRef = useRef(false);
+  const ttsAvailableRef = useRef<boolean | null>(null); // null = not checked yet
+
+  // Check TTS availability once on mount
+  useEffect(() => {
+    if (!enabled) return;
+    fetch("http://localhost:8000/api/tts/status")
+      .then(res => res.json())
+      .then(data => { ttsAvailableRef.current = data.available === true; })
+      .catch(() => { ttsAvailableRef.current = false; });
+  }, [enabled]);
 
   /**
    * Smart filter to determine if a string is narratable human-like text.
@@ -41,7 +51,11 @@ export function useTTS(enabled: boolean = true) {
   }, []);
 
   const processQueue = useCallback(async () => {
-    if (isProcessingRef.current || queueRef.current.length === 0 || !enabled) {
+    if (isProcessingRef.current || queueRef.current.length === 0 || !enabled || ttsAvailableRef.current === false) {
+      // If TTS is not available, drain the queue silently
+      if (ttsAvailableRef.current === false) {
+        queueRef.current = [];
+      }
       return;
     }
 
@@ -56,14 +70,27 @@ export function useTTS(enabled: boolean = true) {
     try {
       setIsPlaying(true);
       
-      const response = await fetch("http://localhost:8000/api/tts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
-      });
+      let response: Response;
+      try {
+        response = await fetch("http://localhost:8000/api/tts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text }),
+        });
+      } catch {
+        // Network error or server unreachable — skip silently
+        setIsPlaying(false);
+        isProcessingRef.current = false;
+        processQueue();
+        return;
+      }
 
       if (!response.ok) {
-        throw new Error("Failed to fetch audio from TTS service");
+        // Silently skip TTS if service is unavailable (e.g. kokoro-onnx not installed)
+        setIsPlaying(false);
+        isProcessingRef.current = false;
+        processQueue();
+        return;
       }
 
       const blob = await response.blob();

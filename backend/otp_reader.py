@@ -10,7 +10,7 @@ import imaplib
 import email
 from email.header import decode_header
 import re
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, Optional
 import os
 from concurrent.futures import ThreadPoolExecutor
@@ -110,7 +110,15 @@ class OTPReader:
             "email_subject": "",
             "error": f"Timeout after {timeout_seconds}s: No OTP received in {self.email_address}"
         }
-    
+        
+    def _make_naive_utc(self, dt: datetime) -> datetime:
+        """Convert any datetime to naive UTC for safe comparison."""
+        if dt.tzinfo is not None:
+            # Convert timezone-aware to UTC then strip tzinfo
+            return dt.astimezone(timezone.utc).replace(tzinfo=None)
+        # Assume naive datetime is local time, convert to UTC
+        return dt
+
     def _fetch_otp_sync(
         self,
         sender_filter: Optional[str],
@@ -133,71 +141,101 @@ class OTPReader:
                     print(f"[OTP-IMAP] Also ensure IMAP is enabled in Gmail Settings > Forwarding and POP/IMAP")
                 return {"found": False, "error": f"IMAP login failed: {err_msg}"}
             print(f"[OTP-IMAP] Logged in as {self.email_address}")
-            mail.select('INBOX')
             
-            # Build search criteria
-            # Search for emails after the test started
-            date_str = since_timestamp.strftime("%d-%b-%Y")
-            search_criteria = f'(SINCE {date_str})'
+            # Apply a 5-minute buffer to since_timestamp to avoid missing emails due to clock skew
+            safe_since = since_timestamp - timedelta(minutes=5)
             
-            if sender_filter:
-                search_criteria = f'{search_criteria} (FROM "{sender_filter}")'
+            # Try multiple folders: INBOX first, then Spam/Junk
+            folders_to_check = ['INBOX', '[Gmail]/Spam', '[Gmail]/All Mail']
             
-            # Search for emails
-            status, messages = mail.search(None, search_criteria)
-            if status != 'OK':
-                mail.close()
-                mail.logout()
-                return {"found": False}
-            
-            email_ids = messages[0].split()
-            
-            # Process emails in reverse order (newest first)
-            for email_id in reversed(email_ids):
+            for folder in folders_to_check:
                 try:
-                    # Fetch email
-                    status, msg_data = mail.fetch(email_id, '(RFC822)')
+                    status, _ = mail.select(folder, readonly=True)
                     if status != 'OK':
+                        print(f"[OTP-IMAP] Could not open folder: {folder}")
                         continue
-                    
-                    # Parse email
-                    msg = email.message_from_bytes(msg_data[0][1])
-                    
-                    # Check if email is recent enough (SINCE only checks date, not time)
-                    email_date = email.utils.parsedate_to_datetime(msg['Date'])
-                    if email_date < since_timestamp:
-                        continue
-                    
-                    # Extract subject
-                    subject = self._decode_header(msg['Subject'])
-                    
-                    # Extract body
-                    body = self._get_email_body(msg)
-                    
-                    # Search for OTP code
-                    matches = re.findall(otp_pattern, body)
-                    if matches:
-                        # Return first match
-                        code = matches[0]
-                        
-                        # Mark as read
-                        mail.store(email_id, '+FLAGS', '\\Seen')
-                        
-                        mail.close()
-                        mail.logout()
-                        
-                        return {
-                            "found": True,
-                            "code": code,
-                            "subject": subject
-                        }
-                
-                except Exception as e:
-                    print(f"Error processing email: {e}")
+                except Exception as folder_err:
+                    print(f"[OTP-IMAP] Folder {folder} error: {folder_err}")
                     continue
+                
+                # Build search criteria
+                date_str = safe_since.strftime("%d-%b-%Y")
+                search_criteria = f'(SINCE {date_str})'
+                
+                if sender_filter:
+                    search_criteria = f'{search_criteria} (FROM "{sender_filter}")'
+                
+                # Search for emails
+                status, messages = mail.search(None, search_criteria)
+                if status != 'OK':
+                    continue
+                
+                email_ids = messages[0].split()
+                print(f"[OTP-IMAP] Folder '{folder}': found {len(email_ids)} emails since {date_str}")
+                
+                # Process emails in reverse order (newest first) - check latest 20 max
+                for email_id in list(reversed(email_ids))[:20]:
+                    try:
+                        # Fetch email
+                        status, msg_data = mail.fetch(email_id, '(RFC822)')
+                        if status != 'OK':
+                            continue
+                        
+                        # Parse email
+                        msg = email.message_from_bytes(msg_data[0][1])
+                        
+                        # Check if email is recent enough (SINCE only checks date, not time)
+                        # FIX: Handle timezone-aware vs naive datetime comparison
+                        email_date = email.utils.parsedate_to_datetime(msg['Date'])
+                        email_date_naive = self._make_naive_utc(email_date)
+                        safe_since_naive = self._make_naive_utc(safe_since)
+                        
+                        if email_date_naive < safe_since_naive:
+                            continue
+                        
+                        # Extract subject
+                        subject = self._decode_header(msg['Subject'])
+                        sender = self._decode_header(msg['From'])
+                        
+                        # Extract body
+                        body = self._get_email_body(msg)
+                        
+                        # Debug: log recent email subjects to help diagnose
+                        print(f"[OTP-IMAP]   Checking email: '{subject}' from '{sender}' at {email_date}")
+                        
+                        # Search for OTP code
+                        matches = re.findall(otp_pattern, body)
+                        if matches:
+                            # Return first match
+                            code = matches[0]
+                            print(f"[OTP-IMAP]   *** FOUND OTP: {code} in '{subject}' ***")
+                            
+                            # Mark as read (need to reopen as read-write)
+                            try:
+                                mail.select(folder)  # re-select as read-write
+                                mail.store(email_id, '+FLAGS', '\\Seen')
+                            except:
+                                pass
+                            
+                            mail.close()
+                            mail.logout()
+                            
+                            return {
+                                "found": True,
+                                "code": code,
+                                "subject": subject
+                            }
+                    
+                    except Exception as e:
+                        print(f"[OTP-IMAP]   Error processing email: {e}")
+                        continue
+                
+                # If we found OTP in INBOX, we'd have returned already.
+                # Only check Spam/All Mail if INBOX didn't have it.
             
             mail.close()
             mail.logout()
+            print(f"[OTP-IMAP] No OTP found in any folder")
             return {"found": False}
             
         except Exception as e:

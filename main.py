@@ -42,6 +42,7 @@ from backend.expectation_engine import check_expectation
 from backend.diagnosis_doctor import diagnose_failure
 from backend.escalation_webhook import send_alert
 from backend.webqa_bridge import _resolve_screenshot_path
+from backend.ai_utils import call_llm_vision, parse_json_from_llm
 from backend.otp_reader import OTPReader
 
 # Unified AI Vision SDK (Handled inside ai_utils)
@@ -261,14 +262,25 @@ Your job:
   - Password: __TEST_PASSWORD__
   - Name: __TEST_NAME__
   - Phone: __TEST_PHONE__
-  - OTP (if asked): 111111 (Magic Code)
+  - OTP: Do NOT type any code manually. Use WaitForOTP action to auto-read the real code from the email inbox.
 - NEVER invent or make up a random email. ALWAYS use the exact email above.
 - If the form rejects the test email, report it as a UX issue and set done=true.
 
-### OTP / VERIFICATION HANDLING ###
-- If the site asks for a verification code sent to email, use: {"action": {"type": "WaitForOTP"}, ...}
+### OTP / VERIFICATION HANDLING (CRITICAL — REAL EMAIL) ###
+- The OTP will be sent to the REAL email inbox (__TEST_EMAIL__). We read it automatically via IMAP.
+- If the site asks for a verification code / OTP sent to email, use: {"action": {"type": "WaitForOTP"}, ...}
 - If the site asks to click a magic link in email, use: {"action": {"type": "WaitForMagicLink"}, ...}
-- Do NOT type random numbers into OTP fields. Use WaitForOTP to auto-retrieve the code.
+- Do NOT type random numbers (like 111111, 123456, etc.) into OTP fields. ALWAYS use WaitForOTP to auto-retrieve the REAL code.
+- After WaitForOTP fills the code, check if there's a "Verify" / "Confirm" / "Submit" button and click it.
+
+### FORM COMPLETION STRATEGY (CRITICAL - BE EFFICIENT) ###
+- ACT on every turn. Do NOT spend more than 1 turn observing/scrolling without performing an Input/Tap/Select.
+- Fill fields in TOP-TO-BOTTOM order: name → email → password → country → checkboxes → submit button.
+- After filling the LAST visible field, immediately SCROLL DOWN to find any remaining fields or the submit button.
+- Once ALL fields are filled, CLICK THE SUBMIT BUTTON immediately ("Create Account", "Sign Up", "Register", "Submit", etc).
+- If the submit button is not visible, SCROLL DOWN — it is almost certainly below the fold.
+- DO NOT waste steps re-observing a page you already analyzed. If you see a field, fill it. If you see a button, click it.
+- If you see a checkbox (e.g. Terms & Conditions, age verification), CHECK IT before clicking submit.
 
 RULES:
 - Perform ONE action per turn.
@@ -290,12 +302,21 @@ DROPDOWN/SELECT HANDLING (CRITICAL):
 - Do NOT use Tap to select dropdown options — Tap does not trigger the selection mechanism
 - If you see a dropdown showing "Select" or a placeholder, use Select with the dropdown's element_id
 - For native <select> elements, also use Select with the option text as value
+- IMPORTANT: If a dropdown LABEL is visible but not the dropdown itself, look for an INPUT field or a clickable 
+  element NEAR the label. Country dropdowns are often searchable text inputs — use Input to type the country name, 
+  then Tap the matching option that appears in the suggestion list.
+- Fallback approach if Select fails:
+  1. Tap the dropdown/input field to open it
+  2. Input the country name (e.g., "Indonesia") into the search field
+  3. Wait for suggestions, then Tap the matching option from the dropdown list
 
 COUNTRY SELECTION STRATEGY:
-- Use the Select action on the country dropdown: {"type":"Select","element_id":<id>,"value":"Indonesia"}
+- First try: Use Select action on the country dropdown: {"type":"Select","element_id":<id>,"value":"Indonesia"}
+- If Select fails or no dropdown element is found: Tap the country input field, then Input "Indonesia", then Tap the suggestion
 - IMPORTANT: Many financial/trading sites RESTRICT certain countries (US, UK, etc). If a country fails, try a DIFFERENT one!
 - Good options: Indonesia, Malaysia, Singapore, Japan, Germany, France, Australia, Brazil, India
 - DO NOT keep retrying the same country if it fails or shows "No result found"
+- If you see ONLY a label like "Country of residence" but no dropdown, SCROLL DOWN slightly — the input field may be just below the label
 
 OTP HANDLING:
 - If the page says "Enter the code sent to your email" or "Verify your email":
@@ -699,7 +720,7 @@ async def autonomous_signup_test(
                     except Exception:
                         abs_screenshot_path = str(Path(screenshot_dir) / Path(screenshot_path or '').name)
     
-                    await screenshot_callback(abs_screenshot_path, step_num, "Observing page")
+                    await screenshot_callback(abs_screenshot_path, step_num, "Analyzing page...")
                 
     
  
@@ -717,8 +738,7 @@ async def autonomous_signup_test(
                     page_url, page_title, step_num, history,
                 )
 
-                raw_response = await _call_claude_vision(
-                    client,
+                raw_response = await call_llm_vision(
                     _get_system_prompt(),
                     user_prompt,
                     images_b64=[screenshot_b64] if screenshot_b64 else None,
@@ -728,8 +748,7 @@ async def autonomous_signup_test(
                 plan = _parse_llm_json(raw_response)
                 if not plan:
                     print(f"  LLM response not parseable, retrying...")
-                    raw_response = await _call_claude_vision(
-                        client,
+                    raw_response = await call_llm_vision(
                         _get_system_prompt(),
                         user_prompt + "\n\nCRITICAL: Respond with valid JSON only. No markdown. No extra text.",
                         images_b64=[screenshot_b64] if screenshot_b64 else None,
@@ -791,15 +810,17 @@ async def autonomous_signup_test(
                     otp_email = os.getenv('TEST_EMAIL_ADDRESS')
                     otp_password = os.getenv('TEST_EMAIL_APP_PASSWORD')
                     imap_server = os.getenv('TEST_EMAIL_IMAP_SERVER', 'imap.gmail.com')
+                    # For Gmail aliases (user+tag@gmail.com), IMAP login must use the real address
+                    imap_login_email = os.getenv('TEST_EMAIL_IMAP_ADDRESS', otp_email)
 
                     if not otp_email or not otp_password:
                         success = False
                         exec_msg = "OTP reader not configured (missing TEST_EMAIL_ADDRESS/TEST_EMAIL_APP_PASSWORD in .env)"
                         print(f"[OTP] ERROR: TEST_EMAIL_ADDRESS={'set' if otp_email else 'MISSING'}, TEST_EMAIL_APP_PASSWORD={'set' if otp_password else 'MISSING'}")
                     else:
-                        print(f"[OTP] Reading OTP from {otp_email} via {imap_server}")
+                        print(f"[OTP] Reading OTP from {otp_email} (IMAP login: {imap_login_email}) via {imap_server}")
                         print(f"[OTP] Polling inbox for new emails since test start...")
-                        reader = OTPReader(otp_email, otp_password, imap_server=imap_server)
+                        reader = OTPReader(imap_login_email, otp_password, imap_server=imap_server)
                         sender_filter = value or action_dict.get('param', {}).get('sender_filter')
                         if sender_filter:
                             print(f"[OTP] Filtering by sender: {sender_filter}")
@@ -870,14 +891,15 @@ async def autonomous_signup_test(
                     otp_email = os.getenv('TEST_EMAIL_ADDRESS')
                     otp_password = os.getenv('TEST_EMAIL_APP_PASSWORD')
                     imap_server = os.getenv('TEST_EMAIL_IMAP_SERVER', 'imap.gmail.com')
+                    imap_login_email = os.getenv('TEST_EMAIL_IMAP_ADDRESS', otp_email)
 
                     if not otp_email or not otp_password:
                         success = False
                         exec_msg = "Magic link reader not configured (missing TEST_EMAIL_ADDRESS/TEST_EMAIL_APP_PASSWORD in .env)"
                         print(f"[MagicLink] ERROR: TEST_EMAIL_ADDRESS={'set' if otp_email else 'MISSING'}, TEST_EMAIL_APP_PASSWORD={'set' if otp_password else 'MISSING'}")
                     else:
-                        print(f"[MagicLink] Reading magic link from {otp_email} via {imap_server}")
-                        reader = OTPReader(otp_email, otp_password, imap_server=imap_server)
+                        print(f"[MagicLink] Reading magic link from {otp_email} (IMAP: {imap_login_email}) via {imap_server}")
+                        reader = OTPReader(imap_login_email, otp_password, imap_server=imap_server)
                         sender_filter = value or action_dict.get('param', {}).get('sender_filter')
 
                         try:
@@ -909,6 +931,63 @@ async def autonomous_signup_test(
                     success = exec_result.get('success', False) if isinstance(exec_result, dict) else bool(exec_result)
                     exec_msg = exec_result.get('message', '') if isinstance(exec_result, dict) else str(exec_result)
 
+                    # FALLBACK: If SelectDropdown failed, try tap-type-tap approach for custom dropdowns
+                    if not success and action_type == 'Select' and value and element_id is not None:
+                        print(f"  SelectDropdown failed, trying tap-type-tap fallback...")
+                        try:
+                            # Step 1: Tap the dropdown to open it
+                            tap_dict = {"type": "Tap", "locate": {"id": str(element_id)}, "param": {}}
+                            await executor.execute(tap_dict)
+                            await asyncio.sleep(0.5)
+
+                            # Step 2: Type the search text into the now-focused field
+                            await page.keyboard.type(value, delay=50)
+                            await asyncio.sleep(1.0)
+
+                            # Step 3: Re-crawl to find the matching option in the dropdown list
+                            new_crawl = await crawler.crawl(highlight=True, cache_dom=True, viewport_only=False)
+                            new_buffer = new_crawl.raw_dict()
+                            value_lower = value.lower()
+
+                            # Find the option that matches our search text
+                            matched_option_id = None
+                            for eid, elem in new_buffer.items():
+                                elem_text = (elem.get('innerText') or '').strip().lower()
+                                elem_role = (elem.get('role') or '').lower()
+                                elem_tag = (elem.get('tagName') or '').lower()
+                                if elem_text and value_lower in elem_text and (
+                                    elem_role in ('option', 'listbox', 'menuitem', '') or
+                                    elem_tag in ('li', 'div', 'span', 'option')
+                                ):
+                                    # Prefer exact match
+                                    if elem_text == value_lower:
+                                        matched_option_id = eid
+                                        break
+                                    elif matched_option_id is None:
+                                        matched_option_id = eid
+
+                            if matched_option_id:
+                                # Tap the matching option
+                                opt_tap = {"type": "Tap", "locate": {"id": str(matched_option_id)}, "param": {}}
+                                action_handler.set_page_element_buffer(new_buffer)
+                                opt_result = await executor.execute(opt_tap)
+                                opt_success = opt_result.get('success', False) if isinstance(opt_result, dict) else bool(opt_result)
+                                if opt_success:
+                                    success = True
+                                    exec_msg = f"Selected '{value}' via tap-type-tap fallback"
+                                    print(f"  Fallback SUCCESS: Selected '{value}'")
+                                else:
+                                    print(f"  Fallback: Found option but tap failed")
+                            else:
+                                # Last resort: press Enter to accept the first suggestion
+                                await page.keyboard.press('Enter')
+                                await asyncio.sleep(0.3)
+                                success = True
+                                exec_msg = f"Typed '{value}' and pressed Enter (fallback)"
+                                print(f"  Fallback: No exact match found, pressed Enter")
+                        except Exception as fb_err:
+                            print(f"  Fallback error: {fb_err}")
+
                 print(f"  Result: {'OK' if success else 'FAIL'} - {exec_msg[:80]}")
 
                 if action_type == 'Input' and value:
@@ -923,6 +1002,21 @@ async def autonomous_signup_test(
                 screenshot_after_b64, screenshot_after_path = await action_handler.b64_page_screenshot(
                     file_name=f'step_{step_num:02d}_after', context='autonomous',
                 )
+
+                # -- Broadcast REAL action to frontend --
+                real_action_desc = action_type
+                if element_desc:
+                    real_action_desc += f" '{element_desc}'"
+                if value and action_type == 'Input':
+                    real_action_desc += f" → \"{value}\""
+                real_action_desc += f" — {'OK' if success else 'FAIL'}"
+
+                after_abs_path = None
+                if screenshot_after_path:
+                    p = Path(screenshot_after_path)
+                    after_abs_path = str(p) if p.is_absolute() else str(Path(screenshot_dir) / p)
+                if screenshot_callback and after_abs_path:
+                    await screenshot_callback(after_abs_path, step_num, real_action_desc)
 
                 # -- VERIFY: Dual-screenshot diagnosis --
                 dual_diagnosis = None
