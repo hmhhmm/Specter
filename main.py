@@ -984,6 +984,15 @@ async def autonomous_signup_test(
                         'expected_outcome': 'Action progresses the sign-up flow',
                         'actual_outcome': action_desc_text,
                         'interactive_elements': after_elements_for_handoff,  # Add DOM elements for heatmap generation
+                        'agent_decision': {  # Add actual agent decision for heatmap
+                            'action': action_desc_text,
+                            'action_type': action_plan.get('type', 'unknown'),
+                            'element_id': str(action_plan.get('element_id', '')),
+                            'target_id': str(action_plan.get('element_id', '')),
+                            'confidence': 1.0 - (confusion / 10.0),  # Convert confusion to confidence
+                            'reasoning': reasoning,
+                            'confusion_score': confusion,
+                        },
                         'ui_analysis': {
                             'issues': ux_issues,
                             'confusion_score': confusion,

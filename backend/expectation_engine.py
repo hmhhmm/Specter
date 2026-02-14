@@ -525,31 +525,10 @@ def generate_uncertainty_heatmap(
     
     agent_conf = float(uncertainty_data.get('agent_confidence', 0.5))
     
-    # FIX 5: Deduplicate overlapping regions to reduce noise
-    deduped_regions = []
-    for region in regions:
-        # Check if this region overlaps significantly with existing ones
-        overlaps = False
-        rx, ry = region.get('x', 0.5), region.get('y', 0.5)
-        
-        for existing in deduped_regions:
-            ex, ey = existing.get('x', 0.5), existing.get('y', 0.5)
-            dist = np.sqrt((rx - ex)**2 + (ry - ey)**2)
-            
-            # If within 5% of screen, consider overlap
-            if dist < 0.05:
-                # Keep the more uncertain one
-                if region.get('uncertainty', 0) > existing.get('uncertainty', 0):
-                    deduped_regions.remove(existing)
-                    deduped_regions.append(region)
-                overlaps = True
-                break
-        
-        if not overlaps:
-            deduped_regions.append(region)
-    
-    logger.debug(f"Deduplication: {len(regions)} -> {len(deduped_regions)} regions")
-    regions = deduped_regions
+    # DISABLE deduplication - show ALL elements with boxes
+    # The user wants to see every detected element, not filtered ones
+    # Deduplication was hiding elements that were close together
+    # regions = regions  # No deduplication!
     
     # FIX 6: Improved gaussian blob generation with maximum instead of sum
     for region in regions:
@@ -698,46 +677,75 @@ def generate_uncertainty_heatmap(
             ocr_conf = region.get('ocr_confidence', 0.0)
             
             # FIX 11: Make ALL bounding boxes clearly visible
-            # Color code based on uncertainty, but all have good contrast
+            # Color intensity based on uncertainty percentage
+            # Low uncertainty (1-15%): Light/subtle colors
+            # High uncertainty (70%+): Bright/intense colors
+            
+            # Calculate color based on uncertainty (gradient from white to red)
             if is_target:
                 box_color = (0, 255, 0)  # Bright Green (target element)
                 thickness = 3
-            elif uncertainty > 0.7:
-                box_color = (0, 0, 255)  # Red (high uncertainty)
-                thickness = 2
-            elif uncertainty > 0.4:
-                box_color = (255, 128, 0)  # Orange (medium uncertainty)
-                thickness = 2
-            elif uncertainty > 0.15:
-                box_color = (255, 255, 0)  # Cyan (low-medium uncertainty)
-                thickness = 2
             else:
-                # Very low uncertainty: use white for maximum visibility
-                box_color = (255, 255, 255)  # White (very low uncertainty)
-                thickness = 1
+                # Uncertainty-based color gradient
+                if uncertainty < 0.15:  # 0-15%: Light gray to white
+                    intensity = int(180 + (uncertainty / 0.15) * 75)  # 180-255
+                    box_color = (intensity, intensity, intensity)  # Gray to White
+                    thickness = 1
+                elif uncertainty < 0.40:  # 15-40%: Cyan to Yellow
+                    # Interpolate from cyan (255,255,0) to yellow (0,255,255)
+                    factor = (uncertainty - 0.15) / 0.25
+                    box_color = (int(255 * (1 - factor)), 255, int(255 * factor))
+                    thickness = 2
+                elif uncertainty < 0.70:  # 40-70%: Yellow to Orange
+                    # Interpolate from yellow (0,255,255) to orange (0,165,255)
+                    factor = (uncertainty - 0.40) / 0.30
+                    box_color = (0, int(255 - 90 * factor), 255)
+                    thickness = 2
+                else:  # 70-100%: Orange to Red
+                    # Interpolate from orange (0,165,255) to red (0,0,255)
+                    factor = (uncertainty - 0.70) / 0.30
+                    box_color = (0, int(165 * (1 - factor)), 255)
+                    thickness = 3
             
-            # Draw rectangle
+            # Draw rectangle with uncertainty-based color
             cv2.rectangle(result, (int(x), int(y)), (int(x + w), int(y + h)), 
                          box_color, thickness)
             
-            # Draw element ID label with OCR confidence
+            # Draw element ID label at TOP-LEFT
             label = f"#{elem_id}"
             if is_target:
                 label += " ★"  # Star for target
-            if ocr_conf > 0:
-                label += f" OCR:{ocr_conf:.0%}"
             
-            label_size = cv2.getTextSize(label, font, 0.4, 1)[0]
-            cv2.rectangle(result, (int(x), int(y) - 18), 
+            label_size = cv2.getTextSize(label, font, 0.35, 1)[0]
+            # Dark background for label
+            cv2.rectangle(result, (int(x), int(y) - 16), 
                          (int(x) + label_size[0] + 4, int(y)), 
-                         box_color, -1)
-            cv2.putText(result, label, (int(x) + 2, int(y) - 5), 
-                       font, 0.4, (255, 255, 255), 1)
+                         (0, 0, 0), -1)
+            cv2.putText(result, label, (int(x) + 2, int(y) - 4), 
+                       font, 0.35, (255, 255, 255), 1)
             
-            # Draw uncertainty percentage
-            unc_label = f"{uncertainty*100:.0f}%"
-            cv2.putText(result, unc_label, (int(x + w) - 35, int(y + h) + 15), 
-                       font, 0.4, box_color, 1)
+            # FIX 12: Draw LARGE uncertainty percentage at BOTTOM-RIGHT corner
+            # This is the "confusion score" the user wants to see
+            unc_pct = int(uncertainty * 100)
+            unc_label = f"{unc_pct}%"
+            
+            # Make font size proportional to uncertainty (bigger = more uncertain)
+            font_scale = 0.5 if uncertainty < 0.3 else 0.7 if uncertainty < 0.7 else 1.0
+            unc_size = cv2.getTextSize(unc_label, font, font_scale, 2)[0]
+            
+            # Position at bottom-right of bbox
+            unc_x = int(x + w - unc_size[0] - 4)
+            unc_y = int(y + h + unc_size[1] + 4)
+            
+            # Dark background for contrast
+            cv2.rectangle(result, 
+                         (unc_x - 2, unc_y - unc_size[1] - 2),
+                         (unc_x + unc_size[0] + 2, unc_y + 2),
+                         (0, 0, 0), -1)
+            
+            # Draw percentage in bright color
+            cv2.putText(result, unc_label, (unc_x, unc_y), 
+                       font, font_scale, box_color, 2)
     
     # Add legend
     if show_legend:

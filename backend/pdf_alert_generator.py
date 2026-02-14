@@ -132,7 +132,7 @@ def generate_team_alert_pdf(final_packet, output_dir="reports/pdf_alerts"):
         elements.append(Spacer(1, 0.3*inch))
         
         # Alert Overview
-        overview_heading = Paragraph("🚨 Alert Overview", heading_style)
+        overview_heading = Paragraph("Alert Overview", heading_style)
         elements.append(overview_heading)
         
         # Extract confusion_score from nested evidence structure
@@ -143,15 +143,15 @@ def generate_team_alert_pdf(final_packet, output_dir="reports/pdf_alerts"):
         # IMPORTANT: Higher F-Score = Worse UX (more friction/frustration)
         f_score = outcome.get('f_score', 0)
         if f_score > 80:
-            f_score_text = f"{f_score}/100 🚨 Critical friction"
+            f_score_text = f"{f_score}/100 Critical friction"
         elif f_score > 60:
-            f_score_text = f"{f_score}/100 ⚠️ High friction"
+            f_score_text = f"{f_score}/100 High friction"
         elif f_score > 40:
-            f_score_text = f"{f_score}/100 ⚡ Moderate friction"
+            f_score_text = f"{f_score}/100 Moderate friction"
         elif f_score > 20:
-            f_score_text = f"{f_score}/100 ✓ Low friction"
+            f_score_text = f"{f_score}/100 Low friction"
         else:
-            f_score_text = f"{f_score}/100 ✅ Minimal friction"
+            f_score_text = f"{f_score}/100 Minimal friction"
         
         overview_data = [
             ["Persona:", final_packet.get('persona', 'N/A')],
@@ -208,7 +208,7 @@ def generate_team_alert_pdf(final_packet, output_dir="reports/pdf_alerts"):
         # ============ ALL ISSUES FOUND (COMPREHENSIVE SECTION) ============
         all_issues = final_packet.get('all_issues', [])
         if all_issues and len(all_issues) > 1:
-            all_issues_heading = Paragraph("📋 All Issues Found Across Test", heading_style)
+            all_issues_heading = Paragraph("Issues Found Across Test", heading_style)
             elements.append(all_issues_heading)
             
             for idx, issue_report in enumerate(all_issues, 1):
@@ -252,9 +252,9 @@ def generate_team_alert_pdf(final_packet, output_dir="reports/pdf_alerts"):
                 
                 # Add context to visual change score
                 if f_score < 20:
-                    f_score_display = f"{f_score}/100 ⚠️ No response"
+                    f_score_display = f"{f_score}/100 No response"
                 elif f_score < 40:
-                    f_score_display = f"{f_score}/100 ⚠️ Minimal"
+                    f_score_display = f"{f_score}/100 Minimal"
                 else:
                     f_score_display = f"{f_score}/100"
                 
@@ -301,7 +301,7 @@ def generate_team_alert_pdf(final_packet, output_dir="reports/pdf_alerts"):
                 unique_ux_issues.append(issue)
         
         if unique_ux_issues:
-            ux_heading = Paragraph("👁️ All UX Observations", heading_style)
+            ux_heading = Paragraph("UX Observations", heading_style)
             elements.append(ux_heading)
             
             # Create a formatted list box for UX issues
@@ -311,7 +311,7 @@ def generate_team_alert_pdf(final_packet, output_dir="reports/pdf_alerts"):
             elements.append(Spacer(1, 0.2*inch))
         
         # Network Logs (ENHANCED - Show even when empty)
-        network_heading = Paragraph("🌐 Network Logs", heading_style)
+        network_heading = Paragraph("Network Logs", heading_style)
         elements.append(network_heading)
         network_logs = evidence.get('network_logs', [])
         if network_logs:
@@ -354,7 +354,7 @@ def generate_team_alert_pdf(final_packet, output_dir="reports/pdf_alerts"):
         elements.append(Spacer(1, 0.3*inch))
         
         # Recommendations (COMPREHENSIVE - From ALL steps)
-        recommendations_heading = Paragraph("💡 How to Fix - Actionable Recommendations", heading_style)
+        recommendations_heading = Paragraph("How to Fix - Actionable Recommendations", heading_style)
         elements.append(recommendations_heading)
         
         # Collect ALL recommendations from all steps
@@ -396,7 +396,7 @@ def generate_team_alert_pdf(final_packet, output_dir="reports/pdf_alerts"):
         # Add UX-specific recommendations based on ALL UX issues
         if unique_ux_issues:
             elements.append(Spacer(1, 0.15*inch))
-            ux_rec_para = Paragraph("<b>🎨 UX Improvements Based on Observations:</b>", subheading_style)
+            ux_rec_para = Paragraph("<b>UX Improvements Based on Observations:</b>", subheading_style)
             elements.append(ux_rec_para)
             
             # Generate UX-specific recommendations based on ALL issues detected
@@ -439,7 +439,7 @@ def generate_team_alert_pdf(final_packet, output_dir="reports/pdf_alerts"):
         elements.append(Spacer(1, 0.3*inch))
         
         # Reproduction Steps (NEW SECTION)
-        repro_heading = Paragraph("🔄 Reproduction Steps", heading_style)
+        repro_heading = Paragraph("Reproduction Steps", heading_style)
         elements.append(repro_heading)
         
         repro_steps = [
@@ -504,10 +504,10 @@ def send_pdf_to_team_slack(pdf_path, team_name, severity, diagnosis):
     
     try:
         severity_emoji = {
-            "P0": "🚨",
-            "P1": "⚠️",
-            "P2": "⚡",
-            "P3": "ℹ️"
+            "P0": "",
+            "P1": "",
+            "P2": "",
+            "P3": ""
         }.get(severity, "")
         
         # Upload PDF to team channel
