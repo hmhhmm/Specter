@@ -4,11 +4,9 @@ import json
 import os
 import base64
 from dotenv import load_dotenv
-import anthropic
+from backend.ai_utils import call_llm_vision, parse_json_from_llm
 
 load_dotenv(os.path.join("backend", ".env"))
-CLAUDE_API_KEY = os.getenv("CLAUDE_API_KEY")
-client = anthropic.Anthropic(api_key=CLAUDE_API_KEY)
 
 
 def determine_responsible_team(handoff_packet):
@@ -125,7 +123,7 @@ def determine_responsible_team(handoff_packet):
         print(f"  Routing: QA (unclear root cause)")
         return "QA"
 
-def diagnose_failure(handoff_packet, use_vision=True):
+async def diagnose_failure(handoff_packet, use_vision=True):
     """
     Analyze failure using AI with optional vision analysis.
     
@@ -212,82 +210,37 @@ Return ONLY valid JSON (no markdown):
 Focus on: What failed? Why? What team should fix it?
 """
 
-    # Prepare message content
-    message_content = []
-    
-    # Add text prompt
-    message_content.append({
-        "type": "text",
-        "text": text_prompt
-    })
-    
-    # Add screenshots if vision is enabled
+    # Prepare screenshot evidence for LLM
+    before_b64, after_b64 = None, None
     if use_vision:
         try:
-            # Get screenshot paths
             before_path = handoff_packet['evidence'].get('screenshot_before_path')
             after_path = handoff_packet['evidence'].get('screenshot_after_path')
             
-            # Add before screenshot
             if before_path and os.path.exists(before_path):
                 with open(before_path, 'rb') as f:
                     before_b64 = base64.b64encode(f.read()).decode('utf-8')
-                message_content.append({
-                    "type": "image",
-                    "source": {
-                        "type": "base64",
-                        "media_type": "image/png",
-                        "data": before_b64
-                    }
-                })
-                message_content.append({
-                    "type": "text",
-                    "text": "↑ BEFORE: Screenshot taken before user action"
-                })
             
-            # Add after screenshot
             if after_path and os.path.exists(after_path):
                 with open(after_path, 'rb') as f:
                     after_b64 = base64.b64encode(f.read()).decode('utf-8')
-                message_content.append({
-                    "type": "image",
-                    "source": {
-                        "type": "base64",
-                        "media_type": "image/png",
-                        "data": after_b64
-                    }
-                })
-                message_content.append({
-                    "type": "text",
-                    "text": "↑ AFTER: Screenshot taken after user action. Compare with BEFORE to identify what changed (or didn't change when expected)."
-                })
         except Exception as e:
-            print(f"Warning: Vision analysis failed, falling back to text-only: {e}")
+            print(f"Warning: Vision evidence preparation failed: {e}")
             use_vision = False
 
+    # Call LLM with vision support (Claude with NVIDIA fallback)
     try:
-        # Using Claude Haiku for both vision and non-vision (faster and more reliable)
-        model = "claude-3-haiku-20240307"
-        
-        message = client.messages.create(
-            model=model,
-            max_tokens=3000,  # Increased for comprehensive analysis
-            messages=[{"role": "user", "content": message_content}]
+        response_text = await call_llm_vision(
+            system_prompt=text_prompt,
+            user_prompt="Analyze the failure based on the screenshots and technical evidence provided. Respond with JSON only.",
+            images_b64=[before_b64, after_b64] if (before_b64 and after_b64) else None,
+            max_tokens=3000
         )
         
-        # Extract response text
-        response_text = message.content[0].text.strip()
-        
-        # Remove markdown code blocks if present
-        if response_text.startswith("```"):
-            # Remove ```json and ``` markers
-            response_text = response_text.split('\n', 1)[1] if '\n' in response_text else response_text
-            if response_text.endswith("```"):
-                response_text = response_text.rsplit("```", 1)[0]
-            response_text = response_text.strip()
-        
         # Parse JSON
-        ai_analysis = json.loads(response_text)
+        ai_analysis = parse_json_from_llm(response_text)
+        if not ai_analysis:
+            raise json.JSONDecodeError("Failed to parse LLM response as JSON", response_text, 0)
         
         # VALIDATE: Ensure responsible_team is one of the 4 valid teams
         valid_teams = ["Backend", "Frontend", "Design", "QA"]
@@ -302,22 +255,13 @@ Focus on: What failed? Why? What team should fix it?
         
         print(f"Final routing: {ai_analysis.get('responsible_team')} team")
         
-    except json.JSONDecodeError as e:
-        print(f"Error: Claude JSON parse failed: {e}")
-        print(f"Raw response: {response_text if 'response_text' in locals() else 'N/A'}")
-        handoff_packet['outcome'].update({
-            "diagnosis": "Analyzing issue... (AI diagnosis pending)",
-            "severity": calc_severity,
-            "responsible_team": suggested_team,  # Use intelligent team determination
-            "recommendations": ["Review network logs", "Check console errors", "Analyze screenshots"]
-        })
     except Exception as e:
-        print(f"Error: Claude API failed: {e}")
+        print(f"Error in LLM diagnosis: {e}")
         handoff_packet['outcome'].update({
-            "diagnosis": "Analyzing issue... (AI diagnosis pending)",
+            "diagnosis": f"AI Analysis paused: {str(e)[:100]}",
             "severity": calc_severity,
-            "responsible_team": suggested_team,  # Use intelligent team determination
-            "recommendations": ["Review network logs", "Check console errors", "Analyze screenshots"]
+            "responsible_team": suggested_team,
+            "recommendations": ["Manual review of logs required", "Check network performance"]
         })
     
     return handoff_packet

@@ -1,46 +1,55 @@
+"use client";
+
+import { Map, Zap, Activity, GitBranch } from "lucide-react";
+import { RegionalMap } from "./regional-map";
+import { CompetitorBar } from "./competitor-bar";
+import { FScoreWave } from "./f-score-wave";
+import { RootCausePanel } from "./root-cause-panel";
+
 export function IntelligencePanel() {
-  const personas = [
-    { icon: "⚡", name: "Zoomer", color: "yellow", issue: "2.3s scroll lag detected", severity: "high" },
-    { icon: "👵", name: "Boomer", color: "blue", issue: "Font size 9px flagged", severity: "medium" },
-    { icon: "🕵️", name: "Skeptic", color: "purple", issue: "Privacy policy hidden", severity: "low" },
-    { icon: "💥", name: "Chaos", color: "red", issue: "Validation bypass found", severity: "critical" },
-    { icon: "📱", name: "Mobile", color: "green", issue: "Touch target 38px", severity: "medium" }
-  ];
-
-  const severityColors = {
-    critical: "bg-red-500/20 border-red-500/30 text-red-400",
-    high: "bg-orange-500/20 border-orange-500/30 text-orange-400",
-    medium: "bg-yellow-500/20 border-yellow-500/30 text-yellow-400",
-    low: "bg-emerald-500/20 border-emerald-500/30 text-emerald-400"
-  };
-
   return (
-    <div className="rounded-2xl border-2 border-white/10 bg-gradient-to-br from-zinc-900/80 to-zinc-900/40 backdrop-blur-sm p-6 h-full">
-      <h3 className="text-lg font-bold mb-6 flex items-center gap-2">
-        <span>Persona Intelligence</span>
-        <span className="text-xs px-2 py-1 rounded-full bg-emerald-500/20 text-emerald-400">Live</span>
-      </h3>
-      
-      <div className="space-y-3">
-        {personas.map((persona) => (
-          <div
-            key={persona.name}
-            className="group relative rounded-xl border-2 border-white/5 bg-white/5 p-4 hover:border-white/10 hover:bg-white/10 transition-all duration-300"
-          >
-            <div className="flex items-start gap-3">
-              <span className="text-2xl">{persona.icon}</span>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-sm font-semibold text-white">{persona.name}</span>
-                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${severityColors[persona.severity as keyof typeof severityColors]}`}>
-                    {persona.severity}
-                  </span>
-                </div>
-                <p className="text-xs text-zinc-400">{persona.issue}</p>
-              </div>
-            </div>
+    <div className="flex flex-col gap-6 h-full">
+      {/* Regional Map */}
+      <div className="rounded-[2.5rem] bg-zinc-900/40 border border-white/5 p-6 flex flex-col h-[300px] shadow-sm">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Map className="w-4 h-4 text-emerald-500" />
+            <h3 className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest font-bold">Regional Leak Map</h3>
           </div>
-        ))}
+          <div className="px-2 py-0.5 rounded border border-emerald-500/20 bg-emerald-500/5 text-[8px] font-mono text-emerald-500 uppercase tracking-widest animate-pulse">
+            Active
+          </div>
+        </div>
+        <div className="flex-1">
+          <RegionalMap />
+        </div>
+      </div>
+
+      {/* Competitor Benchmarking */}
+      <div className="rounded-[2.5rem] bg-zinc-900/40 border border-white/5 p-6 flex flex-col shadow-sm">
+        <div className="flex items-center gap-2 mb-6">
+          <Zap className="w-4 h-4 text-amber-500" />
+          <h3 className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest font-bold">Competitive Tension</h3>
+        </div>
+        <CompetitorBar />
+      </div>
+
+      {/* Root Cause Intelligence */}
+      <div className="rounded-[2.5rem] bg-zinc-900/40 border border-white/5 p-6 flex flex-col shadow-sm">
+        <div className="flex items-center gap-2 mb-4">
+          <GitBranch className="w-4 h-4 text-emerald-500" />
+          <h3 className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest font-bold">Recurring Patterns</h3>
+        </div>
+        <RootCausePanel />
+      </div>
+
+      {/* F-Score Waveform */}
+      <div className="rounded-[2.5rem] bg-zinc-900/40 border border-white/5 p-6 flex flex-col flex-1 shadow-sm overflow-hidden">
+        <div className="flex items-center gap-2 mb-6">
+          <Activity className="w-4 h-4 text-emerald-500" />
+          <h3 className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest font-bold">Average Frustration</h3>
+        </div>
+        <FScoreWave />
       </div>
     </div>
   );

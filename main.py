@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
 SPECTER - Autonomous AI QA Agent
-Fully powered by webqa_agent + raw Anthropic API.
+Fully powered by webqa_agent + Unified AI Vision API.
 
   BrowserSessionPool  - managed browser lifecycle
   DeepCrawler          - DOM element detection + highlight
   ActionHandler         - click, type, scroll, hover, screenshots
   ActionExecutor        - structured action dispatch
   ScrollHandler         - smart page/container scrolling
-  Raw Anthropic API     - vision + reasoning (claude-sonnet-4-20250514)
+  Unified AI Vision API - vision + reasoning (Claude or NVIDIA Llama)
 
 FEATURE 1: Multimodal Persona-Driven Navigator
   - LLM observes screenshot + DOM -> decides next action autonomously
@@ -44,8 +44,7 @@ from backend.escalation_webhook import send_alert
 from backend.webqa_bridge import _resolve_screenshot_path
 from backend.otp_reader import OTPReader
 
-# Raw Anthropic SDK
-import anthropic
+# Unified AI Vision SDK (Handled inside ai_utils)
 from dotenv import load_dotenv
 
 load_dotenv(os.path.join("backend", ".env"))
@@ -382,70 +381,22 @@ Decide your SINGLE next action. Respond with valid JSON only."""
 
 
 # ======================================================================
-# RAW ANTHROPIC API HELPERS
+# UNIFIED AI VISION HELPERS
 # ======================================================================
 
-def _get_anthropic_client():
-    """Create a raw Anthropic client."""
-    api_key = os.getenv("CLAUDE_API_KEY") or os.getenv("ANTHROPIC_API_KEY")
-    if not api_key:
-        return None
-    return anthropic.Anthropic(api_key=api_key)
-
-
-async def _call_claude_vision(client, system_prompt, user_prompt, images_b64=None, max_tokens=2048):
-    """Call Claude with vision via raw Anthropic SDK. Returns response text."""
-    content = []
-    if images_b64:
-        for img in images_b64:
-            if img and isinstance(img, str):
-                # Strip data URI prefix if present
-                raw = img.split('base64,')[1] if 'base64,' in img else img
-                content.append({
-                    "type": "image",
-                    "source": {"type": "base64", "media_type": "image/png", "data": raw},
-                })
-    content.append({"type": "text", "text": user_prompt})
-
-    delay = 3.0
-    for attempt in range(1, 4):
-        try:
-            msg = client.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=max_tokens,
-                system=system_prompt,
-                messages=[{"role": "user", "content": content}],
-            )
-            return msg.content[0].text
-        except Exception as e:
-            err = str(e).lower()
-            if "rate" in err or "429" in err or "overloaded" in err:
-                print(f"      Rate limited (attempt {attempt}/3), waiting {delay:.0f}s...")
-                await asyncio.sleep(delay)
-                delay *= 2
-                continue
-            raise
-    return None
+async def _call_llm_vision(system_prompt, user_prompt, images_b64=None, max_tokens=2048):
+    """Call LLM with vision support (Claude with Gemini fallback)."""
+    return await call_llm_vision(
+        system_prompt=system_prompt,
+        user_prompt=user_prompt,
+        images_b64=images_b64,
+        max_tokens=max_tokens
+    )
 
 
 def _parse_llm_json(text):
     """Extract JSON from LLM response."""
-    if not text:
-        return None
-    text = text.strip()
-    if text.startswith("```"):
-        text = text.split("\n", 1)[-1]
-    if text.endswith("```"):
-        text = text.rsplit("```", 1)[0]
-    text = text.strip()
-    start = text.find('{')
-    end = text.rfind('}')
-    if start != -1 and end != -1:
-        try:
-            return json.loads(text[start:end+1])
-        except json.JSONDecodeError:
-            pass
-    return None
+    return parse_json_from_llm(text)
 
 
 def _build_action_dict(action_type, element_id, value, element_buffer=None):
@@ -515,15 +466,14 @@ async def _show_red_dot(page, element_buffer, element_id):
         pass
 
 
-async def _diagnose_before_after(client, before_b64, after_b64, action_desc, expectation):
-    """Dual-screenshot diagnosis via raw Claude."""
+async def _diagnose_before_after(before_b64, after_b64, action_desc, expectation):
+    """Dual-screenshot diagnosis via unified AI (Claude or NVIDIA)."""
     prompt = f"""Compare BEFORE and AFTER screenshots of a browser action.
 Action: {action_desc}
 Expected: {expectation}
 Respond JSON only: {{"status":"PASSED"|"FAILED"|"PARTIAL","visual_observation":"<what changed>","diagnosis":"<root cause if failed>","severity":"P0 - Critical"|"P1 - Major"|"P2 - Minor"|"P3 - Cosmetic","responsible_team":"Frontend"|"Backend"|"UX/Design"|"N/A"}}"""
     try:
-        raw = await _call_claude_vision(
-            client,
+        raw = await _call_llm_vision(
             "You are a visual QA diagnosis expert. Respond with JSON only.",
             prompt,
             images_b64=[before_b64, after_b64],
@@ -536,7 +486,7 @@ Respond JSON only: {{"status":"PASSED"|"FAILED"|"PARTIAL","visual_observation":"
 
 
 # ======================================================================
-# AUTONOMOUS AGENT - Fully powered by webqa_agent + raw Anthropic
+# AUTONOMOUS AGENT - Fully powered by webqa_agent + Unified AI
 # ======================================================================
 
 async def autonomous_signup_test(
@@ -564,7 +514,7 @@ async def autonomous_signup_test(
     - DeepCrawler: DOM element detection + highlighting
     - ActionHandler + ActionExecutor: action execution
     - ScrollHandler: intelligent scrolling
-    - Raw Anthropic API: vision + reasoning
+    - Unified AI Vision API: vision + reasoning (Claude or NVIDIA)
     """
     if not AUTONOMOUS_AVAILABLE:
         print("Autonomous mode not available. Install webqa_agent.")
@@ -574,13 +524,8 @@ async def autonomous_signup_test(
     network_cfg = NETWORKS[network]
     persona_cfg = PERSONAS[persona]
 
-    client = _get_anthropic_client()
-    if not client:
-        print("No API key. Set CLAUDE_API_KEY or ANTHROPIC_API_KEY in backend/.env")
-        return {'status': 'ERROR', 'reason': 'No API key'}
-
     print("\n" + "=" * 70)
-    print("SPECTER AUTONOMOUS AGENT (webqa_agent + raw Anthropic)")
+    print("SPECTER AUTONOMOUS AGENT (webqa_agent + Unified AI Vision)")
     print("=" * 70)
     print(f"  URL: {url}")
     print(f"  Device: {device_cfg['name']}")
@@ -979,7 +924,7 @@ async def autonomous_signup_test(
                 dual_diagnosis = None
                 if screenshot_b64 and screenshot_after_b64 and screenshot_b64 != screenshot_after_b64:
                     dual_diagnosis = await _diagnose_before_after(
-                        client, screenshot_b64, screenshot_after_b64,
+                        screenshot_b64, screenshot_after_b64,
                         f"{action_type} on {element_desc}",
                         "Action should progress the sign-up flow",
                     )
@@ -1053,7 +998,7 @@ async def autonomous_signup_test(
                 }
 
                 # Feature 2 pipeline - adds diagnosis, severity, team, f_score to handoff['outcome']
-                pipeline_result = run_specter_pipeline(handoff)
+                pipeline_result = await run_specter_pipeline(handoff)
                 
                 # Update step_report with enriched outcome (now has diagnosis, severity, team, f_score)
                 step_report['outcome'] = handoff.get('outcome', step_report['outcome'])
@@ -1071,8 +1016,8 @@ async def autonomous_signup_test(
                 
                 # AUTO-STOP DETECTION: Prevent wasted tokens on stuck flows
                 if len(results) >= 3:
-                    last_3_results = [r['result'] for r in results[-3:]]
-                    last_3_actions = [r['action'] for r in results[-3:]]
+                    last_3_results = [r.get('result') for r in results[-3:]]
+                    last_3_actions = [r.get('action') for r in results[-3:]]
                     
                     # Stop if stuck in failure loop (3 consecutive failures)
                     if all(result == 'FAIL' for result in last_3_results):
@@ -1301,7 +1246,7 @@ async def autonomous_signup_test(
 # SPECTER PIPELINE - Feature 2: Diagnosis Engine
 # ======================================================================
 
-def run_specter_pipeline(handoff_packet: Dict[str, Any]) -> str:
+async def run_specter_pipeline(handoff_packet: Dict[str, Any]) -> str:
     print(f"  Checking Step {handoff_packet['step_id']}...")
     result = check_expectation(handoff_packet)
 
@@ -1322,7 +1267,7 @@ def run_specter_pipeline(handoff_packet: Dict[str, Any]) -> str:
             "gif_path": result.get('gif_path'),
             "heatmap_path": result.get('heatmap_path'),
         }
-        final_packet = diagnose_failure(handoff_packet, use_vision=True)
+        final_packet = await diagnose_failure(handoff_packet, use_vision=True)
         
         # Mark for alert but don't send yet (will send at end of test)
         responsible_team = final_packet.get('outcome', {}).get('responsible_team', 'Design')
@@ -1339,7 +1284,7 @@ def run_specter_pipeline(handoff_packet: Dict[str, Any]) -> str:
         "heatmap_path": result.get('heatmap_path'),
     }
 
-    final_packet = diagnose_failure(handoff_packet, use_vision=True)
+    final_packet = await diagnose_failure(handoff_packet, use_vision=True)
     
     # Mark issue but don't send alert yet (will send summary at test end)
     severity = final_packet.get('outcome', {}).get('severity', '')
