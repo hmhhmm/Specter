@@ -120,11 +120,21 @@ class _BrowserSession:
                 headless=cfg['headless'],
                 args=browser_args,
             )
+            browser_locale = cfg.get('language', 'en-US')
+            # Build Accept-Language header: primary locale + English fallback
+            lang_short = browser_locale.split('-')[0]  # e.g. "ar" from "ar-SA"
+            if lang_short == 'en':
+                accept_lang = 'en-US,en;q=0.9'
+            else:
+                accept_lang = f'{browser_locale},{lang_short};q=0.9,en-US;q=0.5,en;q=0.3'
+
             self._context = await self._browser.new_context(
                 viewport=cfg['viewport'],
                 device_scale_factor=cfg.get('device_scale_factor', 1.0),
-                locale=cfg.get('language', 'en-US'),
+                locale=browser_locale,
+                extra_http_headers={'Accept-Language': accept_lang},
             )
+            logging.info(f'Browser context created with locale={browser_locale}, Accept-Language={accept_lang}')
 
             # Single-Tab Architecture (Layered Defense with Coordination)
             #

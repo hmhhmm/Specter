@@ -63,6 +63,7 @@ class TestConfig(BaseModel):
     device: str = "desktop"
     network: str = "wifi"
     persona: str = "normal"  # Always fast normal user
+    locale: str = "en-US"    # Browser locale (e.g. en-US, de-DE, zh-CN, ar-SA)
     max_steps: int = 20  # Run full signup flow; frontend can override
 
 
@@ -298,6 +299,7 @@ async def run_test_background(test_id: str, config: TestConfig):
             device=config.device,
             network=config.network,
             persona=config.persona,
+            locale=config.locale,
             max_steps=config.max_steps,
             screenshot_callback=screenshot_callback,
             diagnostic_callback=diagnostic_callback,

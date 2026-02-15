@@ -540,7 +540,7 @@ def _get_system_prompt():
     )
 
 
-def build_planner_prompt(persona_cfg, device_cfg, elements_json, page_url, page_title, step_num, history, upload_mock_paths=None):
+def build_planner_prompt(persona_cfg, device_cfg, elements_json, page_url, page_title, step_num, history, upload_mock_paths=None, locale='en-US'):
     history_text = ""
     failure_warning = ""
     
@@ -573,6 +573,36 @@ def build_planner_prompt(persona_cfg, device_cfg, elements_json, page_url, page_
     if upload_mock_paths:
         pick = random.choice(upload_mock_paths)
         upload_hint = f"\n- UPLOAD: To test document upload use action type Upload with element_id of the upload button/input and value = \"{pick}\" (use this exact path).\n"
+
+    # Language-switching instruction: only on step 1, only if locale is not English
+    lang_hint = ""
+    lang_code = locale.split('-')[0] if locale else 'en'
+    LOCALE_NAMES = {
+        'en': 'English', 'de': 'German', 'es': 'Spanish', 'fr': 'French',
+        'zh': 'Chinese', 'ar': 'Arabic', 'ja': 'Japanese', 'ko': 'Korean',
+        'pt': 'Portuguese', 'it': 'Italian', 'ru': 'Russian', 'hi': 'Hindi',
+    }
+    lang_name = LOCALE_NAMES.get(lang_code, lang_code.upper())
+    if lang_code != 'en' and step_num == 1:
+        lang_hint = f"""
+🌐 FIRST STEP — CHANGE LANGUAGE:
+- The tester has selected locale: {locale} ({lang_name}).
+- Your VERY FIRST action (this step!) MUST be to find the language selector/dropdown on the website and change it to {lang_name} ({lang_code.upper()}).
+- Look for a <select> dropdown, a language toggle, or a flag/language button in the header/nav. Common selectors: elements labeled "EN", "Language", or a dropdown with language codes.
+- Use Select action with the language dropdown element_id and value "{lang_code}" or "{lang_name}" to switch the website language.
+- If the language selector is a native <select>, use Select. If it's a custom dropdown or button, use Tap to open it, then Tap the {lang_name} option.
+- After changing the language, the entire website text should switch to {lang_name}. Then proceed with the signup flow.
+- Do NOT skip this step. Do NOT start filling the signup form until the language is changed.
+"""
+    elif lang_code != 'en' and step_num <= 3:
+        # Reminder on steps 2-3 in case it wasn't done yet
+        already_switched = any(
+            lang_name.lower() in h.get('action_desc', '').lower() or
+            'language' in h.get('action_desc', '').lower()
+            for h in (history or [])
+        )
+        if not already_switched:
+            lang_hint = f"\n⚠️ REMINDER: You must change the website language to {lang_name} ({lang_code.upper()}) BEFORE filling the signup form. Find the language selector and switch it now.\n"
     
     return f"""CURRENT STATE:
 - Step: {step_num}
@@ -581,7 +611,8 @@ def build_planner_prompt(persona_cfg, device_cfg, elements_json, page_url, page_
 - Device: {device_cfg['name']} ({device_cfg['viewport']['width']}x{device_cfg['viewport']['height']})
 - Persona: {persona_cfg['name']} -- {persona_cfg['desc']}
 - Persona Behavior: {persona_cfg['system_prompt']}
-{history_text}{failure_warning}{upload_hint}
+- Test Locale: {locale} ({lang_name})
+{lang_hint}{history_text}{failure_warning}{upload_hint}
 
 INTERACTIVE ELEMENTS ON PAGE:
 {elements_json}
@@ -909,6 +940,8 @@ async def autonomous_signup_test(
         await asyncio.sleep(3)
         print("Page loaded\n")
 
+        # Language switching is handled by the AI agent as its first step (see prompt)
+
         test_start_time = datetime.now()
         test_email = os.getenv('TEST_EMAIL_ADDRESS', 'specter_test@deriv.com')
         print(f"OTP reader will monitor inbox: {test_email}")
@@ -1041,6 +1074,7 @@ async def autonomous_signup_test(
                     persona_cfg, device_cfg, elements_json,
                     page_url, page_title, step_num, history,
                     upload_mock_paths=upload_mock_paths,
+                    locale=locale,
                 )
 
                 raw_response = await call_llm_vision(
