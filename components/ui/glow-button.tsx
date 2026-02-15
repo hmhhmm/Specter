@@ -20,7 +20,7 @@ export function GlowButton({ children, className, ...props }: GlowButtonProps) {
       <div className="absolute -inset-0.5 bg-gradient-to-r from-emerald-500 to-green-600 rounded-full blur opacity-30 group-hover:opacity-100 transition duration-1000 group-hover:duration-200"></div>
       <Button
         className={cn(
-          "relative px-8 py-6 bg-zinc-950 hover:bg-zinc-900 text-white border border-emerald-500/20 rounded-full font-mono tracking-tight text-lg",
+          "relative px-8 py-6 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-950 dark:hover:bg-zinc-900 text-zinc-900 dark:text-white border border-emerald-500/20 rounded-full font-mono tracking-tight text-lg transition-colors duration-300",
           className
         )}
         {...props}

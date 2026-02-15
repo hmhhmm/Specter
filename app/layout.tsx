@@ -50,7 +50,7 @@ export default function RootLayout({
       >
         <ThemeToggle />
         {children}
-        <Toaster position="top-right" theme="dark" richColors />
+        <Toaster position="top-right" richColors />
       </body>
     </html>
   );

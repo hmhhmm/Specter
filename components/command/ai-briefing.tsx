@@ -1,57 +1,54 @@
-interface AIBriefingProps {
-  totalTests?: number;
-  issuesFound?: number;
-  uptime?: string;
-  revenueLoss?: number;
-}
+"use client";
 
-export function AIBriefing({ 
-  totalTests = 0, 
-  issuesFound = 0, 
-  uptime = "0%",
-  revenueLoss = 0 
-}: AIBriefingProps) {
+import { motion } from "framer-motion";
+import { Brain } from "lucide-react";
+import { useEffect, useState } from "react";
+
+export function AIBriefing() {
+  const [text, setText] = useState("Initializing Specter AI analysis...");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchBriefing() {
+      try {
+        const response = await fetch("http://localhost:8000/api/dashboard/stats");
+        if (response.ok) {
+          const data = await response.json();
+          setText(data.ai_briefing || "Stable. No critical issues detected.");
+        }
+      } catch (err) {
+        setText("Backend connection pending. Run tests to populate dashboard.");
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchBriefing();
+  }, []);
+  
   return (
-    <div className="relative rounded-3xl border-2 border-zinc-200 dark:border-white/10 bg-gradient-to-br from-white to-zinc-50 dark:from-zinc-900/80 dark:to-zinc-900/40 backdrop-blur-xl p-10 mb-12 overflow-hidden transition-colors duration-300">
-      {/* Background decoration */}
-      <div className="absolute top-0 right-0 w-96 h-96 bg-emerald-500/5 rounded-full blur-3xl" />
-      
-      <div className="relative z-10">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="relative">
-            <div className="w-3 h-3 rounded-full bg-emerald-500 animate-pulse" />
-            <div className="absolute inset-0 w-3 h-3 rounded-full bg-emerald-500 animate-ping" />
-          </div>
-          <span className="text-xs uppercase tracking-[0.2em] text-emerald-400 font-semibold">Live System Status</span>
-        </div>
-        
-        <h2 className="text-3xl font-bold mb-4 bg-gradient-to-r from-zinc-900 to-zinc-600 dark:from-white dark:to-zinc-400 bg-clip-text text-transparent">
-          Autonomous QA Dashboard
-        </h2>
-        
-        <p className="text-base text-zinc-600 dark:text-zinc-400 leading-relaxed max-w-3xl transition-colors duration-300">
-          Real-time intelligence from Claude Sonnet 4 analyzing user flows across 5 behavioral personas. 
-          Surfacing critical UX failures, revenue blockers, and accessibility violations before they reach production.
-        </p>
-
-        <div className="grid grid-cols-4 gap-6 mt-8">
-          <div className="rounded-xl bg-zinc-100 dark:bg-white/5 p-4 border border-zinc-300 dark:border-white/10 transition-colors duration-300">
-            <p className="text-xs text-zinc-500 dark:text-zinc-500 uppercase tracking-wider mb-2">Total Tests</p>
-            <p className="text-2xl font-bold text-zinc-900 dark:text-white">{totalTests.toLocaleString()}</p>
-          </div>
-          <div className="rounded-xl bg-zinc-100 dark:bg-white/5 p-4 border border-zinc-300 dark:border-white/10 transition-colors duration-300">
-            <p className="text-xs text-zinc-500 dark:text-zinc-500 uppercase tracking-wider mb-2">Issues Found</p>
-            <p className="text-2xl font-bold text-red-500 dark:text-red-400">{issuesFound.toLocaleString()}</p>
-          </div>
-          <div className="rounded-xl bg-zinc-100 dark:bg-white/5 p-4 border border-zinc-300 dark:border-white/10 transition-colors duration-300">
-            <p className="text-xs text-zinc-500 dark:text-zinc-500 uppercase tracking-wider mb-2">Revenue Loss</p>
-            <p className="text-2xl font-bold text-orange-500 dark:text-orange-400">${(revenueLoss / 1000).toFixed(0)}k</p>
-          </div>
-          <div className="rounded-xl bg-zinc-100 dark:bg-white/5 p-4 border border-zinc-300 dark:border-white/10 transition-colors duration-300">
-            <p className="text-xs text-zinc-500 dark:text-zinc-500 uppercase tracking-wider mb-2">Uptime</p>
-            <p className="text-2xl font-bold text-emerald-500 dark:text-emerald-400">{uptime}</p>
-          </div>
-        </div>
+    <div className="w-full bg-zinc-100/60 dark:bg-zinc-900/60 border-b border-zinc-200 dark:border-zinc-800 backdrop-blur-sm px-8 py-3 flex items-center gap-4 overflow-hidden transition-colors duration-300">
+      <div className="font-mono text-[11px] text-zinc-600 dark:text-zinc-400 tracking-tight transition-colors duration-300">
+        <motion.span
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.5 }}
+        >
+          {text.split("").map((char, i) => (
+            <motion.span
+              key={i}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.05, delay: i * 0.02 + 0.5 }}
+            >
+              {char}
+            </motion.span>
+          ))}
+          <motion.span
+            animate={{ opacity: [1, 0] }}
+            transition={{ duration: 0.8, repeat: Infinity, ease: [1, 1, 0, 0] }}
+            className="inline-block w-1.5 h-3 bg-amber-500 ml-1 align-middle"
+          />
+        </motion.span>
       </div>
     </div>
   );
