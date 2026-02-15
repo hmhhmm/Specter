@@ -72,7 +72,7 @@ export default function MockTargetPage() {
   };
 
   return (
-    <div className="min-h-[1200px] bg-[#0a0a0c] text-zinc-100 font-sans p-4 relative overflow-x-hidden select-none">
+    <div className="min-h-screen bg-[#0a0a0c] text-zinc-100 font-sans p-4 relative overflow-x-hidden select-none">
       {/* Issue 7: Dead-End Spinner (Hidden by default, triggered by demo) */}
       <AnimatePresence>
         {showGlobalSpinner && (
@@ -119,8 +119,8 @@ export default function MockTargetPage() {
               <div>
                 <p className="text-xs text-zinc-500 uppercase tracking-widest mb-1">{t.price}</p>
                 {/* Issue 2: Data Overflow - Large text that might wrap */}
-                <div className="flex items-baseline gap-3 flex-wrap min-h-[120px]">
-                  <span className="text-7xl font-bold tracking-tighter tabular-nums leading-[0.8] py-4">
+                <div className="flex items-baseline gap-3 flex-wrap">
+                  <span className="text-4xl md:text-7xl font-bold tracking-tighter tabular-nums leading-tight py-2">
                     ${price.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                   </span>
                   <span className="text-emerald-500 flex items-center gap-1 font-bold">
@@ -185,9 +185,9 @@ export default function MockTargetPage() {
 
               {/* Issue 5: Localization Break - Fixed width button so German overflows */}
               <button 
-                className="w-[180px] py-4 bg-emerald-500 rounded-xl text-black font-bold hover:bg-emerald-400 transition-colors text-sm px-2 mx-auto block"
+                className="w-full py-4 bg-emerald-500 rounded-xl text-black font-bold hover:bg-emerald-400 transition-colors text-sm px-2"
               >
-                <span className="block whitespace-nowrap">
+                <span className="block whitespace-nowrap overflow-hidden text-ellipsis">
                   {t.confirmTrade}
                 </span>
               </button>
@@ -201,9 +201,6 @@ export default function MockTargetPage() {
           >
             {t.withdraw}
           </button>
-
-          {/* Spacer to ensure scrollability */}
-          <div className="h-8" />
         </div>
       </div>
 
