@@ -72,7 +72,7 @@ export default function MockTargetPage() {
   };
 
   return (
-    <div className="min-h-[1200px] bg-[#0a0a0c] text-zinc-100 font-sans p-4 relative overflow-x-hidden select-none">
+    <div className="min-h-screen bg-[#0a0a0c] text-zinc-100 font-sans p-4 relative overflow-x-hidden select-none">
       {/* Issue 7: Dead-End Spinner (Hidden by default, triggered by demo) */}
       <AnimatePresence>
         {showGlobalSpinner && (
@@ -88,7 +88,7 @@ export default function MockTargetPage() {
       </AnimatePresence>
 
       {/* Header */}
-      <header className="flex items-center justify-between mb-8 border-b border-white/5 pb-4">
+      <header className="flex items-center justify-between mb-6 border-b border-white/5 pb-4">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 bg-emerald-500 rounded-lg flex items-center justify-center">
             <Zap className="text-black w-5 h-5 fill-current" />
@@ -111,16 +111,16 @@ export default function MockTargetPage() {
         </div>
       </header>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 max-w-7xl mx-auto">
         {/* Left Column: Price Info */}
-        <div className="md:col-span-2 space-y-6">
-          <div className="p-6 rounded-3xl bg-white/5 border border-white/5">
-            <div className="flex justify-between items-start mb-4">
+        <div className="lg:col-span-2 space-y-4">
+          <div className="p-4 rounded-2xl bg-white/5 border border-white/5">
+            <div className="flex justify-between items-start mb-3">
               <div>
                 <p className="text-xs text-zinc-500 uppercase tracking-widest mb-1">{t.price}</p>
                 {/* Issue 2: Data Overflow - Large text that might wrap */}
-                <div className="flex items-baseline gap-3 flex-wrap min-h-[120px]">
-                  <span className="text-7xl font-bold tracking-tighter tabular-nums leading-[0.8] py-4">
+                <div className="flex items-baseline gap-3 flex-wrap">
+                  <span className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tighter tabular-nums leading-tight">
                     ${price.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                   </span>
                   <span className="text-emerald-500 flex items-center gap-1 font-bold">
@@ -135,7 +135,7 @@ export default function MockTargetPage() {
             </div>
             
             {/* Chart Placeholder */}
-            <div className="h-64 w-full bg-white/[0.02] rounded-2xl border border-white/5 relative overflow-hidden">
+            <div className="h-48 w-full bg-white/[0.02] rounded-xl border border-white/5 relative overflow-hidden">
                <svg viewBox="0 0 400 100" className="absolute bottom-0 w-full h-full opacity-30">
                  <path d="M0 80 Q50 20 100 50 T200 30 T300 70 T400 10" fill="none" stroke="#10b981" strokeWidth="2" />
                </svg>
@@ -143,13 +143,13 @@ export default function MockTargetPage() {
           </div>
 
           {/* Quick Actions */}
-          <div className="grid grid-cols-2 gap-4">
-            <button className="p-4 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-all flex items-center justify-between">
+          <div className="grid grid-cols-2 gap-3">
+            <button className="p-3 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 transition-all flex items-center justify-between">
               <span className="font-bold">{t.buy}</span>
               <ArrowUpRight className="text-emerald-500" />
             </button>
             {/* Issue 2 Part 2: Sell button position depends on layout above */}
-            <button className="p-4 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-all flex items-center justify-between">
+            <button className="p-3 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 transition-all flex items-center justify-between">
               <span className="font-bold">{t.sell}</span>
               <ArrowDownRight className="text-red-500" />
             </button>
@@ -157,11 +157,11 @@ export default function MockTargetPage() {
         </div>
 
         {/* Right Column: Trading Form */}
-        <div className="space-y-6">
-          <div className="p-6 rounded-3xl bg-white/5 border border-white/5 relative">
-            <h3 className="font-bold mb-6 text-lg">Execution Panel</h3>
+        <div className="space-y-4">
+          <div className="p-4 rounded-2xl bg-white/5 border border-white/5 relative">
+            <h3 className="font-bold mb-4 text-lg">Execution Panel</h3>
             
-            <div className="space-y-4">
+            <div className="space-y-3">
               <div className="space-y-2">
                 <label className="text-[10px] text-zinc-500 uppercase tracking-widest">{t.amount}</label>
                 {/* Issue 4: Rage Input - uses type="text" instead of numeric inputmode */}
@@ -185,7 +185,7 @@ export default function MockTargetPage() {
 
               {/* Issue 5: Localization Break - Fixed width button so German overflows */}
               <button 
-                className="w-[180px] py-4 bg-emerald-500 rounded-xl text-black font-bold hover:bg-emerald-400 transition-colors text-sm px-2 mx-auto block"
+                className="w-full py-3 bg-emerald-500 rounded-xl text-black font-bold hover:bg-emerald-400 transition-colors text-sm px-2"
               >
                 <span className="block whitespace-nowrap">
                   {t.confirmTrade}
@@ -197,18 +197,15 @@ export default function MockTargetPage() {
           {/* Issue 6: Phantom Error - Button that does nothing on click */}
           <button 
             onClick={handleWithdraw}
-            className="w-full py-4 rounded-2xl border-2 border-amber-500/50 bg-amber-500/10 hover:bg-amber-500/20 transition-all text-sm font-bold text-amber-500"
+            className="w-full py-3 rounded-xl border-2 border-amber-500/50 bg-amber-500/10 hover:bg-amber-500/20 transition-all text-sm font-bold text-amber-500"
           >
             {t.withdraw}
           </button>
-
-          {/* Spacer to ensure scrollability */}
-          <div className="h-8" />
         </div>
       </div>
 
       {/* Footer Branding */}
-      <footer className="mt-20 pt-8 border-t border-white/5 flex justify-between items-center">
+      <footer className="mt-12 pt-6 border-t border-white/5 flex justify-between items-center max-w-7xl mx-auto">
         <p className="text-[10px] text-zinc-600 font-mono tracking-widest uppercase">NovaTrade v4.2.0-secure</p>
         <div className="flex gap-4 opacity-30">
           <div className="w-4 h-4 bg-zinc-800 rounded-full" />
