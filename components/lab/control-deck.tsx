@@ -142,7 +142,7 @@ export function ControlDeck({
 
           {/* Network */}
           <div className="flex-shrink-0">
-            <Label className="text-[8px] font-mono uppercase tracking-wider text-zinc-500 dark:text-zinc-500 mb-1 block">Network</Label>
+            <Label className="text-[8px] font-mono uppercase tracking-wider text-zinc-500 mb-1 block">Network</Label>
             <ToggleGroup 
               type="single" 
               value={network} 

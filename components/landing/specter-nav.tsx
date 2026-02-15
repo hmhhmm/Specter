@@ -24,12 +24,12 @@ export function SpecterNav() {
     >
       <div className="flex items-center justify-between w-full max-w-7xl px-6 py-3 bg-white/90 dark:bg-zinc-950/60 backdrop-blur-xl border border-zinc-200/50 dark:border-zinc-800/50 rounded-full shadow-xl transition-colors duration-300">
         <Link href="/" className="transition-opacity hover:opacity-80">
-          <span className="font-bricolage text-xl font-bold tracking-tight text-zinc-900 dark:text-white">
+          <span className="font-bricolage text-xl font-bold tracking-tight text-zinc-900 dark:text-white transition-colors duration-300">
             Specter
           </span>
         </Link>
 
-        <div className="hidden md:flex items-center gap-2 text-zinc-600 dark:text-zinc-400 font-mono text-xs">
+        <div className="hidden md:flex items-center gap-2 text-zinc-600 dark:text-zinc-400 font-mono text-xs transition-colors duration-300">
           {navLinks.map((link) => {
             const isActive = pathname === link.href;
             return (

@@ -61,7 +61,7 @@ export function RunCard({ run, onExpand, isExpanded }: RunCardProps) {
     <div className={cn(
       "rounded-2xl border-2 backdrop-blur-sm transition-all duration-300",
       config.color,
-      isExpanded ? "bg-zinc-100 dark:bg-zinc-900/60" : "bg-white dark:bg-zinc-900/40 hover:bg-zinc-50 dark:hover:bg-zinc-900/60"
+      isExpanded ? "bg-white/90 dark:bg-zinc-900/60" : "bg-white/70 dark:bg-zinc-900/40 hover:bg-white/95 dark:hover:bg-zinc-900/60"
     )}>
       {/* Run Header - Clickable */}
       <button
@@ -73,9 +73,9 @@ export function RunCard({ run, onExpand, isExpanded }: RunCardProps) {
           config.color
         )}>
           {isExpanded ? (
-            <ChevronDown className="w-5 h-5 text-zinc-900 dark:text-white" />
+            <ChevronDown className="w-5 h-5 text-zinc-900 dark:text-white transition-colors duration-300" />
           ) : (
-            <ChevronRight className="w-5 h-5 text-zinc-900 dark:text-white group-hover:translate-x-0.5 transition-transform" />
+            <ChevronRight className="w-5 h-5 text-zinc-900 dark:text-white group-hover:translate-x-0.5 transition-transform transition-colors duration-300" />
           )}
         </div>
         
@@ -85,7 +85,7 @@ export function RunCard({ run, onExpand, isExpanded }: RunCardProps) {
             <h3 className="text-lg font-semibold text-zinc-900 dark:text-white transition-colors duration-300">
               Run #{run.id.slice(-6)}
             </h3>
-            <div className="flex items-center gap-2 text-xs text-zinc-500">
+            <div className="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-500 transition-colors duration-300">
               <Clock className="w-3 h-3" />
               {displayTime}
             </div>
@@ -94,7 +94,7 @@ export function RunCard({ run, onExpand, isExpanded }: RunCardProps) {
           {/* Issue Distribution */}
           {run.severity_breakdown && (
             <div className="mt-3 flex items-center gap-4">
-              <span className="text-xs text-zinc-500">Issues:</span>
+              <span className="text-xs text-zinc-600 dark:text-zinc-500 transition-colors duration-300">Issues:</span>
               <div className="flex items-center gap-3">
                 {run.severity_breakdown.P0 > 0 && (
                   <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-red-500/10 border border-red-500/30">
@@ -129,29 +129,29 @@ export function RunCard({ run, onExpand, isExpanded }: RunCardProps) {
               {/* Left: QA Metrics */}
               <div className="grid grid-cols-2 gap-3">
                 {/* Tests Completed */}
-                <div className="rounded-lg bg-zinc-100 dark:bg-white/5 p-3 border border-zinc-200 dark:border-white/10 transition-colors duration-300">
-                  <div className="text-xs text-zinc-500 mb-1">Tests Completed</div>
-                  <div className="text-2xl font-bold text-zinc-900 dark:text-white">{ stepCount}</div>
+                <div className="rounded-lg bg-zinc-100 dark:bg-white/5 p-3 border border-zinc-300 dark:border-white/10 transition-colors duration-300">
+                  <div className="text-xs text-zinc-600 dark:text-zinc-500 mb-1 transition-colors duration-300">Tests Completed</div>
+                  <div className="text-2xl font-bold text-zinc-900 dark:text-white transition-colors duration-300">{stepCount}</div>
                 </div>
                 
                 {/* Pass Rate */}
-                <div className="rounded-lg bg-zinc-100 dark:bg-white/5 p-3 border border-zinc-200 dark:border-white/10 transition-colors duration-300">
-                  <div className="text-xs text-zinc-500 mb-1">Pass</div>
-                  <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{passedSteps}</div>
+                <div className="rounded-lg bg-zinc-100 dark:bg-white/5 p-3 border border-zinc-300 dark:border-white/10 transition-colors duration-300">
+                  <div className="text-xs text-zinc-600 dark:text-zinc-500 mb-1 transition-colors duration-300">Pass</div>
+                  <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 transition-colors duration-300">{passedSteps}</div>
                 </div>
                 
                 {/* Fail Count */}
-                <div className="rounded-lg bg-zinc-100 dark:bg-white/5 p-3 border border-zinc-200 dark:border-white/10 transition-colors duration-300">
-                  <div className="text-xs text-zinc-500 mb-1">Fail</div>
-                  <div className="text-2xl font-bold text-red-600 dark:text-red-400">{failedSteps}</div>
+                <div className="rounded-lg bg-zinc-100 dark:bg-white/5 p-3 border border-zinc-300 dark:border-white/10 transition-colors duration-300">
+                  <div className="text-xs text-zinc-600 dark:text-zinc-500 mb-1 transition-colors duration-300">Fail</div>
+                  <div className="text-2xl font-bold text-red-600 dark:text-red-400 transition-colors duration-300">{failedSteps}</div>
                 </div>
                 
                 {/* Friction Score */}
-                <div className="rounded-lg bg-zinc-100 dark:bg-white/5 p-3 border border-zinc-200 dark:border-white/10 transition-colors duration-300">
-                  <div className="text-xs text-zinc-500 mb-1">Friction Score</div>
+                <div className="rounded-lg bg-zinc-100 dark:bg-white/5 p-3 border border-zinc-300 dark:border-white/10 transition-colors duration-300">
+                  <div className="text-xs text-zinc-600 dark:text-zinc-500 mb-1 transition-colors duration-300">Friction Score</div>
                   <div className={cn(
                     "text-2xl font-bold",
-                    avgFScore >= 60 ? "text-red-600 dark:text-red-400" : avgFScore >= 40 ? "text-orange-600 dark:text-orange-400" : "text-emerald-600 dark:text-emerald-400"
+                    avgFScore >= 60 ? "text-red-400" : avgFScore >= 40 ? "text-orange-400" : "text-emerald-400"
                   )}>
                     {avgFScore.toFixed(0)}
                   </div>
@@ -159,9 +159,9 @@ export function RunCard({ run, onExpand, isExpanded }: RunCardProps) {
               </div>
 
               {/* Right: GIF Preview */}
-              <div className="rounded-xl bg-zinc-100 dark:bg-white/5 border border-zinc-200 dark:border-white/10 p-4 transition-colors duration-300">
+              <div className="rounded-xl bg-zinc-100 dark:bg-white/5 border border-zinc-300 dark:border-white/10 p-4 transition-colors duration-300">
                 <h4 className="text-sm font-semibold text-zinc-900 dark:text-white mb-3 flex items-center gap-2 transition-colors duration-300">
-                  <Film className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                  <Film className="w-4 h-4 text-purple-600 dark:text-purple-400 transition-colors duration-300" />
                   Test Replay
                 </h4>
                 {run.evidence_files && run.evidence_files.find((f: any) => f.type === 'gif') ? (
@@ -193,7 +193,7 @@ export function RunCard({ run, onExpand, isExpanded }: RunCardProps) {
                     }
                   </div>
                 ) : (
-                  <div className="text-xs text-zinc-600 dark:text-zinc-600 py-8 text-center">
+                  <div className="text-xs text-zinc-500 dark:text-zinc-600 py-8 text-center transition-colors duration-300">
                     No GIF recordings available
                   </div>
                 )}
@@ -207,7 +207,7 @@ export function RunCard({ run, onExpand, isExpanded }: RunCardProps) {
           {run.incidents.map((incident: any, idx: number) => (
             <div
               key={incident.id || idx}
-              className="rounded-lg bg-zinc-100 dark:bg-white/5 border border-zinc-200 dark:border-white/10 overflow-hidden hover:bg-zinc-200 dark:hover:bg-white/[0.07] transition-all"
+              className="rounded-lg bg-zinc-100 dark:bg-white/5 border border-zinc-300 dark:border-white/10 overflow-hidden hover:bg-zinc-200 dark:hover:bg-white/[0.07] transition-all"
             >
               {/* Issue Header - Always Visible */}
               <div className="p-3.5">
@@ -228,14 +228,14 @@ export function RunCard({ run, onExpand, isExpanded }: RunCardProps) {
                   </div>
                   <div className="flex items-center gap-2">
                     {incident.device && (
-                      <div className="px-2 py-0.5 rounded bg-zinc-200 dark:bg-zinc-800/50 border border-zinc-300 dark:border-zinc-700/50 text-[11px] text-zinc-600 dark:text-zinc-400 font-medium transition-colors duration-300">
+                      <div className="px-2 py-0.5 rounded bg-zinc-200 dark:bg-zinc-800/50 border border-zinc-300 dark:border-zinc-700/50 text-[11px] text-zinc-700 dark:text-zinc-400 font-medium transition-colors duration-300">
                         {incident.device}
                       </div>
                     )}
                   </div>
                 </div>
                 
-                <p className="text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed mb-2.5 transition-colors duration-300">
+                <p className="text-sm text-zinc-700 dark:text-zinc-400 leading-relaxed mb-2.5 transition-colors duration-300">
                   {incident.description || incident.diagnosis || incident.monologue || "No details available"}
                 </p>
                 
@@ -252,18 +252,18 @@ export function RunCard({ run, onExpand, isExpanded }: RunCardProps) {
                           btn.textContent = evidenceDiv.style.display === 'none' ? '🔽 Show Evidence' : '🔼 Hide Evidence';
                         }
                       }}
-                      className="text-xs font-medium text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors"
+                      className="text-xs font-medium text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors mb-2"
                     >
                       🔽 Show Evidence
                     </button>
                     <div style={{display: 'none'}} className="flex gap-2">
                       {incident.screenshot_before && (
                         <div className="flex-1">
-                          <div className="text-xs text-zinc-500 mb-1">Before</div>
+                          <div className="text-xs text-zinc-600 dark:text-zinc-500 mb-1 transition-colors duration-300">Before</div>
                           <img 
                             src={`http://localhost:8000/api/reports/${run.id}/screenshots/${incident.screenshot_before.split('/').pop()}`}
                             alt="Before screenshot"
-                            className="w-full h-72 object-contain rounded border border-zinc-300 dark:border-white/20 bg-zinc-50 dark:bg-black transition-colors duration-300"
+                            className="w-full h-72 object-contain rounded border border-white/20 bg-black"
                             loading="lazy"
                             onError={(e) => {
                               const target = e.target as HTMLImageElement;
@@ -281,11 +281,11 @@ export function RunCard({ run, onExpand, isExpanded }: RunCardProps) {
                       )}
                       {incident.screenshot_after && (
                         <div className="flex-1">
-                          <div className="text-xs text-zinc-500 mb-1">After</div>
+                          <div className="text-xs text-zinc-600 dark:text-zinc-500 mb-1 transition-colors duration-300">After</div>
                           <img 
                             src={`http://localhost:8000/api/reports/${run.id}/screenshots/${incident.screenshot_after.split('/').pop()}`}
                             alt="After screenshot"
-                            className="w-full h-72 object-contain rounded border border-zinc-300 dark:border-white/20 bg-zinc-50 dark:bg-black transition-colors duration-300"
+                            className="w-full h-72 object-contain rounded border border-zinc-300 dark:border-white/20 bg-white dark:bg-black transition-colors duration-300"
                             loading="lazy"
                             onError={(e) => {
                               const target = e.target as HTMLImageElement;
@@ -308,7 +308,7 @@ export function RunCard({ run, onExpand, isExpanded }: RunCardProps) {
                 {incident.f_score !== undefined && (
                   <div className="flex items-center gap-2 text-xs mt-3">
                     <span className="text-zinc-500">Friction:</span>
-                    <div className="flex-1 max-w-[200px] h-2 rounded-full bg-zinc-200 dark:bg-white/10 overflow-hidden transition-colors duration-300">
+                    <div className="flex-1 max-w-[200px] h-2 rounded-full bg-white/10 overflow-hidden">
                       <div
                         className={cn(
                           "h-full rounded-full transition-all",
@@ -319,7 +319,7 @@ export function RunCard({ run, onExpand, isExpanded }: RunCardProps) {
                         style={{ width: `${incident.f_score}%` }}
                       />
                     </div>
-                    <span className="font-mono text-zinc-600 dark:text-zinc-400 transition-colors duration-300">{incident.f_score.toFixed(0)}/100</span>
+                    <span className="font-mono text-zinc-400">{incident.f_score.toFixed(0)}/100</span>
                   </div>
                 )}
               </div>

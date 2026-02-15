@@ -94,7 +94,7 @@ export function HeroSection() {
 
   return (
     <section className="relative flex min-h-screen w-full items-center justify-center overflow-hidden bg-transparent">
-      <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/[0.15] via-transparent to-zinc-200/[0.15] dark:to-zinc-900/[0.15] blur-3xl opacity-70 transition-colors duration-300" />
+      <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/[0.15] via-transparent to-zinc-900/[0.15] blur-3xl opacity-70" />
 
       <div className="container relative z-10 mx-auto px-4 md:px-6">
         <div className="mx-auto max-w-4xl text-center mt-16">

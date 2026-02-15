@@ -17,7 +17,7 @@ export default function Home() {
       <footer className="relative z-10 py-20 border-t border-zinc-200 dark:border-zinc-900 bg-zinc-50/50 dark:bg-zinc-950/50 backdrop-blur-md flex justify-center transition-colors duration-300">
         <div className="flex items-center gap-2 opacity-30">
           <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          <span className="font-mono text-xs text-zinc-700 dark:text-zinc-500 tracking-widest uppercase">
+          <span className="font-mono text-xs text-zinc-700 dark:text-zinc-500 tracking-widest uppercase transition-colors duration-300">
             Specter Systems Initialized
           </span>
         </div>

@@ -52,17 +52,17 @@ export function MissionHeader({ activePersona, networkCondition, nextTestIn }: M
   };
 
   return (
-    <header className="relative w-full border-b border-zinc-200 dark:border-white/5 bg-white/50 dark:bg-zinc-950/50 backdrop-blur-xl px-8 py-4 flex items-center justify-between z-20 transition-colors duration-300">
+    <header className="relative w-full border-b border-white/5 bg-zinc-950/50 backdrop-blur-xl px-8 py-4 flex items-center justify-between z-20">
       <div className="flex items-center gap-6">
         <Link href="/" className="flex items-center gap-2 group transition-opacity hover:opacity-80">
-          <span className="font-bricolage text-lg font-bold tracking-tight text-zinc-900 dark:text-white">
+          <span className="font-bricolage text-lg font-bold tracking-tight text-white">
             Specter
           </span>
         </Link>
         
-        <div className="h-4 w-px bg-zinc-200 dark:bg-white/10 hidden md:block" />
+        <div className="h-4 w-px bg-white/10 hidden md:block" />
         
-        <div className="hidden md:flex items-center gap-6 text-[10px] font-mono text-zinc-500 dark:text-zinc-500 uppercase tracking-widest">
+        <div className="hidden md:flex items-center gap-6 text-[10px] font-mono text-zinc-500 uppercase tracking-widest">
           <Link href="/lab" className="hover:text-emerald-500 transition-colors">Lab</Link>
           <Link href="/vault" className="flex items-center gap-2 hover:text-emerald-500 transition-colors">
             <Database className="w-3 h-3" />
@@ -73,7 +73,7 @@ export function MissionHeader({ activePersona, networkCondition, nextTestIn }: M
 
         {countdown > 0 && (
           <>
-            <div className="h-4 w-px bg-zinc-200 dark:bg-white/10 hidden md:block" />
+            <div className="h-4 w-px bg-white/10 hidden md:block" />
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-500/10 border border-blue-500/20">
               <Clock className="w-3 h-3 text-blue-400" />
               <span className="text-xs text-blue-400 font-mono">

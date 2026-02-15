@@ -69,9 +69,9 @@ export function IncidentGrid({ activeFilter, incidents = [], isLoading = false }
         heatmapPath: inc.heatmap_path || null,
         aiReasoning: diagnosis || (hasConsoleErrors ? `Console errors: ${inc.console_logs.join(', ')}` : null),
         confusionTime: inc.confusion_score || (inc.dwell_time_ms ? inc.dwell_time_ms / 1000 : null),
-        impactEstimate: inc.revenueLoss ? `Est. $${inc.revenueLoss.toLocaleString()} revenue impact` : null,
-        responsibleTeam: inc.responsible_team || null,
-        fScore: inc.f_score || null
+        impactEstimate: inc.revenueLoss ? `Est. $${inc.revenueLoss.toLocaleString()} revenue impact` : undefined,
+        responsibleTeam: inc.responsible_team || undefined,
+        fScore: inc.f_score || undefined
       };
     });
   
@@ -86,9 +86,9 @@ export function IncidentGrid({ activeFilter, incidents = [], isLoading = false }
   if (!isLoading && filteredIncidents.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center">
-        <AlertCircle className="w-16 h-16 text-zinc-300 dark:text-zinc-700 mb-4" />
-        <h3 className="text-xl font-semibold text-zinc-600 dark:text-zinc-400 mb-2">No Incidents Found</h3>
-        <p className="text-sm text-zinc-500 dark:text-zinc-600 max-w-md">
+        <AlertCircle className="w-16 h-16 text-zinc-700 mb-4" />
+        <h3 className="text-xl font-semibold text-zinc-400 mb-2">No Incidents Found</h3>
+        <p className="text-sm text-zinc-600 max-w-md">
           {activeFilter === "all" 
             ? "Run a test from the Lab to start detecting issues"
             : `No ${activeFilter} incidents found. Try a different filter.`
@@ -100,15 +100,15 @@ export function IncidentGrid({ activeFilter, incidents = [], isLoading = false }
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      {filteredIncidents.map((incident) => (
-        <div key={incident.id} className="space-y-3">
+      {filteredIncidents.map((incident, index) => (
+        <div key={`${incident.id}_${index}`} className="space-y-3">
           <IncidentCard 
             {...incident}
-            aiReasoning={incident.aiReasoning ?? undefined}
-            confusionTime={incident.confusionTime ?? undefined}
-            impactEstimate={incident.impactEstimate ?? undefined}
-            responsibleTeam={incident.responsibleTeam ?? undefined}
-            fScore={incident.fScore ?? undefined}
+            aiReasoning={incident.aiReasoning}
+            confusionTime={incident.confusionTime}
+            impactEstimate={incident.impactEstimate}
+            responsibleTeam={incident.responsibleTeam}
+            fScore={incident.fScore}
           />
           <EvidencePreview 
             testId={incident.id}

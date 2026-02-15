@@ -7,8 +7,8 @@ export function BackgroundEffects() {
   const mouseX = useMotionValue(0);
   const mouseY = useMotionValue(0);
 
-  const bloomX = useTransform(mouseX, [0, window.innerWidth], [-30, 30]);
-  const bloomY = useTransform(mouseY, [0, window.innerHeight], [-30, 30]);
+  const bloomX = useTransform(mouseX, [0, typeof window !== 'undefined' ? window.innerWidth : 1920], [-30, 30]);
+  const bloomY = useTransform(mouseY, [0, typeof window !== 'undefined' ? window.innerHeight : 1080], [-30, 30]);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
