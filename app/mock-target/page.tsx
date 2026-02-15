@@ -167,6 +167,7 @@ export default function MockTargetPage() {
                 {/* Issue 4: Rage Input - uses type="text" instead of numeric inputmode */}
                 <input 
                   type="text" 
+                  inputMode="numeric"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   placeholder="0.00"
@@ -175,19 +176,19 @@ export default function MockTargetPage() {
               </div>
 
               <div className="flex justify-between items-center py-3 bg-zinc-900 rounded-lg px-3 border border-white/5">
-                {/* Issue 3: Invisible Fee - Label visible, but VALUE is black on black */}
+                {/* Issue 3: Invisible Fee - Label visible, but VALUE is now visible */}
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] uppercase tracking-widest text-zinc-400">{t.fee}:</span>
-                  <span className="text-sm font-bold" style={{ color: '#0a0a0c' }}>$2.50</span>
+                  <span className="text-sm font-bold text-zinc-300">$2.50</span>
                 </div>
                 <Shield className="w-4 h-4 text-zinc-600" />
               </div>
 
-              {/* Issue 5: Localization Break - Fixed width button so German overflows */}
+              {/* Issue 5: Localization Break - Flexible width button for German text */}
               <button 
-                className="w-[180px] py-4 bg-emerald-500 rounded-xl text-black font-bold hover:bg-emerald-400 transition-colors text-sm px-2 mx-auto block"
+                className="w-full py-4 bg-emerald-500 rounded-xl text-black font-bold hover:bg-emerald-400 transition-colors text-sm px-4"
               >
-                <span className="block whitespace-nowrap">
+                <span className="block">
                   {t.confirmTrade}
                 </span>
               </button>
@@ -216,13 +217,12 @@ export default function MockTargetPage() {
         </div>
       </footer>
 
-      {/* Issue 1: Z-Index Trap - Chat bubble that covers buttons on small viewports */}
-      {/* Positioned fixed but we simulate it in the mobile view of emulator */}
-      <div className="fixed bottom-6 right-6 z-[9999] group pointer-events-auto">
+      {/* Issue 1: Z-Index Trap - Chat bubble repositioned to avoid covering buttons */}
+      <div className="fixed bottom-6 left-6 z-[9999] group pointer-events-auto">
         <div className="w-16 h-16 bg-emerald-500 rounded-full shadow-[0_0_30px_rgba(16,185,129,0.4)] flex items-center justify-center cursor-pointer hover:scale-110 transition-transform">
           <MessageCircle className="text-black w-8 h-8 fill-current" />
         </div>
-        <div className="absolute bottom-full right-0 mb-4 w-64 bg-zinc-900 border border-white/10 rounded-2xl p-4 shadow-2xl opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="absolute bottom-full left-0 mb-4 w-64 bg-zinc-900 border border-white/10 rounded-2xl p-4 shadow-2xl opacity-0 group-hover:opacity-100 transition-opacity">
           <p className="text-xs text-zinc-400 leading-relaxed">
             Hi! Need help with your trade? Our AI assistant is here to help.
           </p>
